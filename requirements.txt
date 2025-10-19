@@ -1,0 +1,9 @@
+PySide6==6.9.2
+darkdetect==0.8.0
+colorthief==0.2.1
+scipy==1.16.2
+pillow==11.3.0
+pywin32==311; platform_system=="Windows"
+pyobjc==11.1; platform_system=="Darwin"
+PyCocoa==25.4.8; platform_system=="Darwin"
+xcffib==1.11.2; sys_platform=="linux"

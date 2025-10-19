@@ -1,0 +1,19 @@
+<RCC>
+    <qresource prefix="/powertools">
+        <file>images/icons/image_edit_black.svg</file>
+        <file>images/icons/image_edit_white.svg</file>
+        <file>images/icons/watermark_add_black.svg</file>
+        <file>images/icons/watermark_add_white.svg</file>
+        <file>images/icons/watermark_remove_black.svg</file>
+        <file>images/icons/watermark_remove_white.svg</file>
+        <file>images/icons/long_screenshot_black.svg</file>
+        <file>images/icons/long_screenshot_white.svg</file>
+        <file>images/icons/screenshot_black.svg</file>
+        <file>images/icons/screenshot_white.svg</file>
+        <file>images/icons/ocr_black.svg</file>
+        <file>images/icons/ocr_white.svg</file>
+        <file>images/icons/Price_black.svg</file>
+        <file>images/icons/Price_white.svg</file>
+        <file>images/logo.png</file>
+    </qresource>
+</RCC>

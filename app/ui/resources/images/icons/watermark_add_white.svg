@@ -1,0 +1,13 @@
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="watermarkAddLight" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#0078d4" />
+                            <stop offset="100%" stop-color="#106ebe" />
+                        </linearGradient>
+                    </defs>
+                    <rect x="2" y="2" width="20" height="16" rx="3" fill="url(#watermarkAddLight)"/>
+                    <circle cx="7" cy="7" r="2" fill="white" opacity="0.8"/>
+                    <path d="M22 14l-4-4-6 6-4-4-6 6" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="18" cy="20" r="3" fill="white"/>
+                    <path d="M17 20h2M18 19v2" stroke="#0078d4" stroke-width="1.2" stroke-linecap="round"/>
+                </svg>
