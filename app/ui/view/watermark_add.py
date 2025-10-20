@@ -6,12 +6,13 @@ from PySide6.QtGui import QPainter, QBrush, QLinearGradient, QColor, QFont
 
 from app.ui.library.qfluentwidgets import (
     ScrollArea, HeaderCardWidget, GroupHeaderCardWidget, SegmentedWidget, setFont,
-    PushButton, CaptionLabel, TextEdit, SpinBox, ComboBox
+    PushButton, CaptionLabel, TextEdit, SpinBox, ComboBox, ColorPickerButton
 )
 
-from app.ui.widgets.font_card import FontCard, common_fonts_zh, common_fonts_en
+from app.ui.widgets.font_card import FontCard, get_available_fonts
 from app.ui.widgets.file_selector_widget import FileSelectorWidget
 from app.ui.widgets.directory_selector_widget import DirectorySelectorWidget
+from app.ui.widgets.color_picker_widget import ColorPicker
 
 
 class FileSelectorCard(HeaderCardWidget):
@@ -97,6 +98,7 @@ class WatermarkTypeSelectorCard(HeaderCardWidget):
         visible_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         visible_text = QLabel("可见水印")
         setFont(visible_text, 12)
+        visible_text.setStyleSheet("color: #666666;")  # 黑灰色字体
         visible_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         visible_icon.setCursor(Qt.PointingHandCursor)
@@ -121,6 +123,7 @@ class WatermarkTypeSelectorCard(HeaderCardWidget):
         blind_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         blind_text = QLabel("盲水印")
         setFont(blind_text, 12)
+        blind_text.setStyleSheet("color: #666666;")  # 黑灰色字体
         blind_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         visible_icon.setCursor(Qt.PointingHandCursor)
@@ -196,13 +199,14 @@ class WatermarkContentCard(HeaderCardWidget):
         text_label_2.setStyleSheet("color: #888888;")  # 设置为浅灰色
         text_settings_layout.addWidget(text_label_2)
         font_combo = ComboBox()
-        font_combo.addItems(common_fonts_zh + common_fonts_en)
+        self.common_fonts_zh, self.common_fonts_en = get_available_fonts()
+        font_combo.addItems(list(self.common_fonts_zh.keys()) + list(self.common_fonts_en.keys()))
         font_combo.currentTextChanged.connect(self.font_changed)
         text_settings_layout.addWidget(font_combo)
-        if font_combo.currentText() in common_fonts_zh:
-            self.font_card = FontCard(font_combo.currentText(), "你好，世界")
+        if font_combo.currentText() in self.common_fonts_zh.keys():
+            self.font_card = FontCard(self.common_fonts_zh[font_combo.currentText()], "你好，世界", parent=self)
         else:
-            self.font_card = FontCard(font_combo.currentText(), "hello, world")
+            self.font_card = FontCard(self.common_fonts_en[font_combo.currentText()], "hello, world", parent=self)
         text_settings_layout.addWidget(self.font_card)
 
         text_settings_layout.addSpacing(10)
@@ -217,7 +221,7 @@ class WatermarkContentCard(HeaderCardWidget):
         spinBox.setValue(15)
         # 监听数值改变信号
         # spinBox.valueChanged.connect(lambda value: print("当前值：", value))
-        text_settings_layout.addWidget(spinBox )
+        text_settings_layout.addWidget(spinBox)
 
         text_settings_layout.addSpacing(10)
 
@@ -225,8 +229,7 @@ class WatermarkContentCard(HeaderCardWidget):
         setFont(text_label_4, 13)
         text_label_4.setStyleSheet("color: #888888;")  # 设置为浅灰色
         text_settings_layout.addWidget(text_label_4)
-        select_color = PushButton("颜色选择")
-        setFont(select_color, 13)
+        select_color = ColorPicker()
         text_settings_layout.addWidget(select_color)
 
 
@@ -246,12 +249,12 @@ class WatermarkContentCard(HeaderCardWidget):
         self.pivot.addItem(routeKey=objectName, text=text)
 
     def font_changed(self, font_name):
-        if font_name in common_fonts_zh:
+        if font_name in self.common_fonts_zh.keys():
             text = "你好，世界"
+            self.font_card.update_font(self.common_fonts_zh[font_name], text)
         else:
             text = "hello, world"
-        self.font_card.update_font(font_name, text)
-
+            self.font_card.update_font(self.common_fonts_en[font_name], text)
 
 class WatermarkSettingsCard(GroupHeaderCardWidget):
     def __init__(self, parent=None):

@@ -1,15 +1,50 @@
-from PySide6.QtCore import Qt, QEasingCurve
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QFontDatabase, QFont
-from PySide6.QtWidgets import QVBoxLayout, QLabel, QWidget
-from app.ui.library.qfluentwidgets import CardWidget, setFont, FlowLayout
+from PySide6.QtWidgets import QVBoxLayout, QLabel
+from app.ui.library.qfluentwidgets import CardWidget, setFont
 
 
-common_fonts_zh = [
-    "微软雅黑", "宋体", "黑体", "仿宋", "楷体", "苹方", "思源黑体", "思源宋体"
-]
-common_fonts_en = [
-    "Arial", "Calibri", "Times New Roman", "Courier New", "Segoe UI", "Verdana", "Tahoma", "Helvetica"
-]
+FONT_ALIAS_MAP = {
+    "微软雅黑": ["Microsoft YaHei"],
+    "宋体": ["SimSun"],
+    "黑体": ["SimHei"],
+    "仿宋": ["FangSong"],
+    "楷体": ["KaiTi"],
+    "苹方": ["PingFang SC", "PingFang"],
+    "思源黑体": ["Source Han Sans CN", "Source Han Sans", "Noto Sans CJK SC"],
+    "思源宋体": ["Source Han Serif CN", "Source Han Serif", "Noto Serif CJK SC"],
+
+    # 英文字体
+    "Arial": ["Arial"],
+    "Calibri": ["Calibri"],
+    "Times New Roman": ["Times New Roman"],
+    "Courier New": ["Courier New"],
+    "Segoe UI": ["Segoe UI"],
+    "Verdana": ["Verdana"],
+    "Tahoma": ["Tahoma"],
+    "Helvetica": ["Helvetica"]
+}
+
+def get_available_fonts():
+    families = list(QFontDatabase.families())
+    lower_families = [f.lower() for f in families]
+
+    fonts_zh = {}
+    fonts_en = {}
+
+    for display_name, aliases in FONT_ALIAS_MAP.items():
+        for alias in aliases:
+            if alias.lower() in lower_families:
+                real_name = families[lower_families.index(alias.lower())]
+                entry = {"display": display_name, "system": real_name}
+                if display_name in [
+                    "微软雅黑", "宋体", "黑体", "仿宋", "楷体", "苹方", "思源黑体", "思源宋体"
+                ]:
+                    fonts_zh[display_name] = real_name
+                else:
+                    fonts_en[display_name] = real_name
+                break
+    return fonts_zh, fonts_en
 
 class FontCard(CardWidget):
     def __init__(self, font_name: str, text: str, parent=None):
@@ -25,7 +60,7 @@ class FontCard(CardWidget):
 
         self.preview = QLabel(text)
         font = QFont(font_name)
-        font.setPointSize(11)
+        font.setPointSize(12)
         self.preview.setFont(font)
         self.preview.setWordWrap(True)
         self.preview.setStyleSheet("color: rgba(0, 0, 0, 0.6);")
@@ -53,31 +88,3 @@ class FontCard(CardWidget):
         font.setPointSize(10)
         self.preview.setFont(font)
         self.preview.setText(text)
-
-
-class FontSelectorWidget(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent=parent)
-
-        self.flow_layout = FlowLayout(self, needAni=True)  # 启用动画
-        self.flow_layout.setAnimation(250, QEasingCurve.OutQuad)
-        self.flow_layout.setContentsMargins(10, 10, 10, 10)
-        self.flow_layout.setVerticalSpacing(10)
-        self.flow_layout.setHorizontalSpacing(5)
-
-        # 加载字体卡片
-        self.load_fonts()
-
-
-    def load_fonts(self):
-        """加载系统字体"""
-        font_db = QFontDatabase()
-        families = font_db.families()
-        for name in common_fonts_zh:
-            if name in families:
-                card = FontCard(name, "你好，世界")
-                self.flow_layout.addWidget(card)
-        for name in common_fonts_en:
-            if name in families:
-                card = FontCard(name, "Hello, world")
-                self.flow_layout.addWidget(card)
