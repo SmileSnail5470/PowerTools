@@ -1,6 +1,6 @@
 from PySide6.QtCore import Signal, QEasingCurve, Qt
 from PySide6.QtWidgets import QVBoxLayout, QLabel, QWidget, QHBoxLayout
-from app.ui.library.qfluentwidgets import PushButton, FlowLayout, SingleDirectionScrollArea
+from app.ui.library.qfluentwidgets import PushButton, FlowLayout, SingleDirectionScrollArea, setFont
 
 
 class ColorButton(PushButton):
@@ -86,9 +86,11 @@ class ColorPicker(QWidget):
         scroll_area.enableTransparentBackground()
         
         # 当前颜色显示
-        self.current_color_label = QLabel("当前颜色:")
+        self.current_color_label = QLabel("选择颜色: ")
+        self.current_color_label.setStyleSheet("color: #666666;")  # 黑灰色字体
+        setFont(self.current_color_label, 12)
         self.color_display = QLabel()
-        self.color_display.setFixedSize(50, 30)
+        self.color_display.setFixedSize(35, 15)
         self.color_display.setStyleSheet(f"background-color: {self.selected_color}; border: 1px solid black;")
         
         color_info_layout = QHBoxLayout()
@@ -97,9 +99,8 @@ class ColorPicker(QWidget):
         color_info_layout.addStretch()
         
         # 添加到主布局
-        layout.addWidget(QLabel("选择字体颜色:"))
-        layout.addWidget(scroll_area)
         layout.addLayout(color_info_layout)
+        layout.addWidget(scroll_area)
         
     def on_color_selected(self, color_code):
         """处理颜色选择"""

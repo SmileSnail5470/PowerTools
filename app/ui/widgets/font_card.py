@@ -60,7 +60,7 @@ class FontCard(CardWidget):
 
         self.preview = QLabel(text)
         font = QFont(font_name)
-        font.setPointSize(12)
+        font.setPointSize(10)
         self.preview.setFont(font)
         self.preview.setWordWrap(True)
         self.preview.setStyleSheet("color: rgba(0, 0, 0, 0.6);")

@@ -1,12 +1,12 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QStackedWidget, QHBoxLayout, QLabel, QFontComboBox
+    QWidget, QVBoxLayout, QStackedWidget, QHBoxLayout, QLabel
 )
 from PySide6.QtGui import QPainter, QBrush, QLinearGradient, QColor, QFont
 
 from app.ui.library.qfluentwidgets import (
     ScrollArea, HeaderCardWidget, GroupHeaderCardWidget, SegmentedWidget, setFont,
-    PushButton, CaptionLabel, TextEdit, SpinBox, ComboBox, ColorPickerButton
+    PushButton, CaptionLabel, TextEdit, SpinBox, ComboBox
 )
 
 from app.ui.widgets.font_card import FontCard, get_available_fonts
