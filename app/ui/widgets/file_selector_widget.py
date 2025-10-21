@@ -5,6 +5,7 @@ from app.ui.library.qfluentwidgets import setFont, SimpleCardWidget
 
 class FileSelectorWidget(SimpleCardWidget):
     file_selected = Signal(list)
+    format_text_value = "支持 JPG, PNG, AVIF, MP4, AVI 格式"
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -33,7 +34,7 @@ class FileSelectorWidget(SimpleCardWidget):
         """)
         main_layout.addWidget(upload_text)
         
-        format_text = QLabel("支持 JPG, PNG, AVIF, MP4, AVI 格式")
+        format_text = QLabel(self.format_text_value)
         format_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
         setFont(format_text, 10)
         format_text.setStyleSheet("""

@@ -175,7 +175,8 @@ class WatermarkContentCard(HeaderCardWidget):
 
         self.viewLayout.setContentsMargins(10, 10, 10, 10)
         self.viewLayout.addLayout(main_layout)
-
+        
+        # 文字水印设置界面
         textSettings = QWidget()
         text_settings_layout = QVBoxLayout(textSettings)
         text_settings_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -191,7 +192,6 @@ class WatermarkContentCard(HeaderCardWidget):
         text_edit.setFixedHeight(50)
         setFont(text_edit, 13)
         text_settings_layout.addWidget(text_edit)
-
         text_settings_layout.addSpacing(10)
 
         text_label_2 = CaptionLabel(text="字体")
@@ -208,7 +208,6 @@ class WatermarkContentCard(HeaderCardWidget):
         else:
             self.font_card = FontCard(self.common_fonts_en[font_combo.currentText()], "hello, world", parent=self)
         text_settings_layout.addWidget(self.font_card)
-
         text_settings_layout.addSpacing(10)
 
         text_label_3 = CaptionLabel(text="字体大小")
@@ -222,7 +221,6 @@ class WatermarkContentCard(HeaderCardWidget):
         # 监听数值改变信号
         # spinBox.valueChanged.connect(lambda value: print("当前值：", value))
         text_settings_layout.addWidget(spinBox)
-
         text_settings_layout.addSpacing(10)
 
         text_label_4 = CaptionLabel(text="颜色")
@@ -232,8 +230,27 @@ class WatermarkContentCard(HeaderCardWidget):
         select_color = ColorPicker()
         text_settings_layout.addWidget(select_color)
 
+        # 图片水印设置界面
+        imageSettings = QWidget()
+        image_settings_layout = QVBoxLayout(imageSettings)
+        image_settings_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        image_settings_layout.setContentsMargins(0, 0, 0, 0)
+        image_settings_layout.setSpacing(5)
+        text_label_1 = CaptionLabel(text="选择水印图片")
+        setFont(text_label_1, 13)
+        text_label_1.setStyleSheet("color: #888888;")  # 设置为浅灰色
+        image_settings_layout.addWidget(text_label_1)
+        FileSelectorWidget.format_text_value = "支持 JPG, PNG 格式"
+        upload_file_selector = FileSelectorWidget()
+        image_settings_layout.addWidget(upload_file_selector)
 
-        imageSettings = DirectorySelectorWidget(self)
+        image_settings_layout.addSpacing(10)
+
+        text_label_2 = CaptionLabel(text="透明度")
+        setFont(text_label_2, 13)
+        text_label_2.setStyleSheet("color: #888888;")  # 设置为浅灰色
+        image_settings_layout.addWidget(text_label_2)
+        image_settings_layout.addSpacing(10)
 
         self.addSubInterface(textSettings, 'TextSettings', self.tr("文字"))
         self.addSubInterface(imageSettings, 'ImageSettings', self.tr("图片"))
