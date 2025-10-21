@@ -6,7 +6,7 @@ from PySide6.QtGui import QPainter, QBrush, QLinearGradient, QColor, QFont
 
 from app.ui.library.qfluentwidgets import (
     ScrollArea, HeaderCardWidget, GroupHeaderCardWidget, SegmentedWidget, setFont,
-    PushButton, CaptionLabel, TextEdit, SpinBox, ComboBox
+    PushButton, CaptionLabel, TextEdit, SpinBox, ComboBox, Slider
 )
 
 from app.ui.widgets.font_card import FontCard, get_available_fonts
@@ -243,14 +243,25 @@ class WatermarkContentCard(HeaderCardWidget):
         FileSelectorWidget.format_text_value = "支持 JPG, PNG 格式"
         upload_file_selector = FileSelectorWidget()
         image_settings_layout.addWidget(upload_file_selector)
-
         image_settings_layout.addSpacing(10)
 
+        slider_top_layout = QHBoxLayout()
+        slider_top_layout.setContentsMargins(0, 0, 0, 0)
         text_label_2 = CaptionLabel(text="透明度")
         setFont(text_label_2, 13)
         text_label_2.setStyleSheet("color: #888888;")  # 设置为浅灰色
-        image_settings_layout.addWidget(text_label_2)
-        image_settings_layout.addSpacing(10)
+        slider_top_layout.addWidget(text_label_2)
+        self.slider_value_label = QLabel("20%")
+        setFont(self.slider_value_label, 13)
+        self.slider_value_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
+        slider_top_layout.addStretch(1)
+        slider_top_layout.addWidget(self.slider_value_label)
+        image_settings_layout.addLayout(slider_top_layout)
+        slider = Slider(Qt.Horizontal)
+        slider.setRange(0, 100)
+        slider.setValue(20)
+        slider.valueChanged.connect(self.update_value)
+        image_settings_layout.addWidget(slider)
 
         self.addSubInterface(textSettings, 'TextSettings', self.tr("文字"))
         self.addSubInterface(imageSettings, 'ImageSettings', self.tr("图片"))
@@ -265,6 +276,9 @@ class WatermarkContentCard(HeaderCardWidget):
         self.stackedWidget.addWidget(widget)
         self.pivot.addItem(routeKey=objectName, text=text)
 
+    def update_value(self, val):
+        self.slider_value_label.setText(str(val)+"%")
+
     def font_changed(self, font_name):
         if font_name in self.common_fonts_zh.keys():
             text = "你好，世界"
@@ -276,11 +290,14 @@ class WatermarkContentCard(HeaderCardWidget):
 class WatermarkSettingsCard(GroupHeaderCardWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setTitle(self.tr("⚙️ 水印设置"))
+        self.setBorderRadius(8)
 
 
 class OutputSettingsCard(GroupHeaderCardWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setTitle(self.tr("💾 输出设置"))
 
 
 class GradientHeader(QWidget):
