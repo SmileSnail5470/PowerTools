@@ -293,6 +293,25 @@ class WatermarkSettingsCard(GroupHeaderCardWidget):
         self.setTitle(self.tr("⚙️ 水印设置"))
         self.setBorderRadius(8)
 
+        self.location_label = CaptionLabel(text="位置")
+        self.location_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
+        self.location_combo = ComboBox()
+        self.location_combo.addItems([
+            "左上角", "上方居中", "右上角",
+            "左侧居中", "正中间", "右侧居中",
+            "左下角", "下方居中", "右下角",
+            "全图水印"
+        ])
+        self.rotate_label = CaptionLabel(text="旋转角度")
+        self.rotate_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
+        self.rotate_slider = Slider(Qt.Horizontal)
+        self.rotate_slider.setRange(-180, 180)
+        self.rotate_slider.setValue(0)
+        self.zoom_label = CaptionLabel(text="缩放比例")
+        self.zoom_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
+        self.zoom_slider = Slider(Qt.Horizontal)
+        self.zoom_slider.setRange(10, 200)
+        self.zoom_slider.setValue(100)
 
 class OutputSettingsCard(GroupHeaderCardWidget):
     def __init__(self, parent=None):
