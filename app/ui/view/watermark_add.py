@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QPainter, QBrush, QLinearGradient, QColor, QFont
 
 from app.ui.library.qfluentwidgets import (
-    ScrollArea, HeaderCardWidget, GroupHeaderCardWidget, SegmentedWidget, setFont,
+    ScrollArea, HeaderCardWidget, SegmentedWidget, setFont, FluentIcon,
     PushButton, CaptionLabel, TextEdit, SpinBox, ComboBox, Slider
 )
 
@@ -181,20 +181,20 @@ class WatermarkContentCard(HeaderCardWidget):
         text_settings_layout = QVBoxLayout(textSettings)
         text_settings_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         text_settings_layout.setContentsMargins(0, 0, 0, 0)
-        text_settings_layout.setSpacing(5)
-        text_label_1 = CaptionLabel(text="水印文字")
+        text_settings_layout.setSpacing(8)
+        text_label_1 = CaptionLabel(text=self.tr("水印文字"))
         setFont(text_label_1, 13)
         text_label_1.setStyleSheet("color: #888888;")  # 设置为浅灰色
         text_settings_layout.addWidget(text_label_1)
         text_edit = TextEdit()
-        text_edit.setPlaceholderText("输入水印文字")
+        text_edit.setPlaceholderText(self.tr("输入水印文字"))
         text_edit.setText("@ PowerTools")
         text_edit.setFixedHeight(50)
         setFont(text_edit, 13)
         text_settings_layout.addWidget(text_edit)
         text_settings_layout.addSpacing(10)
 
-        text_label_2 = CaptionLabel(text="字体")
+        text_label_2 = CaptionLabel(text=self.tr("字体"))
         setFont(text_label_2, 13)
         text_label_2.setStyleSheet("color: #888888;")  # 设置为浅灰色
         text_settings_layout.addWidget(text_label_2)
@@ -210,7 +210,7 @@ class WatermarkContentCard(HeaderCardWidget):
         text_settings_layout.addWidget(self.font_card)
         text_settings_layout.addSpacing(10)
 
-        text_label_3 = CaptionLabel(text="字体大小")
+        text_label_3 = CaptionLabel(text=self.tr("字体大小"))
         setFont(text_label_3, 13)
         text_label_3.setStyleSheet("color: #888888;")  # 设置为浅灰色
         text_settings_layout.addWidget(text_label_3)
@@ -223,7 +223,7 @@ class WatermarkContentCard(HeaderCardWidget):
         text_settings_layout.addWidget(spinBox)
         text_settings_layout.addSpacing(10)
 
-        text_label_4 = CaptionLabel(text="颜色")
+        text_label_4 = CaptionLabel(text=self.tr("颜色"))
         setFont(text_label_4, 13)
         text_label_4.setStyleSheet("color: #888888;")  # 设置为浅灰色
         text_settings_layout.addWidget(text_label_4)
@@ -235,19 +235,19 @@ class WatermarkContentCard(HeaderCardWidget):
         image_settings_layout = QVBoxLayout(imageSettings)
         image_settings_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         image_settings_layout.setContentsMargins(0, 0, 0, 0)
-        image_settings_layout.setSpacing(5)
-        text_label_1 = CaptionLabel(text="选择水印图片")
+        image_settings_layout.setSpacing(8)
+        text_label_1 = CaptionLabel(text=self.tr("选择水印图片"))
         setFont(text_label_1, 13)
         text_label_1.setStyleSheet("color: #888888;")  # 设置为浅灰色
         image_settings_layout.addWidget(text_label_1)
-        FileSelectorWidget.format_text_value = "支持 JPG, PNG 格式"
+        FileSelectorWidget.format_text_value = self.tr("支持 JPG, PNG 格式")
         upload_file_selector = FileSelectorWidget()
         image_settings_layout.addWidget(upload_file_selector)
         image_settings_layout.addSpacing(10)
 
         slider_top_layout = QHBoxLayout()
         slider_top_layout.setContentsMargins(0, 0, 0, 0)
-        text_label_2 = CaptionLabel(text="透明度")
+        text_label_2 = CaptionLabel(text=self.tr("透明度"))
         setFont(text_label_2, 13)
         text_label_2.setStyleSheet("color: #888888;")  # 设置为浅灰色
         slider_top_layout.addWidget(text_label_2)
@@ -268,8 +268,23 @@ class WatermarkContentCard(HeaderCardWidget):
 
         self.stackedWidget.setCurrentWidget(textSettings)
         self.pivot.setCurrentItem(textSettings.objectName())
-        self.pivot.currentItemChanged.connect(
-            lambda k:  self.stackedWidget.setCurrentWidget(self.findChild(QWidget, k)))
+        self.pivot.currentItemChanged.connect(lambda k: self.on_pivot_changed(k))
+        
+    def on_pivot_changed(self, object_name):
+        widget = self.findChild(QWidget, object_name)
+        if not widget:
+            return
+        # 切换页面
+        self.stackedWidget.setCurrentWidget(widget)
+        # 强制调整内容区域大小
+        widget.adjustSize()
+        # 让 stackedWidget 匹配子内容高度
+        hint = widget.sizeHint()
+        self.stackedWidget.setFixedHeight(hint.height())
+        # 让整个窗口或父容器重新布局
+        parent = self.parentWidget()
+        if parent:
+            parent.adjustSize()
 
     def addSubInterface(self, widget: QWidget, objectName, text):
         widget.setObjectName(objectName)
@@ -287,36 +302,106 @@ class WatermarkContentCard(HeaderCardWidget):
             text = "hello, world"
             self.font_card.update_font(self.common_fonts_en[font_name], text)
 
-class WatermarkSettingsCard(GroupHeaderCardWidget):
+class WatermarkSettingsCard(HeaderCardWidget):
+    degree = "\u00B0"
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setTitle(self.tr("⚙️ 水印设置"))
         self.setBorderRadius(8)
+        self.viewLayout.setContentsMargins(10, 10, 10, 10)
 
-        self.location_label = CaptionLabel(text="位置")
-        self.location_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
-        self.location_combo = ComboBox()
-        self.location_combo.addItems([
-            "左上角", "上方居中", "右上角",
-            "左侧居中", "正中间", "右侧居中",
-            "左下角", "下方居中", "右下角",
-            "全图水印"
+        watermark_location = QWidget()
+        watermark_location_layout = QVBoxLayout(watermark_location)
+        watermark_location_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        watermark_location_layout.setContentsMargins(0, 0, 0, 0)
+        watermark_location_layout.setSpacing(8)
+
+        watermark_location_label = CaptionLabel(text=self.tr("位置"))
+        setFont(watermark_location_label, 13)
+        watermark_location_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
+        watermark_location_layout.addWidget(watermark_location_label)
+        watermark_location_combo = ComboBox()
+        watermark_location_combo.addItems([
+            self.tr("左上"), self.tr("上中"), self.tr("右上"),
+            self.tr("左中"), self.tr("居中"), self.tr("右中"),
+            self.tr("左下"), self.tr("下中"), self.tr("右下"),
         ])
-        self.rotate_label = CaptionLabel(text="旋转角度")
-        self.rotate_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
-        self.rotate_slider = Slider(Qt.Horizontal)
-        self.rotate_slider.setRange(-180, 180)
-        self.rotate_slider.setValue(0)
-        self.zoom_label = CaptionLabel(text="缩放比例")
-        self.zoom_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
-        self.zoom_slider = Slider(Qt.Horizontal)
-        self.zoom_slider.setRange(10, 200)
-        self.zoom_slider.setValue(100)
+        watermark_location_combo.currentTextChanged.connect(self.watermark_location_changed)
+        watermark_location_layout.addWidget(watermark_location_combo)
+        watermark_location_layout.addSpacing(10)
 
-class OutputSettingsCard(GroupHeaderCardWidget):
+        rotation_slider_top_layout = QHBoxLayout()
+        rotation_slider_top_layout.setContentsMargins(0, 0, 0, 0)
+        watermark_rotation_label = CaptionLabel(text=self.tr("旋转角度"))
+        setFont(watermark_rotation_label, 13)
+        watermark_rotation_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
+        rotation_slider_top_layout.addWidget(watermark_rotation_label)
+        self.slider_rotation_value_label = QLabel("0{degree}".format(degree=self.degree))
+        setFont(self.slider_rotation_value_label, 13)
+        self.slider_rotation_value_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
+        rotation_slider_top_layout.addStretch(1)
+        rotation_slider_top_layout.addWidget(self.slider_rotation_value_label)
+        slider = Slider(Qt.Horizontal)
+        slider.setRange(-180, 180)
+        slider.setValue(0)
+        slider.valueChanged.connect(self.update_rotation_value)
+        watermark_location_layout.addLayout(rotation_slider_top_layout)
+        watermark_location_layout.addWidget(slider)
+        watermark_location_layout.addSpacing(10)
+
+        zoom_slider_top_layout = QHBoxLayout()
+        zoom_slider_top_layout.setContentsMargins(0, 0, 0, 0)
+        watermark_zoom_label = CaptionLabel(text=self.tr("缩放比例"))
+        setFont(watermark_zoom_label, 13)
+        watermark_zoom_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
+        zoom_slider_top_layout.addWidget(watermark_zoom_label)
+        self.slider_zoom_value_label = QLabel("100%")
+        setFont(self.slider_zoom_value_label, 13)
+        self.slider_zoom_value_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
+        zoom_slider_top_layout.addStretch(1)
+        zoom_slider_top_layout.addWidget(self.slider_zoom_value_label)
+        zoom_slider = Slider(Qt.Horizontal)
+        zoom_slider.setRange(10, 200)
+        zoom_slider.setValue(100)
+        zoom_slider.valueChanged.connect(self.update_zoom_value)
+        watermark_location_layout.addLayout(zoom_slider_top_layout)
+        watermark_location_layout.addWidget(zoom_slider)
+
+        self.viewLayout.addWidget(watermark_location)
+
+    def watermark_location_changed(self, location_text):
+        # TODO
+        pass
+
+    def update_rotation_value(self, val):
+        self.slider_rotation_value_label.setText(str(val)+"{degree}".format(degree=self.degree))
+
+    def update_zoom_value(self, val):
+        self.slider_zoom_value_label.setText(str(val)+"%")
+
+class OutputSettingsCard(HeaderCardWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setTitle(self.tr("💾 输出设置"))
+        self.setBorderRadius(8)
+        self.viewLayout.setContentsMargins(10, 10, 10, 10)
+
+        output_settings = QWidget()
+        output_settings_layout = QVBoxLayout(output_settings)
+        output_settings_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        output_settings_layout.setContentsMargins(0, 0, 0, 0)
+        output_settings_layout.setSpacing(8)
+
+        save_location_label = CaptionLabel(text=self.tr("保存位置"))
+        setFont(save_location_label, 13)
+        save_location_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
+        output_settings_layout.addWidget(save_location_label)
+        save_location_button = PushButton(text=self.tr("选择保存目录"), icon=FluentIcon.FOLDER_ADD)
+        setFont(save_location_button, 13)
+        output_settings_layout.addWidget(save_location_button)
+
+        self.viewLayout.addWidget(output_settings)
 
 
 class GradientHeader(QWidget):
@@ -357,6 +442,12 @@ class ControlPanelWidget(ScrollArea):
 
         watermarkContentCard = WatermarkContentCard(self)
         main_layout.addWidget(watermarkContentCard)
+
+        watermarkSettingsCard = WatermarkSettingsCard(self)
+        main_layout.addWidget(watermarkSettingsCard)
+
+        outputSettingsCard = OutputSettingsCard(self)
+        main_layout.addWidget(outputSettingsCard)
 
         self.setWidget(view)
         self.setViewportMargins(0, 0, 0, 0)
