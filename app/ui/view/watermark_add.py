@@ -1,18 +1,19 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QStackedWidget, QHBoxLayout, QLabel
+    QWidget, QVBoxLayout, QStackedWidget, QHBoxLayout, QLabel, QLineEdit, QFileDialog
 )
-from PySide6.QtGui import QPainter, QBrush, QLinearGradient, QColor, QFont
+from PySide6.QtGui import QPainter, QBrush, QLinearGradient, QColor, QFont, QAction
 
 from app.ui.library.qfluentwidgets import (
     ScrollArea, HeaderCardWidget, SegmentedWidget, setFont, FluentIcon,
-    PushButton, CaptionLabel, TextEdit, SpinBox, ComboBox, Slider
+    PushButton, CaptionLabel, TextEdit, SpinBox, ComboBox, Slider, LineEdit
 )
 
 from app.ui.widgets.font_card import FontCard, get_available_fonts
 from app.ui.widgets.file_selector_widget import FileSelectorWidget
 from app.ui.widgets.directory_selector_widget import DirectorySelectorWidget
 from app.ui.widgets.color_picker_widget import ColorPicker
+from app.ui.widgets.image_preview_widget import SyncImageViewer
 
 
 class FileSelectorCard(HeaderCardWidget):
@@ -397,11 +398,34 @@ class OutputSettingsCard(HeaderCardWidget):
         setFont(save_location_label, 13)
         save_location_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
         output_settings_layout.addWidget(save_location_label)
-        save_location_button = PushButton(text=self.tr("选择保存目录"), icon=FluentIcon.FOLDER_ADD)
-        setFont(save_location_button, 13)
-        output_settings_layout.addWidget(save_location_button)
+        self.save_location_line_edit = LineEdit()
+        self.save_location_line_edit.setPlaceholderText(self.tr("选择保存位置"))
+        save_location_action = QAction(FluentIcon.FOLDER_ADD.qicon(), "", triggered=self.save_location_browse)
+        self.save_location_line_edit.addAction(save_location_action, QLineEdit.TrailingPosition)
+        output_settings_layout.addWidget(self.save_location_line_edit)
+        output_settings_layout.addSpacing(10)
+
+        output_format_label = CaptionLabel(text=self.tr("输出格式"))
+        setFont(output_format_label, 13)
+        output_format_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
+        output_settings_layout.addWidget(output_format_label)
+        output_format_combo = ComboBox()
+        output_format_combo.addItems([
+            self.tr("保持原格式"), "JPG", "PNG"
+        ])
+        output_settings_layout.addWidget(output_format_combo)
 
         self.viewLayout.addWidget(output_settings)
+
+    def save_location_browse(self):
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "选择文件夹",
+            "",
+            QFileDialog.Option.ShowDirsOnly
+        )
+        if directory:
+            self.save_location_line_edit.setText(directory)
 
 
 class GradientHeader(QWidget):
@@ -518,8 +542,17 @@ class HeaderWidget(QWidget):
         main_layout.addWidget(header)
 
 
-class PreviewWidget():
-    pass
+class PreviewWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("PreviewWidget")
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        preview_widget = SyncImageViewer(imag1="path/to/image1.jpg", img2="path/to/image2.jpg")
+        main_layout.addWidget(preview_widget)
 
 
 class WatermarkAdd(QWidget):

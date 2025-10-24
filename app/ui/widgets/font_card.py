@@ -36,7 +36,6 @@ def get_available_fonts():
         for alias in aliases:
             if alias.lower() in lower_families:
                 real_name = families[lower_families.index(alias.lower())]
-                entry = {"display": display_name, "system": real_name}
                 if display_name in [
                     "微软雅黑", "宋体", "黑体", "仿宋", "楷体", "苹方", "思源黑体", "思源宋体"
                 ]:
