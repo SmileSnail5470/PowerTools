@@ -14,6 +14,7 @@ from app.ui.widgets.file_selector_widget import FileSelectorWidget
 from app.ui.widgets.directory_selector_widget import DirectorySelectorWidget
 from app.ui.widgets.color_picker_widget import ColorPicker
 from app.ui.widgets.image_preview_widget import SyncImageViewer
+from app.ui.widgets.status_bar_widget import StatusInfoWidget
 
 
 class FileSelectorCard(HeaderCardWidget):
@@ -551,10 +552,14 @@ class PreviewWidget(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        preview_widget = SyncImageViewer(imag1="path/to/image1.jpg", img2="path/to/image2.jpg")
+        preview_widget = SyncImageViewer(img1="", img2="")
         main_layout.addWidget(preview_widget)
 
+        # 底部状态栏
+        status_info_widget = StatusInfoWidget(self)
+        main_layout.addWidget(status_info_widget)
 
+    
 class WatermarkAdd(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -576,8 +581,7 @@ class WatermarkAdd(QWidget):
         view_layout.addWidget(control_panel_widget, 3)
 
         # 右侧预览
-        right_content = QLabel("右侧预览区")
-        right_content.setAlignment(Qt.AlignCenter)
+        right_content = PreviewWidget(self)
         view_layout.addWidget(right_content, 7)
 
         main_Layout.addLayout(view_layout)
