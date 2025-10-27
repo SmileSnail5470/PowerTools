@@ -139,7 +139,7 @@ class SyncGraphicsView(QGraphicsView):
     zoomChanged = Signal(float)
     scrollChanged = Signal(int, int)
 
-    def __init__(self, pixmap: QPixmap = None, parent=None):
+    def __init__(self, pixmap: QPixmap = None, parent=None, sub_title: str = ""):
         super().__init__(parent)
         self.setRenderHints(self.renderHints() | self.renderHints().SmoothPixmapTransform)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
@@ -161,6 +161,7 @@ class SyncGraphicsView(QGraphicsView):
         self._syncing_scroll = False
         self.pixmap_item = None
         self.placeholder = None
+        self.sub_title = sub_title
 
         self._init_placeholder()
         if pixmap and not pixmap.isNull():
@@ -176,13 +177,13 @@ class SyncGraphicsView(QGraphicsView):
 
         # 主标题
         title = QGraphicsTextItem(self.tr("预览区域"))
-        setFont(title, 20)
+        setFont(title, 16)
         title.setDefaultTextColor(QColor("#666666"))
         self.scene.addItem(title)
 
         # 副标题
-        subtitle = QGraphicsTextItem(self.tr("添加文件后显示预览"))
-        setFont(subtitle, 18)
+        subtitle = QGraphicsTextItem(self.tr(self.sub_title) if self.sub_title else self.tr("请加载图片以预览"))
+        setFont(subtitle, 14)
         subtitle.setDefaultTextColor(QColor("#999999"))
         self.scene.addItem(subtitle)
 
@@ -200,10 +201,9 @@ class SyncGraphicsView(QGraphicsView):
         subtitle.setPos(-subtitle.boundingRect().width() / 2, title.pos().y() + title.boundingRect().height() + 2)
 
         # 设置场景矩形（用于居中）
-        self.scene.setSceneRect(-200, -150, 400, 300)
+        self.scene.setSceneRect(-180, -135, 360, 270)
 
     def _center_placeholder(self):
-        """将占位文字居中"""
         if not self.placeholder:
             return
         rect = self.scene.sceneRect()
@@ -218,7 +218,6 @@ class SyncGraphicsView(QGraphicsView):
         self._center_placeholder()
 
     def set_pixmap(self, pixmap: QPixmap):
-        """设置/更新图片"""
         self.scene.clear()
         if pixmap and not pixmap.isNull():
             self.pixmap_item = QGraphicsPixmapItem(pixmap)
@@ -228,7 +227,6 @@ class SyncGraphicsView(QGraphicsView):
             self._init_placeholder()
 
     def wheelEvent(self, event: QWheelEvent):
-        """同步缩放"""
         zoom_factor = 1.25 if event.angleDelta().y() > 0 else 0.8
         old_zoom = self._zoom
         self._zoom *= zoom_factor
@@ -240,7 +238,6 @@ class SyncGraphicsView(QGraphicsView):
         self.zoomChanged.emit(self._zoom)
 
     def _emit_scroll(self):
-        """滚动同步信号"""
         if not self._syncing_scroll:
             self.scrollChanged.emit(
                 self.horizontalScrollBar().value(),
@@ -248,14 +245,12 @@ class SyncGraphicsView(QGraphicsView):
             )
 
     def sync_scroll(self, x: int, y: int):
-        """响应同步滚动"""
         self._syncing_scroll = True
         self.horizontalScrollBar().setValue(x)
         self.verticalScrollBar().setValue(y)
         self._syncing_scroll = False
 
     def sync_zoom(self, target_zoom: float):
-        """响应同步缩放"""
         if abs(target_zoom - self._zoom) > 1e-3:
             scale_factor = target_zoom / self._zoom
             self._zoom = target_zoom
@@ -268,13 +263,13 @@ class SyncImageViewer(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(5)
+        layout.setSpacing(0)
 
         pix1 = QPixmap(img1) if img1 else None
         pix2 = QPixmap(img2) if img2 else None
 
-        self.view1 = SyncGraphicsView(pix1)
-        self.view2 = SyncGraphicsView(pix2)
+        self.view1 = SyncGraphicsView(pix1, sub_title="原图预览区域")
+        self.view2 = SyncGraphicsView(pix2, sub_title="添加水印后预览区域")
 
         layout.addWidget(self.view1)
         layout.addWidget(self.view2)
@@ -285,7 +280,6 @@ class SyncImageViewer(QWidget):
         self.view1.scrollChanged.connect(self.view2.sync_scroll)
         self.view2.scrollChanged.connect(self.view1.sync_scroll)
 
-        # Fluent/Win11风格
         self.setStyleSheet("""
             QWidget {
                 background-color: #f3f3f3;
@@ -294,7 +288,7 @@ class SyncImageViewer(QWidget):
             QGraphicsView {
                 background-color: #fafafa;
                 border: 1px solid #d0d0d0;
-                border-radius: 6px;
+                border-radius: 4px;
             }
         """)
 

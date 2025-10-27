@@ -14,6 +14,7 @@ from app.ui.widgets.file_selector_widget import FileSelectorWidget
 from app.ui.widgets.directory_selector_widget import DirectorySelectorWidget
 from app.ui.widgets.color_picker_widget import ColorPicker
 from app.ui.widgets.image_preview_widget import SyncImageViewer
+from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
 
 
