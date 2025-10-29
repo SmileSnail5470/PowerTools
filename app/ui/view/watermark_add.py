@@ -553,7 +553,8 @@ class PreviewWidget(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        preview_widget = SyncImageViewer(img1="", img2="")
+        # preview_widget = SyncImageViewer(img1="", img2="")
+        preview_widget = SyncVideoViewer(video1="", video2="")
         main_layout.addWidget(preview_widget)
 
         # 底部状态栏

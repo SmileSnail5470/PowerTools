@@ -253,7 +253,7 @@ class FailurePanel(QFrame):
         
     def setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setContentsMargins(16, 16, 24, 16)
         layout.setSpacing(12)
         
         # 头部
@@ -271,7 +271,7 @@ class FailurePanel(QFrame):
                 border-radius: 10px;
             }
         """)
-        setFont(self.failure_icon, 12, QFont.Bold)
+        setFont(self.failure_icon, 10, QFont.Bold)
         
         # 失败标题
         self.failure_title = QLabel(self.tr("失败的文件列表"))
