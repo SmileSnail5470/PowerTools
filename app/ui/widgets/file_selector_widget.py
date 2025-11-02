@@ -1,9 +1,11 @@
-from PySide6.QtCore import Signal, Qt
-from PySide6.QtWidgets import QVBoxLayout, QLabel, QFileDialog
-from app.ui.library.qfluentwidgets import setFont, SimpleCardWidget
+import os
+from PySide6.QtCore import Signal, Qt, QSize, QPropertyAnimation, QEasingCurve
+from PySide6.QtGui import QFont, QColor
+from PySide6.QtWidgets import QVBoxLayout, QLabel, QFileDialog, QHBoxLayout, QPushButton, QGraphicsDropShadowEffect, QFrame, QWidget
+from app.ui.library.qfluentwidgets import setFont, SimpleCardWidget, BodyLabel, CaptionLabel, FluentIcon
 
 
-class FileSelectorWidget(SimpleCardWidget):
+class FileUploadWidget(SimpleCardWidget):
     file_selected = Signal(list)
     format_text_value = "支持 JPG, PNG, AVIF, MP4, AVI 格式"
 
@@ -50,12 +52,12 @@ class FileSelectorWidget(SimpleCardWidget):
     def setup_style(self):
         self.setFixedHeight(140)
         self.setStyleSheet("""
-            FileSelectorWidget {
+            FileUploadWidget {
                 border: 2px dashed #667eea;
                 background-color: white;
                 border-radius: 12px;
             }
-            FileSelectorWidget:hover {
+            FileUploadWidget:hover {
                 background-color: #f0f4ff;
                 border-color: #764ba2;
             }
@@ -75,7 +77,7 @@ class FileSelectorWidget(SimpleCardWidget):
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
             self.setStyleSheet("""
-                FileSelectorCard {
+                FileUploadWidget {
                     border: 2px dashed #667eea;
                     background-color: #f0f4ff;
                     border-radius: 12px;
@@ -90,3 +92,179 @@ class FileSelectorWidget(SimpleCardWidget):
         files = [url.toLocalFile() for url in event.mimeData().urls()]
         if files:
             self.file_selected.emit(files)
+
+class DeleteButton(QPushButton):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(32, 32)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setText("")
+
+        self._setup_style()
+        
+        self._setup_shadow()
+        
+        self.setIcon(FluentIcon.DELETE.icon())
+        self.setIconSize(QSize(16, 16))
+        
+    def _setup_style(self):
+        self.setStyleSheet("""
+            DeleteButton {
+                background-color: transparent;
+                border: none;
+                border-radius: 16px;
+                padding: 0px;
+            }
+            DeleteButton:hover {
+                background-color: rgba(244, 67, 54, 0.1);
+            }
+            DeleteButton:pressed {
+                background-color: rgba(244, 67, 54, 0.2);
+            }
+            DeleteButton QAbstractButton {
+                background: transparent;
+            }
+        """)
+        
+    def _setup_shadow(self):
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(8)
+        shadow.setXOffset(0)
+        shadow.setYOffset(2)
+        shadow.setColor(QColor(0, 0, 0, 20))
+        self.setGraphicsEffect(shadow)
+
+
+class FileInfoWidget(SimpleCardWidget):
+    def __init__(self, parent=None, image_path: str = ""):
+        super().__init__(parent)
+        self.setFixedHeight(63)
+        self.setStyleSheet("""
+            FileSelectorWidget {
+                border: 1px solid rgba(0, 0, 0, 0.08);
+                background-color: #f9f9f9;
+                border-radius: 12px;
+            }
+            FileSelectorWidget:hover {
+                background-color: #f5f5f5;
+                border-color: rgba(0, 0, 0, 0.12);
+            }
+        """)
+
+        if not image_path:
+            image_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "images", "logo.png")
+
+        image_file_name = os.path.basename(image_path)
+        file_size = os.path.getsize(image_path)
+        
+        self._create_ui_components(image_file_name, file_size)
+        
+        self._setup_layout()
+        
+    def _create_ui_components(self, file_name: str, file_size: int):
+        self.iconWidget = QLabel("🖼️")
+        setFont(self.iconWidget, 30)
+        
+        self.titleLabel = BodyLabel(file_name, self)
+        setFont(self.titleLabel, 12, QFont.DemiBold)
+        self.titleLabel.setStyleSheet("color: #323130;")
+        
+        content = self.human_readable_size(file_size)
+        self.contentLabel = CaptionLabel(content, self)
+        setFont(self.contentLabel, 10)
+        self.contentLabel.setTextColor("#606060", "#d2d2d2")
+        
+        self.removeButton = DeleteButton(self)
+        
+        self.separator = QFrame()
+        self.separator.setFrameShape(QFrame.Shape.VLine)
+        self.separator.setFrameShadow(QFrame.Shadow.Sunken)
+        self.separator.setStyleSheet("""
+            QFrame {
+                color: rgba(0, 0, 0, 0.08);
+                margin: 0px 10px;
+            }
+        """)
+        
+    def _setup_layout(self):
+        self.hBoxLayout = QHBoxLayout(self)
+        self.vBoxLayout = QVBoxLayout()
+
+        # 水平布局设置
+        self.hBoxLayout.setContentsMargins(20, 11, 11, 11)
+        self.hBoxLayout.setSpacing(15)
+        self.hBoxLayout.addWidget(self.iconWidget)
+
+        # 垂直布局设置
+        self.vBoxLayout.setContentsMargins(0, 0, 0, 0)
+        self.vBoxLayout.setSpacing(2)
+        self.vBoxLayout.addWidget(self.titleLabel, 0, Qt.AlignVCenter)
+        self.vBoxLayout.addWidget(self.contentLabel, 0, Qt.AlignVCenter)
+        self.vBoxLayout.setAlignment(Qt.AlignVCenter)
+        self.hBoxLayout.addLayout(self.vBoxLayout)
+
+        # 添加弹性空间和分隔线
+        self.hBoxLayout.addStretch(1)
+        self.hBoxLayout.addWidget(self.separator)
+        self.hBoxLayout.addWidget(self.removeButton, 0, Qt.AlignVCenter)
+
+    def human_readable_size(self, size_bytes: int) -> str:
+        if size_bytes == 0:
+            return "0 B"
+        units = ["B", "KB", "MB", "GB", "TB"]
+        i = 0
+        while size_bytes >= 1024 and i < len(units) - 1:
+            size_bytes /= 1024.0
+            i += 1
+        return f"{size_bytes:.2f} {units[i]}"
+    
+
+class FileSelectorWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(10)
+
+        self.fileSelector = FileUploadWidget(self)
+        self.main_layout.addWidget(self.fileSelector)
+
+        self.fileInfoWidget = None
+
+        self.fileSelector.file_selected.connect(self.on_file_selected)
+
+    def on_file_selected(self, files: list[str]):
+        if not files:
+            return
+        file_path = files[0]
+
+        if self.fileInfoWidget:
+            self.fileInfoWidget.deleteLater()
+            self.fileInfoWidget = None
+
+        self.fileInfoWidget = FileInfoWidget(self, image_path=file_path)
+        self.main_layout.addWidget(self.fileInfoWidget)
+
+        self.default_height = self.fileSelector.height()
+
+        self.fileInfoWidget.removeButton.clicked.connect(self.on_file_removed)
+
+        self.animate_height_change(expand=True)
+
+    def on_file_removed(self):
+        if self.fileInfoWidget:
+            self.fileInfoWidget.deleteLater()
+            self.fileInfoWidget = None
+        self.animate_height_change(expand=False)
+
+    def animate_height_change(self, expand: bool):
+        start_height = self.height()
+        target_height = (self.default_height + 63 if expand else self.default_height)
+
+        animation = QPropertyAnimation(self, b"maximumHeight", self)
+        animation.setDuration(200)
+        animation.setStartValue(start_height)
+        animation.setEndValue(target_height)
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        animation.start()

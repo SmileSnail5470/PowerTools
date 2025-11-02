@@ -277,14 +277,10 @@ class WatermarkContentCard(HeaderCardWidget):
         widget = self.findChild(QWidget, object_name)
         if not widget:
             return
-        # 切换页面
         self.stackedWidget.setCurrentWidget(widget)
-        # 强制调整内容区域大小
         widget.adjustSize()
-        # 让 stackedWidget 匹配子内容高度
         hint = widget.sizeHint()
         self.stackedWidget.setFixedHeight(hint.height())
-        # 让整个窗口或父容器重新布局
         parent = self.parentWidget()
         if parent:
             parent.adjustSize()
