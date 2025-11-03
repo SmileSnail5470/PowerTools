@@ -99,8 +99,8 @@ class MainWindow(FluentWindow):
         )
 
     def initWindow(self):
-        self.resize(1220, 780)
-        self.setMinimumWidth(960)
+        self.resize(1300, 900)
+        self.setMinimumWidth(1300)
         self.setWindowIcon(QIcon(':/powertools/images/logo.png'))
         self.setWindowTitle(self.tr("PowerTools"))
 

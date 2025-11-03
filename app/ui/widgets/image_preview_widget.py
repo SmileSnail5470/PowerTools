@@ -1,10 +1,10 @@
 import os
-from PySide6.QtCore import Signal, Qt, QTimer, QRect, Property, QEasingCurve, QPropertyAnimation
+from PySide6.QtCore import Signal, Qt, QTimer, QRect, Property, QEasingCurve, QPropertyAnimation, QThreadPool, QRunnable, QRectF
 from PySide6.QtWidgets import (
     QGraphicsView, QWidget , QVBoxLayout, QGraphicsScene, QGraphicsPixmapItem, QGraphicsTextItem, 
-    QScrollBar, QProgressBar, QPushButton, QFrame, QHBoxLayout
+    QScrollBar, QProgressBar, QPushButton, QFrame, QHBoxLayout, QScrollArea
 )
-from PySide6.QtGui import QPixmap, QWheelEvent, QColor, QPainter, QBrush, QFont
+from PySide6.QtGui import QPixmap, QWheelEvent, QColor, QPainter, QBrush, QFont, QPen
 from app.ui.library.qfluentwidgets import setFont, qconfig, Theme 
 
 
@@ -262,8 +262,8 @@ class SyncGraphicsView(QGraphicsView):
 
 
 class SyncImageViewer(QWidget):
-    def __init__(self, img1: str = "", img2: str = ""):
-        super().__init__()
+    def __init__(self, img1: str = "", img2: str = "", parent=None):
+        super().__init__(parent=parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -300,275 +300,6 @@ class SyncImageViewer(QWidget):
         self.view2.set_pixmap(QPixmap(img2))
 
 
-# class RoundedProgressBar(QProgressBar):
-#     def __init__(self, parent=None):
-#         super().__init__(parent)
-#         self.setFixedHeight(6)
-#         self.setTextVisible(False)
-#         self.setRange(0, 100)
-#         self.setStyleSheet("""
-#             QProgressBar {
-#                 border: none;
-#                 border-radius: 3px;
-#                 background-color: rgba(200, 200, 200, 0.2);
-#             }
-#             QProgressBar::chunk {
-#                 border-radius: 3px;
-#                 background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-#                     stop:0 rgba(102, 126, 234, 0.7),
-#                     stop:0.5 rgba(118, 75, 162, 0.8),
-#                     stop:1 rgba(102, 126, 234, 0.7));
-#             }
-#         """)
-
-# class AnimatedButton(QPushButton):
-#     def __init__(self, text, parent=None):
-#         super().__init__(text, parent)
-#         self._scale = 1.0
-#         self._animation = QPropertyAnimation(self, b"scale", self)
-#         self._animation.setDuration(150)
-#         self._animation.setEasingCurve(QEasingCurve.OutCubic)
-        
-#     def get_scale(self):
-#         return self._scale
-    
-#     def set_scale(self, scale):
-#         self._scale = scale
-#         self.update()
-    
-#     scale = Property(float, get_scale, set_scale)
-    
-#     def enterEvent(self, event):
-#         super().enterEvent(event)
-#         self._animation.setEndValue(1.08)
-#         self._animation.start()
-    
-#     def leaveEvent(self, event):
-#         super().leaveEvent(event)
-#         self._animation.setEndValue(1.0)
-#         self._animation.start()
-    
-#     def mousePressEvent(self, event):
-#         self._animation.setEndValue(0.95)
-#         self._animation.start()
-#         super().mousePressEvent(event)
-    
-#     def mouseReleaseEvent(self, event):
-#         self._animation.setEndValue(1.08)
-#         self._animation.start()
-#         super().mouseReleaseEvent(event)
-    
-#     def paintEvent(self, event):
-#         painter = QPainter(self)
-#         painter.setRenderHint(QPainter.Antialiasing)
-        
-#         # 应用缩放
-#         painter.translate(self.width() / 2, self.height() / 2)
-#         painter.scale(self._scale, self._scale)
-#         painter.translate(-self.width() / 2, -self.height() / 2)
-        
-#         # 绘制按钮背景
-#         self.draw_background(painter)
-        
-#         # 绘制文本
-#         painter.setPen(QColor(85, 85, 85))
-#         setFont(painter, 18, QFont.Bold)
-#         painter.drawText(self.rect(), Qt.AlignCenter, self.text())
-    
-#     def draw_background(self, painter):
-#         pass
-
-# class TransparentNavButton(AnimatedButton):
-#     def __init__(self, text, parent=None):
-#         super().__init__(text, parent)
-#         self.setFixedSize(32, 32)
-#         self.setCursor(Qt.PointingHandCursor)
-#         self._is_hovered = False
-        
-#     def draw_background(self, painter):
-#         painter.setRenderHint(QPainter.Antialiasing)
-#         if self._is_hovered:
-#             fill_color = QColor(102, 126, 234, 60)      # hover: 半透明浅蓝
-#             border_color = QColor(102, 126, 234, 120)
-#         else:
-#             fill_color = QColor(102, 126, 234, 30)      # normal: 更浅
-#             border_color = QColor(102, 126, 234, 80)
-
-#         painter.setBrush(fill_color)
-#         painter.setPen(border_color)
-#         painter.drawEllipse(self.rect().adjusted(2, 2, -2, -2))
-    
-#     def enterEvent(self, event):
-#         self._is_hovered = True
-#         super().enterEvent(event)
-    
-#     def leaveEvent(self, event):
-#         self._is_hovered = False
-#         super().leaveEvent(event)
-
-# class ThumbnailButton(AnimatedButton):
-#     def __init__(self, index, image_path, parent=None):
-#         super().__init__("", parent)
-#         self.index = index
-#         self.image_path = image_path
-#         self.pixmap = QPixmap(image_path)
-#         self.setFixedSize(48, 48)
-#         self.is_active = False
-#         self._is_hovered = False
-#         self.setCursor(Qt.PointingHandCursor)
-
-#     def draw_background(self, painter):
-#         painter.setRenderHint(QPainter.Antialiasing)
-#         # 绘制图片（缩略图内容）
-#         if not self.pixmap.isNull():
-#             target_rect = self.rect().adjusted(3, 3, -3, -3)
-#             painter.drawPixmap(target_rect, self.pixmap.scaled(
-#                 target_rect.size(),
-#                 Qt.KeepAspectRatioByExpanding,
-#                 Qt.SmoothTransformation
-#             ))
-#         # hover 或 active 时加“柔光”效果（光晕遮罩）
-#         if self._is_hovered or self.is_active:
-#             overlay = QColor(255, 255, 255, 40 if self._is_hovered else 60)
-#             painter.setBrush(overlay)
-#             painter.setPen(Qt.NoPen)
-#             painter.drawRoundedRect(self.rect().adjusted(2, 2, -2, -2), 6, 6)
-
-#     def enterEvent(self, event):
-#         self._is_hovered = True
-#         if not self.is_active:
-#             super().enterEvent(event)
-
-#     def leaveEvent(self, event):
-#         self._is_hovered = False
-#         if not self.is_active:
-#             super().leaveEvent(event)
-
-#     def set_active(self, active):
-#         if self.is_active != active:
-#             self.is_active = active
-#             self._animation.setEndValue(1.1 if active else 1.0)
-#             self._animation.start()
-#             self.update()
-
-# class ImageNavigationWidget(QWidget):
-#     def __init__(self, images=[], parent=None):
-#         super().__init__(parent)
-#         self.total_images = images
-#         if not self.total_images:
-#             self.total_images = [
-#                 os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "images", "logo.png")
-#             ]
-#         self.current_index = 0
-#         self.setup_ui()
-#         self.update_display()
-
-#     def setup_ui(self):
-#         main_layout = QVBoxLayout(self)
-#         main_layout.setSpacing(10)
-#         main_layout.setContentsMargins(20, 20, 20, 20)
-
-#         # 导航控制区域
-#         nav_layout = QHBoxLayout()
-#         nav_layout.setSpacing(10)
-
-#         # 上一个按钮
-#         self.prev_btn = TransparentNavButton("◀")
-#         self.prev_btn.clicked.connect(self.prev_image)
-
-#         # 圆润进度条
-#         self.progress_bar = RoundedProgressBar()
-
-#         # 下一个按钮
-#         self.next_btn = TransparentNavButton("▶")
-#         self.next_btn.clicked.connect(self.next_image)
-
-#         nav_layout.addWidget(self.prev_btn)
-#         nav_layout.addWidget(self.progress_bar, 1)
-#         nav_layout.addWidget(self.next_btn)
-
-#         main_layout.addLayout(nav_layout)
-
-#         # 缩略图区域
-#         thumbnail_frame = QFrame()
-#         thumbnail_frame.setStyleSheet("""
-#             QFrame {
-#                 background-color: rgba(255, 255, 255, 0.05);
-#                 border-radius: 10px;
-#             }
-#         """)
-        
-#         thumbnail_layout = QHBoxLayout(thumbnail_frame)
-#         thumbnail_layout.setSpacing(8)
-#         thumbnail_layout.setContentsMargins(10, 10, 10, 10)
-
-#         # 创建缩略图按钮
-#         self.thumbnails = []
-#         for i, path in enumerate(self.total_images):
-#             thumbnail = ThumbnailButton(i, path)
-#             thumbnail.clicked.connect(lambda checked, idx=i: self.go_to_image(idx))
-#             self.thumbnails.append(thumbnail)
-#             thumbnail_layout.addWidget(thumbnail)
-
-#         thumbnail_layout.addStretch()
-
-#         main_layout.addWidget(thumbnail_frame)
-
-#         self.setStyleSheet("""
-#             QWidget {
-#                 background-color: rgba(248, 249, 250, 0.95);
-#                 border-radius: 15px;
-#             }
-#         """)
-
-#     def update_display(self):
-#         # 更新进度条
-#         progress = int(((self.current_index + 1) / len(self.total_images)) * 100)
-#         self.progress_bar.setValue(progress)
-        
-#         # 更新缩略图状态
-#         for i, thumbnail in enumerate(self.thumbnails):
-#             thumbnail.set_active(i == self.current_index)
-        
-#         # 更新按钮状态
-#         self.prev_btn.setEnabled(len(self.total_images) > 1)
-#         self.next_btn.setEnabled(len(self.total_images) > 1)
-
-#     def prev_image(self):
-#         if len(self.total_images) <= 1:
-#             return
-            
-#         if self.current_index > 0:
-#             self.current_index -= 1
-#         else:
-#             self.current_index = len(self.total_images) - 1  # 循环
-#         self.update_display()
-
-#     def next_image(self):
-#         if len(self.total_images) <= 1:
-#             return
-            
-#         if self.current_index < len(self.total_images) - 1:
-#             self.current_index += 1
-#         else:
-#             self.current_index = 0  # 循环
-#         self.update_display()
-
-#     def go_to_image(self, index):
-#         if 0 <= index < len(self.total_images):
-#             self.current_index = index
-#             self.update_display()
-
-#     def keyPressEvent(self, event):
-#         if event.key() == Qt.Key_Left:
-#             self.prev_image()
-#         elif event.key() == Qt.Key_Right:
-#             self.next_image()
-
-
-from PySide6.QtCore import QThreadPool, QRunnable, Signal
-
-# ------------------ RoundedProgressBar ------------------
 class RoundedProgressBar(QProgressBar):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -590,7 +321,7 @@ class RoundedProgressBar(QProgressBar):
             }
         """)
 
-# ------------------ AnimatedButton ------------------
+
 class AnimatedButton(QPushButton):
     def __init__(self, text, parent=None):
         super().__init__(text, parent)
@@ -646,13 +377,7 @@ class AnimatedButton(QPushButton):
     def draw_background(self, painter):
         pass
 
-def setFont(painter, size, weight=QFont.Normal):
-    font = painter.font()
-    font.setPixelSize(size)
-    font.setWeight(weight)
-    painter.setFont(font)
 
-# ------------------ TransparentNavButton ------------------
 class TransparentNavButton(AnimatedButton):
     def __init__(self, text, parent=None):
         super().__init__(text, parent)
@@ -681,7 +406,7 @@ class TransparentNavButton(AnimatedButton):
         self._is_hovered = False
         super().leaveEvent(event)
 
-# ------------------ 异步加载辅助 ------------------
+
 class LoaderWorker(QRunnable):
     def __init__(self, image_path, callback):
         super().__init__()
@@ -694,7 +419,7 @@ class LoaderWorker(QRunnable):
             if not pix.isNull():
                 self.callback(pix)
 
-# ------------------ ThumbnailButton ------------------
+
 class ThumbnailButton(AnimatedButton):
     thread_pool = QThreadPool.globalInstance()
 
@@ -712,13 +437,21 @@ class ThumbnailButton(AnimatedButton):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
+        scale_factor = self.scale
+        rect = self.rect()
+        center = rect.center()
+        painter.save()
+        painter.translate(center)
+        painter.scale(scale_factor, scale_factor)
+        painter.translate(-center)
+
         if self.pixmap:
             target_rect = self.rect().adjusted(3, 3, -3, -3)
             painter.drawPixmap(target_rect, self.pixmap)
         else:
             painter.setBrush(QColor(220, 220, 220, 50))
             painter.setPen(Qt.NoPen)
-            painter.drawRect(self.rect())
+            painter.drawRoundedRect(self.rect().adjusted(3, 3, -3, -3), 6, 6)
 
             # 异步加载
             worker = LoaderWorker(self.image_path, self.on_loaded)
@@ -729,6 +462,15 @@ class ThumbnailButton(AnimatedButton):
             painter.setBrush(overlay)
             painter.setPen(Qt.NoPen)
             painter.drawRoundedRect(self.rect().adjusted(2, 2, -2, -2), 6, 6)
+
+        painter.restore()
+
+        if self.is_active:
+            pen = QPen(QColor(128, 150, 255, 128), 2)  # 蓝色边框
+            pen.setJoinStyle(Qt.RoundJoin)
+            painter.setPen(pen)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 6, 6)
 
     def on_loaded(self, pixmap: QPixmap):
         self.pixmap = pixmap.scaled(
@@ -756,10 +498,11 @@ class ThumbnailButton(AnimatedButton):
             self._animation.start()
             self.update()
 
-# ------------------ ImageNavigationWidget ------------------
+
 class ImageNavigationWidget(QWidget):
     def __init__(self, images=[], parent=None):
         super().__init__(parent)
+        self.setObjectName("ImageNavigationWidget")
         self.total_images = images or [
             os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "images", "logo.png")
         ]
@@ -770,7 +513,7 @@ class ImageNavigationWidget(QWidget):
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(10)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setContentsMargins(10, 5, 10, 10)
 
         nav_layout = QHBoxLayout()
         nav_layout.setSpacing(10)
@@ -784,21 +527,22 @@ class ImageNavigationWidget(QWidget):
         self.next_btn.clicked.connect(self.next_image)
 
         nav_layout.addWidget(self.prev_btn)
-        nav_layout.addWidget(self.progress_bar, 1)
+        nav_layout.addWidget(self.progress_bar)
         nav_layout.addWidget(self.next_btn)
 
         main_layout.addLayout(nav_layout)
 
         thumbnail_frame = QFrame()
+        thumbnail_frame.setObjectName("thumbnailFrame")
         thumbnail_frame.setStyleSheet("""
-            QFrame {
-                background-color: rgba(255, 255, 255, 0.05);
+            QFrame#thumbnailFrame {
+                background-color: rgba(248, 249, 250, 0.95);
                 border-radius: 10px;
             }
         """)
         thumbnail_layout = QHBoxLayout(thumbnail_frame)
-        thumbnail_layout.setSpacing(8)
-        thumbnail_layout.setContentsMargins(10, 10, 10, 10)
+        thumbnail_layout.setSpacing(15)
+        thumbnail_layout.setContentsMargins(0, 0, 0, 0)
 
         self.thumbnails = []
         for i, path in enumerate(self.total_images):
@@ -807,12 +551,27 @@ class ImageNavigationWidget(QWidget):
             self.thumbnails.append(thumb)
             thumbnail_layout.addWidget(thumb)
         thumbnail_layout.addStretch()
-        main_layout.addWidget(thumbnail_frame)
 
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        scroll_area.setHorizontalScrollBar(ScrollBar(Qt.Horizontal, scroll_area))
+        scroll_area.horizontalScrollBar().setFade(True)
+
+        scroll_area.setWidget(thumbnail_frame)
+        
+        main_layout.addWidget(scroll_area)
+
+        self.setAutoFillBackground(True)
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.setStyleSheet("""
-            QWidget {
-                background-color: rgba(248, 249, 250, 0.95);
-                border-radius: 15px;
+            ImageNavigationWidget {
+                background-color: white;
+                border-radius: 8px;
+                border: 1px solid rgba(200, 200, 200, 0.3);
             }
         """)
 

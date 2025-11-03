@@ -392,7 +392,7 @@ class StatusInfoWidget(QWidget):
         
         # 状态栏
         self.status_bar = QFrame()
-        self.status_bar.setFixedHeight(100)
+        # self.status_bar.setFixedHeight(100)
         status_layout = QHBoxLayout(self.status_bar)
         status_layout.setContentsMargins(20, 0, 20, 0)
         status_layout.setSpacing(20)

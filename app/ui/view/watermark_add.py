@@ -547,11 +547,11 @@ class PreviewWidget(QWidget):
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        main_layout.setSpacing(5)
 
-        preview_widget = SyncImageViewer(img1="", img2="")
+        preview_widget = SyncImageViewer(img1="", img2="", parent=self)
         # preview_widget = SyncVideoViewer(self)
-        main_layout.addWidget(preview_widget)
+        main_layout.addWidget(preview_widget, 1)
 
         image_navigation_widget = ImageNavigationWidget(parent=self)
         main_layout.addWidget(image_navigation_widget)
