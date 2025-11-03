@@ -1,7 +1,7 @@
 import os
 from PySide6.QtCore import Signal, Qt, QSize, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QFont, QColor
-from PySide6.QtWidgets import QVBoxLayout, QLabel, QFileDialog, QHBoxLayout, QPushButton, QGraphicsDropShadowEffect, QFrame, QWidget
+from PySide6.QtWidgets import QVBoxLayout, QLabel, QFileDialog, QHBoxLayout, QPushButton, QGraphicsDropShadowEffect, QFrame, QWidget, QSizePolicy
 from app.ui.library.qfluentwidgets import setFont, SimpleCardWidget, BodyLabel, CaptionLabel, FluentIcon
 
 
@@ -141,7 +141,7 @@ class FileInfoWidget(SimpleCardWidget):
         self.setFixedHeight(63)
         self.setStyleSheet("""
             FileSelectorWidget {
-                border: 1px solid rgba(0, 0, 0, 0.08);
+                border: 2px solid rgba(0, 0, 0, 0.08);
                 background-color: #f9f9f9;
                 border-radius: 12px;
             }
@@ -157,16 +157,20 @@ class FileInfoWidget(SimpleCardWidget):
         image_file_name = os.path.basename(image_path)
         file_size = os.path.getsize(image_path)
         
-        self._create_ui_components(image_file_name, file_size)
+        self._create_ui_components(image_file_name, file_size, image_path)
         
         self._setup_layout()
         
-    def _create_ui_components(self, file_name: str, file_size: int):
+    def _create_ui_components(self, file_name: str, file_size: int, image_path: str):
         self.iconWidget = QLabel("🖼️")
         setFont(self.iconWidget, 30)
         
         self.titleLabel = BodyLabel(file_name, self)
         setFont(self.titleLabel, 12, QFont.DemiBold)
+        self.titleLabel.setToolTip(image_path)
+        self.titleLabel.setWordWrap(False)
+        self.titleLabel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.titleLabel.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.titleLabel.setStyleSheet("color: #323130;")
         
         content = self.human_readable_size(file_size)
@@ -260,7 +264,7 @@ class FileSelectorWidget(QWidget):
 
     def animate_height_change(self, expand: bool):
         start_height = self.height()
-        target_height = (self.default_height + 63 if expand else self.default_height)
+        target_height = (self.default_height + 63 + 10 if expand else self.default_height)
 
         animation = QPropertyAnimation(self, b"maximumHeight", self)
         animation.setDuration(200)

@@ -13,7 +13,7 @@ from app.ui.widgets.font_card import FontCard, get_available_fonts
 from app.ui.widgets.file_selector_widget import FileSelectorWidget
 from app.ui.widgets.directory_selector_widget import DirectorySelectorWidget
 from app.ui.widgets.color_picker_widget import ColorPicker
-from app.ui.widgets.image_preview_widget import SyncImageViewer
+from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget
 from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
 
@@ -552,6 +552,9 @@ class PreviewWidget(QWidget):
         preview_widget = SyncImageViewer(img1="", img2="")
         # preview_widget = SyncVideoViewer(self)
         main_layout.addWidget(preview_widget)
+
+        image_navigation_widget = ImageNavigationWidget(parent=self)
+        main_layout.addWidget(image_navigation_widget)
 
         # 底部状态栏
         status_info_widget = StatusInfoWidget(self)

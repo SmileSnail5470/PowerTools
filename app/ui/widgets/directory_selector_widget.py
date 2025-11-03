@@ -1,6 +1,6 @@
 import os
 from PySide6.QtCore import Signal, Qt, QSize, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QFont, QColor, QFontMetrics
+from PySide6.QtGui import QFont, QColor
 from PySide6.QtWidgets import QVBoxLayout, QLabel, QFileDialog, QPushButton, QGraphicsDropShadowEffect, QFrame, QWidget, QHBoxLayout, QSizePolicy
 from app.ui.library.qfluentwidgets import setFont, SimpleCardWidget, BodyLabel, CaptionLabel, FluentIcon
 
@@ -146,76 +146,13 @@ class DeleteButton(QPushButton):
         shadow.setColor(QColor(0, 0, 0, 20))
         self.setGraphicsEffect(shadow)
 
-
-class ElidedBodyLabel(QLabel):
-    def __init__(self, text="", mode=Qt.ElideMiddle, parent=None):
-        super().__init__(text, parent)
-        self._full_text = text
-        self._mode = mode
-        self.setToolTip(text)
-        self.setWordWrap(False)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        self.setTextInteractionFlags(Qt.TextSelectableByMouse)
-
-    def setText(self, text: str):
-        self._full_text = text
-        self.setToolTip(text)
-        self.updateElidedText()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.updateElidedText()
-
-    def updateElidedText(self):
-        full_text = self._full_text
-        if not full_text:
-            super().setText("")
-            return
-
-        fm = QFontMetrics(self.font())
-        max_width = self.width() - 60
-
-        if fm.horizontalAdvance(full_text) <= max_width:
-            super().setText(full_text)
-            return
-
-        parts = full_text.replace("\\", "/").split("/")
-        if len(parts) <= 2:
-            elided = fm.elidedText(full_text, Qt.ElideMiddle, max_width)
-            super().setText(elided)
-            return
-
-        first = parts[0]
-        last = parts[-1]
-        middle = "/".join(parts[1:-1])
-
-        prefix = first + "/"
-        suffix = "/" + last
-        prefix_width = fm.horizontalAdvance(prefix)
-        suffix_width = fm.horizontalAdvance(suffix)
-        ellipsis_width = fm.horizontalAdvance("...")
-
-        remain = max_width - prefix_width - suffix_width - ellipsis_width
-
-        if remain <= 0:
-            short_text = f".../{last}"
-        else:
-            trimmed_middle = ""
-            for ch in middle:
-                if fm.horizontalAdvance(trimmed_middle + ch) > remain:
-                    break
-                trimmed_middle += ch
-            short_text = f"{prefix}.../{last}"
-        super().setText(short_text)
-
-
 class DirectoryInfoWidget(SimpleCardWidget):
     def __init__(self, parent=None, dir_path: str = ""):
         super().__init__(parent)
         self.setFixedHeight(63)
         self.setStyleSheet("""
             FileSelectorWidget {
-                border: 1px solid rgba(0, 0, 0, 0.08);
+                border: 2px solid rgba(0, 0, 0, 0.08);
                 background-color: #f9f9f9;
                 border-radius: 12px;
             }
@@ -236,8 +173,17 @@ class DirectoryInfoWidget(SimpleCardWidget):
         self.iconWidget = QLabel("📁")
         setFont(self.iconWidget, 30)
         
-        self.titleLabel = ElidedBodyLabel(dir_path, parent=self)
+        base_dir = os.path.basename(dir_path)
+        if os.name == "nt":
+            base_dir = "...\\{0}".format(base_dir)
+        else:
+            base_dir = ".../{0}".format(base_dir)
+        self.titleLabel = BodyLabel(base_dir, self)
         setFont(self.titleLabel, 12, QFont.DemiBold)
+        self.titleLabel.setToolTip(dir_path)
+        self.titleLabel.setWordWrap(False)
+        self.titleLabel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.titleLabel.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.titleLabel.setStyleSheet("color: #323130;")
         
         content = "文件个数：{0}".format(len(os.listdir(dir_path)))
@@ -321,7 +267,7 @@ class DirectorySelectorWidget(QWidget):
 
     def animate_height_change(self, expand: bool):
         start_height = self.height()
-        target_height = (self.default_height + 63 if expand else self.default_height)
+        target_height = (self.default_height + 63 + 10 if expand else self.default_height)
 
         animation = QPropertyAnimation(self, b"maximumHeight", self)
         animation.setDuration(200)
