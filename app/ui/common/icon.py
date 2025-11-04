@@ -1,4 +1,3 @@
-# coding: utf-8
 from enum import Enum
 
 from app.ui.library.qfluentwidgets import FluentIconBase, getIconColor, Theme, theme

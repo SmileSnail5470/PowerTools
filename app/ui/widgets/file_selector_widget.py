@@ -224,6 +224,8 @@ class FileInfoWidget(SimpleCardWidget):
     
 
 class FileSelectorWidget(QWidget):
+    item_selected = Signal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -256,11 +258,14 @@ class FileSelectorWidget(QWidget):
 
         self.animate_height_change(expand=True)
 
+        self.item_selected.emit(file_path)
+
     def on_file_removed(self):
         if self.fileInfoWidget:
             self.fileInfoWidget.deleteLater()
             self.fileInfoWidget = None
         self.animate_height_change(expand=False)
+        self.item_selected.emit("")
 
     def animate_height_change(self, expand: bool):
         start_height = self.height()

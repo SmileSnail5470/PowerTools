@@ -4,8 +4,7 @@ from enum import Enum
 from PySide6.QtCore import QLocale
 from app.ui.library.qfluentwidgets import (qconfig, QConfig, ConfigItem, OptionsConfigItem, 
                                            BoolValidator, OptionsValidator, RangeConfigItem, 
-                                           RangeValidator, FolderListValidator, FolderValidator, 
-                                           Theme, ConfigSerializer)
+                                           RangeValidator, Theme, ConfigSerializer)
 
 
 class Language(Enum):
@@ -32,11 +31,6 @@ def isWin11():
 
 class Config(QConfig):
     """ Config of application """
-
-    # folders
-    musicFolders = ConfigItem("Folders", "LocalMusic", [], FolderListValidator())
-    downloadFolder = ConfigItem("Folders", "Download", "app/download", FolderValidator())
-
     # main window
     micaEnabled = ConfigItem("MainWindow", "MicaEnabled", isWin11(), BoolValidator())
     dpiScale = OptionsConfigItem("MainWindow", "DpiScale", "Auto", OptionsValidator([1, 1.25, 1.5, 1.75, 2, "Auto"]), restart=True)

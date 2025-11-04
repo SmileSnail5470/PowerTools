@@ -12,7 +12,7 @@ from app.ui.common.config import cfg
 from window import MainWindow
 from app.ui.library.qfluentwidgets import FluentTranslator
 
-from core.config import UpdateFontFamilies
+from app.configs.config import UpdateFontFamilies
 
 
 def main():

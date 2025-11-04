@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QStackedWidget, QHBoxLayout, QLabel, QLineEdit, QFileDialog
 )
@@ -10,13 +10,17 @@ from app.ui.library.qfluentwidgets import (
 )
 
 from app.ui.widgets.font_card import FontCard, get_available_fonts
-from app.ui.widgets.file_selector_widget import FileSelectorWidget
+from app.ui.widgets.file_selector_widget import FileSelectorWidget, FileUploadWidget
 from app.ui.widgets.directory_selector_widget import DirectorySelectorWidget
 from app.ui.widgets.color_picker_widget import ColorPicker
 from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget
 from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
 
+from app.ui.common.task_params import bind_widget_to_param, TaskParams
+
+
+watermark_add_params = TaskParams()
 
 class FileSelectorCard(HeaderCardWidget):
     def __init__(self, parent=None):
@@ -37,7 +41,9 @@ class FileSelectorCard(HeaderCardWidget):
         self.viewLayout.addLayout(main_layout)
 
         singleFileSelector = FileSelectorWidget(self)
+        bind_widget_to_param(singleFileSelector, "item_selected", watermark_add_params, "input_path", transform=None)
         batchFilesSelector = DirectorySelectorWidget(self)
+        bind_widget_to_param(batchFilesSelector, "item_selected", watermark_add_params, "input_path", transform=None)
 
         self.addSubInterface(singleFileSelector, 'FileSelectorWidget', self.tr("文件"))
         self.addSubInterface(batchFilesSelector, 'DirectorySelectorWidget', self.tr("目录"))
@@ -54,6 +60,8 @@ class FileSelectorCard(HeaderCardWidget):
 
 
 class WatermarkTypeSelectorCard(HeaderCardWidget):
+    watermark_type = Signal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.selected_type = "visible"  # 表示被选择的水印类型
@@ -147,7 +155,11 @@ class WatermarkTypeSelectorCard(HeaderCardWidget):
         self.visible_btn.mousePressEvent = lambda e: self.select_type("visible")
         self.blind_btn.mousePressEvent = lambda e: self.select_type("blind")
 
+        bind_widget_to_param(self, "watermark_type", watermark_add_params, "watermark_type", transform=None)
+        self.watermark_type.emit("visible")
+
     def select_type(self, type_name: str):
+        self.watermark_type.emit(type_name)
         if type_name == self.selected_type:
             return
         self.selected_type = type_name
@@ -163,6 +175,8 @@ class WatermarkTypeSelectorCard(HeaderCardWidget):
 
 
 class WatermarkContentCard(HeaderCardWidget):
+    watermark_text_changed = Signal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setTitle(self.tr("✏️ 水印内容"))
@@ -189,12 +203,15 @@ class WatermarkContentCard(HeaderCardWidget):
         setFont(text_label_1, 13)
         text_label_1.setStyleSheet("color: #888888;")  # 设置为浅灰色
         text_settings_layout.addWidget(text_label_1)
-        text_edit = TextEdit()
-        text_edit.setPlaceholderText(self.tr("输入水印文字"))
-        text_edit.setText("@ PowerTools")
-        text_edit.setFixedHeight(50)
-        setFont(text_edit, 13)
-        text_settings_layout.addWidget(text_edit)
+        self.text_edit = TextEdit()
+        self.text_edit.setPlaceholderText(self.tr("输入水印文字"))
+        self.text_edit.setText("@ PowerTools")
+        self.text_edit.setFixedHeight(50)
+        setFont(self.text_edit, 13)
+        bind_widget_to_param(self, "watermark_text_changed", watermark_add_params, "watermark_text", transform=None)
+        self.text_edit.textChanged.connect(self.watermark_text_update)
+        self.text_edit.textChanged.emit()
+        text_settings_layout.addWidget(self.text_edit)
         text_settings_layout.addSpacing(10)
 
         text_label_2 = CaptionLabel(text=self.tr("字体"))
@@ -202,6 +219,7 @@ class WatermarkContentCard(HeaderCardWidget):
         text_label_2.setStyleSheet("color: #888888;")  # 设置为浅灰色
         text_settings_layout.addWidget(text_label_2)
         font_combo = ComboBox()
+        bind_widget_to_param(font_combo, "currentTextChanged", watermark_add_params, "font", transform=None)
         self.common_fonts_zh, self.common_fonts_en = get_available_fonts()
         font_combo.addItems(list(self.common_fonts_zh.keys()) + list(self.common_fonts_en.keys()))
         font_combo.currentTextChanged.connect(self.font_changed)
@@ -221,8 +239,8 @@ class WatermarkContentCard(HeaderCardWidget):
         setFont(spinBox, 13)
         spinBox.setRange(8, 50)
         spinBox.setValue(15)
-        # 监听数值改变信号
-        # spinBox.valueChanged.connect(lambda value: print("当前值：", value))
+        bind_widget_to_param(spinBox, "valueChanged", watermark_add_params, "font_size", transform=None)
+        spinBox.valueChanged.emit(spinBox.value())
         text_settings_layout.addWidget(spinBox)
         text_settings_layout.addSpacing(10)
 
@@ -231,6 +249,8 @@ class WatermarkContentCard(HeaderCardWidget):
         text_label_4.setStyleSheet("color: #888888;")  # 设置为浅灰色
         text_settings_layout.addWidget(text_label_4)
         select_color = ColorPicker()
+        bind_widget_to_param(select_color, "color_changed", watermark_add_params, "font_color", transform=None)
+        select_color.color_changed.emit(select_color.selected_color)
         text_settings_layout.addWidget(select_color)
 
         # 图片水印设置界面
@@ -243,8 +263,9 @@ class WatermarkContentCard(HeaderCardWidget):
         setFont(text_label_1, 13)
         text_label_1.setStyleSheet("color: #888888;")  # 设置为浅灰色
         image_settings_layout.addWidget(text_label_1)
-        FileSelectorWidget.format_text_value = self.tr("支持 JPG, PNG 格式")
+        FileUploadWidget.format_text_value = self.tr("支持 JPG, PNG 格式")
         upload_file_selector = FileSelectorWidget()
+        bind_widget_to_param(upload_file_selector, "item_selected", watermark_add_params, "watermark_image", transform=None)
         image_settings_layout.addWidget(upload_file_selector)
         image_settings_layout.addSpacing(10)
 
@@ -264,12 +285,15 @@ class WatermarkContentCard(HeaderCardWidget):
         slider.setRange(0, 100)
         slider.setValue(20)
         slider.valueChanged.connect(self.update_value)
+        bind_widget_to_param(slider, "valueChanged", watermark_add_params, "watermark_opacity", transform=None)
+        slider.valueChanged.emit(slider.value())
         image_settings_layout.addWidget(slider)
 
         self.addSubInterface(textSettings, 'TextSettings', self.tr("文字"))
         self.addSubInterface(imageSettings, 'ImageSettings', self.tr("图片"))
 
         self.stackedWidget.setCurrentWidget(textSettings)
+        bind_widget_to_param(self.pivot, "currentItemChanged", watermark_add_params, "watermark_content", transform=None)
         self.pivot.setCurrentItem(textSettings.objectName())
         self.pivot.currentItemChanged.connect(lambda k: self.on_pivot_changed(k))
         
@@ -301,6 +325,9 @@ class WatermarkContentCard(HeaderCardWidget):
             text = "hello, world"
             self.font_card.update_font(self.common_fonts_en[font_name], text)
 
+    def watermark_text_update(self):
+        self.watermark_text_changed.emit(self.text_edit.toPlainText())
+
 class WatermarkSettingsCard(HeaderCardWidget):
     degree = "\u00B0"
 
@@ -326,7 +353,7 @@ class WatermarkSettingsCard(HeaderCardWidget):
             self.tr("左中"), self.tr("居中"), self.tr("右中"),
             self.tr("左下"), self.tr("下中"), self.tr("右下"),
         ])
-        watermark_location_combo.currentTextChanged.connect(self.watermark_location_changed)
+        bind_widget_to_param(watermark_location_combo, "currentTextChanged", watermark_add_params, "watermark_location", transform=None)
         watermark_location_layout.addWidget(watermark_location_combo)
         watermark_location_layout.addSpacing(10)
 
@@ -345,6 +372,8 @@ class WatermarkSettingsCard(HeaderCardWidget):
         slider.setRange(-180, 180)
         slider.setValue(0)
         slider.valueChanged.connect(self.update_rotation_value)
+        bind_widget_to_param(slider, "valueChanged", watermark_add_params, "watermark_rotation", transform=None)
+        slider.valueChanged.emit(slider.value())
         watermark_location_layout.addLayout(rotation_slider_top_layout)
         watermark_location_layout.addWidget(slider)
         watermark_location_layout.addSpacing(10)
@@ -364,14 +393,12 @@ class WatermarkSettingsCard(HeaderCardWidget):
         zoom_slider.setRange(10, 200)
         zoom_slider.setValue(100)
         zoom_slider.valueChanged.connect(self.update_zoom_value)
+        bind_widget_to_param(zoom_slider, "valueChanged", watermark_add_params, "watermark_zoom", transform=None)
+        zoom_slider.valueChanged.emit(zoom_slider.value())
         watermark_location_layout.addLayout(zoom_slider_top_layout)
         watermark_location_layout.addWidget(zoom_slider)
 
         self.viewLayout.addWidget(watermark_location)
-
-    def watermark_location_changed(self, location_text):
-        # TODO
-        pass
 
     def update_rotation_value(self, val):
         self.slider_rotation_value_label.setText(str(val)+"{degree}".format(degree=self.degree))
@@ -400,6 +427,7 @@ class OutputSettingsCard(HeaderCardWidget):
         self.save_location_line_edit.setPlaceholderText(self.tr("选择保存位置"))
         save_location_action = QAction(FluentIcon.FOLDER_ADD.qicon(), "", triggered=self.save_location_browse)
         self.save_location_line_edit.addAction(save_location_action, QLineEdit.TrailingPosition)
+        bind_widget_to_param(self.save_location_line_edit, "textChanged", watermark_add_params, "output_path", transform=None)
         output_settings_layout.addWidget(self.save_location_line_edit)
         output_settings_layout.addSpacing(10)
 
@@ -408,6 +436,7 @@ class OutputSettingsCard(HeaderCardWidget):
         output_format_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
         output_settings_layout.addWidget(output_format_label)
         output_format_combo = ComboBox()
+        bind_widget_to_param(output_format_combo, "currentTextChanged", watermark_add_params, "output_format", transform=None)
         output_format_combo.addItems([
             self.tr("保持原格式"), "JPG", "PNG"
         ])
@@ -538,6 +567,15 @@ class HeaderWidget(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         main_layout.addWidget(header)
+
+        process_btn.clicked.connect(self.add_watermark_process)
+        extract_btn.clicked.connect(self.extract_process)
+
+    def add_watermark_process(self):
+        print(watermark_add_params.to_dict())
+
+    def extract_process(self):
+        pass
 
 
 class PreviewWidget(QWidget):

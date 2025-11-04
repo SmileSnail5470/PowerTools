@@ -1,5 +1,5 @@
-from PySide6.QtCore import QUrl, QSize, QTimer
-from PySide6.QtGui import QIcon, QDesktopServices
+from PySide6.QtCore import QSize, QTimer
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from app.ui.library.qfluentwidgets import (NavigationItemPosition, FluentWindow, SplashScreen, SystemThemeListener, isDarkTheme)
@@ -16,7 +16,6 @@ from app.ui.view.watermark_remove import WatermarkRemove
 
 from app.ui.common.config import cfg
 from app.ui.common.icon import Icon
-from app.ui.common.signal_bus import signalBus
 from app.ui.resources import resource
 
 
@@ -46,19 +45,12 @@ class MainWindow(FluentWindow):
         # hide menu button
         self.navigationInterface.setMenuButtonVisible(False)
 
-        self.connectSignalToSlot()
-
         # add items to navigation interface
         self.initNavigation()
         self.splashScreen.finish()
 
         # start theme listener
         self.themeListener.start()
-
-    def connectSignalToSlot(self):
-        signalBus.micaEnableChanged.connect(self.setMicaEffectEnabled)
-        signalBus.switchToSampleCard.connect(self.switchToSample)
-        signalBus.supportSignal.connect(self.onSupport)
 
     def initNavigation(self):
         # add navigation items
@@ -119,11 +111,8 @@ class MainWindow(FluentWindow):
         QApplication.processEvents()  # 立即处理所有挂起的事件，而不是等待事件循环自然处理（鼠标点击、窗口重绘、定时器事件都被放入事件队列）
 
     def onSupport(self):
-        language = cfg.get(cfg.language).value
-        if language.name() == "zh_CN":
-            QDesktopServices.openUrl(QUrl(ZH_SUPPORT_URL))
-        else:
-            QDesktopServices.openUrl(QUrl(EN_SUPPORT_URL))
+        # TODO
+        pass
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
@@ -141,11 +130,3 @@ class MainWindow(FluentWindow):
         # retry
         if self.isMicaEffectEnabled():
             QTimer.singleShot(100, lambda: self.windowEffect.setMicaEffect(self.winId(), isDarkTheme()))
-
-    def switchToSample(self, routeKey, index):
-        """ switch to sample """
-        interfaces = self.findChildren(GalleryInterface)
-        for w in interfaces:
-            if w.objectName() == routeKey:
-                self.stackedWidget.setCurrentWidget(w, False)
-                w.scrollToCard(index)

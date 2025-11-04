@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QGraphicsView, QWidget , QVBoxLayout, QGraphicsScene, QGraphicsPixmapItem, QGraphicsTextItem, 
     QScrollBar, QProgressBar, QPushButton, QFrame, QHBoxLayout, QScrollArea
 )
-from PySide6.QtGui import QPixmap, QWheelEvent, QColor, QPainter, QBrush, QFont, QPen
+from PySide6.QtGui import QPixmap, QWheelEvent, QColor, QPainter, QBrush, QPen
 from app.ui.library.qfluentwidgets import setFont, qconfig, Theme 
 
 
@@ -371,7 +371,6 @@ class AnimatedButton(QPushButton):
         self.draw_background(painter)
 
         painter.setPen(QColor(85, 85, 85))
-        setFont(painter, 18, QFont.Bold)
         painter.drawText(self.rect(), Qt.AlignCenter, self.text())
 
     def draw_background(self, painter):

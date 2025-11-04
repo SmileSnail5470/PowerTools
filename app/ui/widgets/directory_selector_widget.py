@@ -227,6 +227,8 @@ class DirectoryInfoWidget(SimpleCardWidget):
     
 
 class DirectorySelectorWidget(QWidget):
+    item_selected = Signal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -259,11 +261,14 @@ class DirectorySelectorWidget(QWidget):
 
         self.animate_height_change(expand=True)
 
+        self.item_selected.emit(dir_path)
+
     def on_dir_removed(self):
         if self.dirInfoWidget:
             self.dirInfoWidget.deleteLater()
             self.dirInfoWidget = None
         self.animate_height_change(expand=False)
+        self.item_selected.emit("")
 
     def animate_height_change(self, expand: bool):
         start_height = self.height()
