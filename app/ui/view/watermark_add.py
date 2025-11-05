@@ -219,7 +219,7 @@ class WatermarkContentCard(HeaderCardWidget):
         text_label_2.setStyleSheet("color: #888888;")  # 设置为浅灰色
         text_settings_layout.addWidget(text_label_2)
         font_combo = ComboBox()
-        bind_widget_to_param(font_combo, "currentTextChanged", watermark_add_params, "font", transform=None)
+        bind_widget_to_param(font_combo, "currentTextChanged", watermark_add_params, "font", transform=lambda name: self.font_real_name(name))
         self.common_fonts_zh, self.common_fonts_en = get_available_fonts()
         font_combo.addItems(list(self.common_fonts_zh.keys()) + list(self.common_fonts_en.keys()))
         font_combo.currentTextChanged.connect(self.font_changed)
@@ -334,6 +334,12 @@ class WatermarkContentCard(HeaderCardWidget):
         else:
             text = "hello, world"
             self.font_card.update_font(self.common_fonts_en[font_name], text)
+
+    def font_real_name(self, font_name):
+        if font_name in self.common_fonts_zh.keys():
+            return self.common_fonts_zh[font_name]
+        else:
+            return self.common_fonts_en[font_name]
 
     def watermark_text_update(self):
         self.watermark_text_changed.emit(self.text_edit.toPlainText())
