@@ -225,6 +225,7 @@ class FileInfoWidget(SimpleCardWidget):
 
 class FileSelectorWidget(QWidget):
     item_selected = Signal(str)
+    layout_add_height = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -256,6 +257,9 @@ class FileSelectorWidget(QWidget):
 
         self.fileInfoWidget.removeButton.clicked.connect(self.on_file_removed)
 
+        self.layout_add_height.emit(self.fileInfoWidget.height() + 10)
+        self.add_height = self.fileInfoWidget.height()
+
         self.animate_height_change(expand=True)
 
         self.item_selected.emit(file_path)
@@ -264,12 +268,13 @@ class FileSelectorWidget(QWidget):
         if self.fileInfoWidget:
             self.fileInfoWidget.deleteLater()
             self.fileInfoWidget = None
+            self.layout_add_height.emit(-(self.add_height + 10))
         self.animate_height_change(expand=False)
         self.item_selected.emit("")
 
     def animate_height_change(self, expand: bool):
         start_height = self.height()
-        target_height = (self.default_height + 63 + 10 if expand else self.default_height)
+        target_height = (self.default_height + self.add_height + 10 if expand else self.default_height)
 
         animation = QPropertyAnimation(self, b"maximumHeight", self)
         animation.setDuration(200)

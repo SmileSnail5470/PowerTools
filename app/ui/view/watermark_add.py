@@ -266,6 +266,7 @@ class WatermarkContentCard(HeaderCardWidget):
         FileUploadWidget.format_text_value = self.tr("支持 JPG, PNG 格式")
         upload_file_selector = FileSelectorWidget()
         bind_widget_to_param(upload_file_selector, "item_selected", watermark_add_params, "watermark_image", transform=None)
+        upload_file_selector.layout_add_height.connect(lambda x: self.adjust_stacked_height(x))
         image_settings_layout.addWidget(upload_file_selector)
         image_settings_layout.addSpacing(10)
 
@@ -308,6 +309,15 @@ class WatermarkContentCard(HeaderCardWidget):
         parent = self.parentWidget()
         if parent:
             parent.adjustSize()
+
+    def adjust_stacked_height(self, add_height):
+        current_widget = self.stackedWidget.currentWidget()
+        if not current_widget:
+            return
+        current_widget.adjustSize()
+        self.stackedWidget.setFixedHeight(current_widget.sizeHint().height() + add_height)
+        if self.parentWidget():
+            self.parentWidget().adjustSize()
 
     def addSubInterface(self, widget: QWidget, objectName, text):
         widget.setObjectName(objectName)

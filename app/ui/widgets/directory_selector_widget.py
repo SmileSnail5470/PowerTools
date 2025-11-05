@@ -257,6 +257,8 @@ class DirectorySelectorWidget(QWidget):
 
         self.default_height = self.dirSelector.height()
 
+        self.add_height = self.dirInfoWidget.height()
+
         self.dirInfoWidget.removeButton.clicked.connect(self.on_dir_removed)
 
         self.animate_height_change(expand=True)
@@ -272,7 +274,7 @@ class DirectorySelectorWidget(QWidget):
 
     def animate_height_change(self, expand: bool):
         start_height = self.height()
-        target_height = (self.default_height + 63 + 10 if expand else self.default_height)
+        target_height = (self.default_height + self.add_height + 10 if expand else self.default_height)
 
         animation = QPropertyAnimation(self, b"maximumHeight", self)
         animation.setDuration(200)
