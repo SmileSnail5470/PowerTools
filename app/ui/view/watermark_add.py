@@ -582,7 +582,7 @@ class HeaderWidget(QWidget):
         extract_btn.clicked.connect(self.extract_process)
 
     def add_watermark_process(self):
-        print(watermark_add_params.to_dict())
+        task_params = watermark_add_params.to_dict()
 
     def extract_process(self):
         pass
