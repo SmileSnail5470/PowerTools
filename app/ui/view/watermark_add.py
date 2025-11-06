@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QPainter, QBrush, QLinearGradient, QColor, QFont, QAction
 
 from app.ui.library.qfluentwidgets import (
-    ScrollArea, HeaderCardWidget, SegmentedWidget, setFont, FluentIcon,
+    ScrollArea, HeaderCardWidget, SegmentedWidget, setFont, FluentIcon, MessageBox,
     PushButton, CaptionLabel, TextEdit, SpinBox, ComboBox, Slider, LineEdit
 )
 
@@ -531,7 +531,7 @@ class HeaderWidget(QWidget):
         header_layout.setContentsMargins(30, 20, 30, 20)
         header_layout.setSpacing(10)
 
-        title_label = QLabel("🎨 水印添加工具")
+        title_label = QLabel(self.tr("🎨 水印添加工具"))
         setFont(title_label, fontSize=24, weight=QFont.DemiBold)
         title_label.setStyleSheet("""
             QLabel {
@@ -560,7 +560,7 @@ class HeaderWidget(QWidget):
         """)
         header_layout.addWidget(extract_btn)
 
-        process_btn = PushButton(text="▶️ 开始处理")
+        process_btn = PushButton(text=self.tr("▶️ 开始处理"))
         process_btn.setStyleSheet("""
             PushButton {
                 background-color: white;
@@ -589,6 +589,29 @@ class HeaderWidget(QWidget):
 
     def add_watermark_process(self):
         task_params = watermark_add_params.to_dict()
+        error_msg = self._params_check(params=task_params)
+        if error_msg:
+            w = MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window())
+            if w.exec():
+                print('确认')
+            else:
+                print('取消')
+        w = MessageBox(title=self.tr("任务信息"), content="", parent=self.window())
+        if w.exec():
+            print('确认')
+        else:
+            print('取消')
+
+    def _params_check(self, params):
+        error_msg = ""
+        content = ""
+        if not params:
+            error_msg = self.tr("请设置水印参数")
+        elif "input_path" not in params:
+            error_msg = self.tr("请选择要处理的文件或目录")
+        elif "output_path" not in params:
+            error_msg = self.tr("请设置文件保存位置")
+        return error_msg
 
     def extract_process(self):
         pass
