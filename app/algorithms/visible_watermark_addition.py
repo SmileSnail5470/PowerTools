@@ -180,7 +180,7 @@ class VisibleWatermarkAddition:
         outline_width: int = 2,
         shadow: bool = True,
         shadow_offset: Tuple[int,int] = (2,2),
-        jpeg_quality: int = 95,
+        jpeg_quality: int = 100,
     ):
         im = Image.open(input_image_path)
         im = ImageOps.exif_transpose(im).convert("RGBA")
@@ -215,16 +215,23 @@ class VisibleWatermarkAddition:
 
         y = outline_width
         for i, line in enumerate(lines):
+            bbox = draw_tmp.textbbox((0, 0), line, font=font)
+            baseline_correction = -bbox[1]
             x = outline_width
             if shadow:
-                td.text((x+shadow_offset[0], y+shadow_offset[1]), line, font=font, fill=(0,0,0,int(color[3]*0.6)))
-            if outline and outline_width > 0:
-                for dx in range(-outline_width, outline_width+1):
-                    for dy in range(-outline_width, outline_width+1):
-                        if dx==0 and dy==0:
-                            continue
-                        td.text((x+dx, y+dy), line, font=font, fill=(0,0,0,int(color[3]*0.85)))
-            td.text((x, y), line, font=font, fill=color)
+                td.text(
+                    (x+shadow_offset[0], y+shadow_offset[1]+baseline_correction),
+                    line, font=font,
+                    fill=(0,0,0,int(color[3]*0.6))
+                )
+            td.text(
+                (x, y+baseline_correction),
+                line, font=font,
+                fill=color,
+                stroke_width=outline_width if outline else 0,
+                stroke_fill=(0,0,0,int(color[3]*0.85)) if outline else None
+            )
+
             y += heights[i] + spacing
 
         if rotation:
@@ -244,12 +251,23 @@ class VisibleWatermarkAddition:
         if out_dir:
             os.makedirs(out_dir, exist_ok=True)
 
+        exif_data = im.info.get("exif")
+        pnginfo = im.info.get("pnginfo")
+
         if output_image_path.lower().endswith(('.jpg', '.jpeg')):
-            bg = Image.new("RGB", out.size, (255,255,255))
+            bg = Image.new("RGB", out.size, (255, 255, 255))
             bg.paste(out, mask=out.split()[3])
-            bg.save(output_image_path, quality=jpeg_quality, optimize=True)
+            if exif_data:
+                bg.save(output_image_path, "JPEG", quality=jpeg_quality, optimize=True, exif=exif_data)
+            else:
+                bg.save(output_image_path, "JPEG", quality=jpeg_quality, optimize=True)
         else:
-            out.save(output_image_path)
+            if pnginfo:
+                out.save(output_image_path, "PNG", pnginfo=pnginfo)
+            elif exif_data:
+                out.save(output_image_path, "PNG", exif=exif_data)
+            else:
+                out.save(output_image_path, "PNG")
 
     def add_image_watermark(
         self,
@@ -262,9 +280,10 @@ class VisibleWatermarkAddition:
         scale: float = 1.0,
         margin: int = 10,
         relative_to: str = "watermark",
-        jpeg_quality: int = 95,
+        jpeg_quality: int = 100,
     ):
-        base = Image.open(input_image_path).convert("RGBA")
+        base = Image.open(input_image_path)
+        base = ImageOps.exif_transpose(base).convert("RGBA")
         wm = Image.open(watermark_image_path).convert("RGBA")
         bw, bh = base.size
         ww, wh = wm.size
@@ -299,24 +318,20 @@ class VisibleWatermarkAddition:
         if out_dir:
             os.makedirs(out_dir, exist_ok=True)
 
+        exif_data = base.info.get("exif")
+        pnginfo = base.info.get("pnginfo")
+
         if output_image_path.lower().endswith(('.jpg', '.jpeg')):
-            bg = Image.new("RGB", out.size, (255,255,255))
+            bg = Image.new("RGB", out.size, (255, 255, 255))
             bg.paste(out, mask=out.split()[3])
-            bg.save(output_image_path, quality=jpeg_quality, optimize=True)
+            if exif_data:
+                bg.save(output_image_path, "JPEG", quality=jpeg_quality, optimize=True, exif=exif_data)
+            else:
+                bg.save(output_image_path, "JPEG", quality=jpeg_quality, optimize=True)
         else:
-            out.save(output_image_path)
-
-
-if __name__ == "__main__":
-    a = VisibleWatermarkAddition()
-    a.add_text_watermark(
-        input_image_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assess", "test8.png"),
-        output_image_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assess", "test8_watermark.png"),
-        text="@ 水印",
-        font_name="PingFang",
-        font_size=36,
-        color=(255,255,255,128),
-        position="center",
-        rotation=0,
-        scale=1,
-    )
+            if pnginfo:
+                out.save(output_image_path, "PNG", pnginfo=pnginfo)
+            elif exif_data:
+                out.save(output_image_path, "PNG", exif=exif_data)
+            else:
+                out.save(output_image_path, "PNG")
