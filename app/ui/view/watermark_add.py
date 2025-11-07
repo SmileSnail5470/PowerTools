@@ -1,3 +1,4 @@
+import os
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QStackedWidget, QHBoxLayout, QLabel, QLineEdit, QFileDialog
@@ -16,6 +17,7 @@ from app.ui.widgets.color_picker_widget import ColorPicker
 from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget
 from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
+from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
 
 from app.ui.common.task_params import bind_widget_to_param, TaskParams
 
@@ -268,27 +270,6 @@ class WatermarkContentCard(HeaderCardWidget):
         bind_widget_to_param(upload_file_selector, "item_selected", watermark_add_params, "watermark_image", transform=None)
         upload_file_selector.layout_add_height.connect(lambda x: self.adjust_stacked_height(x))
         image_settings_layout.addWidget(upload_file_selector)
-        image_settings_layout.addSpacing(10)
-
-        slider_top_layout = QHBoxLayout()
-        slider_top_layout.setContentsMargins(0, 0, 0, 0)
-        text_label_2 = CaptionLabel(text=self.tr("透明度"))
-        setFont(text_label_2, 13)
-        text_label_2.setStyleSheet("color: #888888;")  # 设置为浅灰色
-        slider_top_layout.addWidget(text_label_2)
-        self.slider_value_label = QLabel("20%")
-        setFont(self.slider_value_label, 13)
-        self.slider_value_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
-        slider_top_layout.addStretch(1)
-        slider_top_layout.addWidget(self.slider_value_label)
-        image_settings_layout.addLayout(slider_top_layout)
-        slider = Slider(Qt.Horizontal)
-        slider.setRange(0, 100)
-        slider.setValue(20)
-        slider.valueChanged.connect(self.update_value)
-        bind_widget_to_param(slider, "valueChanged", watermark_add_params, "watermark_opacity", transform=None)
-        slider.valueChanged.emit(slider.value())
-        image_settings_layout.addWidget(slider)
 
         self.addSubInterface(textSettings, 'TextSettings', self.tr("文字"))
         self.addSubInterface(imageSettings, 'ImageSettings', self.tr("图片"))
@@ -324,9 +305,6 @@ class WatermarkContentCard(HeaderCardWidget):
         self.stackedWidget.addWidget(widget)
         self.pivot.addItem(routeKey=objectName, text=text)
 
-    def update_value(self, val):
-        self.slider_value_label.setText(str(val)+"%")
-
     def font_changed(self, font_name):
         if font_name in self.common_fonts_zh.keys():
             text = "你好，世界"
@@ -346,6 +324,11 @@ class WatermarkContentCard(HeaderCardWidget):
 
 class WatermarkSettingsCard(HeaderCardWidget):
     degree = "\u00B0"
+    watermark_location_map = {
+        "左上": "top-left", "上中": "top-center", "右上": "top-right",
+        "左中": "center-left", "居中": "center", "右中": "center-right",
+        "左下": "bottom-left", "下中": "bottom-center", "右下": "bottom-right"
+    }
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -369,7 +352,10 @@ class WatermarkSettingsCard(HeaderCardWidget):
             self.tr("左中"), self.tr("居中"), self.tr("右中"),
             self.tr("左下"), self.tr("下中"), self.tr("右下"),
         ])
-        bind_widget_to_param(watermark_location_combo, "currentTextChanged", watermark_add_params, "watermark_location", transform=None)
+        bind_widget_to_param(
+            watermark_location_combo, "currentTextChanged", watermark_add_params, 
+            "watermark_location", transform=lambda x: self.watermark_location_map[x] if x in self.watermark_location_map else None
+        )
         watermark_location_layout.addWidget(watermark_location_combo)
         watermark_location_layout.addSpacing(10)
 
@@ -413,8 +399,32 @@ class WatermarkSettingsCard(HeaderCardWidget):
         zoom_slider.valueChanged.emit(zoom_slider.value())
         watermark_location_layout.addLayout(zoom_slider_top_layout)
         watermark_location_layout.addWidget(zoom_slider)
+        watermark_location_layout.addSpacing(10)
+
+        opacity_slider_top_layout = QHBoxLayout()
+        opacity_slider_top_layout.setContentsMargins(0, 0, 0, 0)
+        text_label = CaptionLabel(text=self.tr("透明度"))
+        setFont(text_label, 13)
+        text_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
+        opacity_slider_top_layout.addWidget(text_label)
+        self.slider_value_label = QLabel("20%")
+        setFont(self.slider_value_label, 13)
+        self.slider_value_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
+        opacity_slider_top_layout.addStretch(1)
+        opacity_slider_top_layout.addWidget(self.slider_value_label)
+        watermark_location_layout.addLayout(opacity_slider_top_layout)
+        slider = Slider(Qt.Horizontal)
+        slider.setRange(0, 100)
+        slider.setValue(20)
+        slider.valueChanged.connect(self.update_value)
+        bind_widget_to_param(slider, "valueChanged", watermark_add_params, "watermark_opacity", transform=None)
+        slider.valueChanged.emit(slider.value())
+        watermark_location_layout.addWidget(slider)
 
         self.viewLayout.addWidget(watermark_location)
+
+    def update_value(self, val):
+        self.slider_value_label.setText(str(val)+"%")
 
     def update_rotation_value(self, val):
         self.slider_rotation_value_label.setText(str(val)+"{degree}".format(degree=self.degree))
@@ -591,26 +601,29 @@ class HeaderWidget(QWidget):
         task_params = watermark_add_params.to_dict()
         error_msg = self._params_check(params=task_params)
         if error_msg:
-            w = MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window())
-            if w.exec():
-                print('确认')
-            else:
-                print('取消')
-        w = MessageBox(title=self.tr("任务信息"), content="", parent=self.window())
-        if w.exec():
-            print('确认')
+            MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
+            return
+        w = TaskInfoMessageBox(task_params, "watermark-add", self.window())
+        w.exec()
+
+        input_path = task_params["input_path"]
+        if os.path.isdir(input_path):
+            for one_file in os.listdir(input_path):
+                task_params["input_path"] = os.path.join(input_path, one_file)
         else:
-            print('取消')
+            pass
 
     def _params_check(self, params):
         error_msg = ""
-        content = ""
         if not params:
             error_msg = self.tr("请设置水印参数")
         elif "input_path" not in params:
             error_msg = self.tr("请选择要处理的文件或目录")
         elif "output_path" not in params:
             error_msg = self.tr("请设置文件保存位置")
+        elif "watermark_content" in params and params["watermark_content"] == "ImageSettings":
+            if "watermark_image" not in params:
+                error_msg = self.tr("请选择水印图片")
         return error_msg
 
     def extract_process(self):
