@@ -621,6 +621,7 @@ class HeaderWidget(QWidget):
         total_tasks = []
         input_path = task_params["input_path"]
         task_status_model.reset()
+        global_event_bus.watermarkAdd_ImageNavigationInit.emit()
         if os.path.isdir(input_path):
             for one_file in os.listdir(input_path):
                 task_params["input_path"] = os.path.join(input_path, one_file)
@@ -718,6 +719,7 @@ class PreviewWidget(QWidget):
         global_event_bus.watermarkAdd_InputFileUpdate.connect(self.update_init_preview)
         global_event_bus.watermarkAdd_TaskFinished.connect(self.update_preview)
         global_event_bus.watermarkAdd_PreviewFile.connect(self._on_preview_file)
+        global_event_bus.watermarkAdd_ImageNavigationInit.connect(lambda: self.image_navigation_widget.clear_images())
 
     def update_init_preview(self, file_path):
         self.image_navigation_widget.clear_images()

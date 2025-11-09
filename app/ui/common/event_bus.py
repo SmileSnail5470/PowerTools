@@ -5,6 +5,7 @@ class GlobalEventBus(QObject):
     watermarkAdd_InputFileUpdate = Signal(str)
     watermarkAdd_TaskFinished = Signal(str, str)
     watermarkAdd_PreviewFile = Signal(str)
+    watermarkAdd_ImageNavigationInit = Signal()
 
 
 global_event_bus = GlobalEventBus()
