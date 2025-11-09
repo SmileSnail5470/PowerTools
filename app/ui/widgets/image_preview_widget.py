@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QPixmap, QWheelEvent, QColor, QPainter, QBrush, QPen
 from app.ui.library.qfluentwidgets import setFont, qconfig, Theme 
+from app.ui.common.event_bus import global_event_bus
 
 
 class ScrollBar(QScrollBar):
@@ -499,12 +500,10 @@ class ThumbnailButton(AnimatedButton):
 
 
 class ImageNavigationWidget(QWidget):
-    def __init__(self, images=[], parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("ImageNavigationWidget")
-        self.total_images = images or [
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "images", "logo.png")
-        ]
+        self.total_images = []
         self.current_index = 0
         self.setup_ui()
         self.update_display()
@@ -539,17 +538,10 @@ class ImageNavigationWidget(QWidget):
                 border-radius: 10px;
             }
         """)
-        thumbnail_layout = QHBoxLayout(thumbnail_frame)
-        thumbnail_layout.setSpacing(15)
-        thumbnail_layout.setContentsMargins(0, 0, 0, 0)
-
-        self.thumbnails = []
-        for i, path in enumerate(self.total_images):
-            thumb = ThumbnailButton(i, path)
-            thumb.clicked.connect(lambda checked, idx=i: self.go_to_image(idx))
-            self.thumbnails.append(thumb)
-            thumbnail_layout.addWidget(thumb)
-        thumbnail_layout.addStretch()
+        self.thumbnail_layout = QHBoxLayout(thumbnail_frame)
+        self.thumbnail_layout.setSpacing(15)
+        self.thumbnail_layout.setContentsMargins(0, 0, 0, 0)
+        self.thumbnail_layout.addStretch()
 
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -574,11 +566,43 @@ class ImageNavigationWidget(QWidget):
             }
         """)
 
+    def load_images(self, image_paths):
+        if not image_paths:
+            return
+        old_images_num = len(self.total_images)
+        self.total_images.extend(image_paths)
+        for i, path in enumerate(image_paths):
+            i += old_images_num
+            thumb = ThumbnailButton(i, path)
+            thumb.clicked.connect(lambda checked, idx=i: self.go_to_image(idx))
+            self.thumbnail_layout.insertWidget(self.thumbnail_layout.count() - 1, thumb)
+        self.current_index = 0
+        self.update_display()
+
+    def clear_images(self):
+        for i in reversed(range(self.thumbnail_layout.count() - 1)):
+            widget = self.thumbnail_layout.itemAt(i).widget()
+            if widget:
+                widget.setParent(None)
+        self.total_images.clear()
+        self.current_index = 0
+        self.update_display()
+
     def update_display(self):
+        if not self.total_images:
+            self.progress_bar.setValue(0)
+            self.prev_btn.setEnabled(False)
+            self.next_btn.setEnabled(False)
+            return
+
         progress = int(((self.current_index + 1) / len(self.total_images)) * 100)
         self.progress_bar.setValue(progress)
-        for i, thumb in enumerate(self.thumbnails):
-            thumb.set_active(i == self.current_index)
+        for i in range(self.thumbnail_layout.count() - 1):
+            thumb = self.thumbnail_layout.itemAt(i).widget()
+            if thumb:
+                thumb.set_active(i == self.current_index)
+                if i == self.current_index:
+                    global_event_bus.watermarkAdd_PreviewFile.emit(thumb.image_path)
         self.prev_btn.setEnabled(len(self.total_images) > 1)
         self.next_btn.setEnabled(len(self.total_images) > 1)
 

@@ -1,6 +1,6 @@
 from PySide6.QtCore import QThreadPool
-from worker import Worker
-from task_future import TaskFuture
+from app.controllers.worker import Worker
+from app.controllers.task_future import TaskFuture
 import uuid
 
 

@@ -1,13 +1,14 @@
 import os
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QStackedWidget, QHBoxLayout, QLabel, QLineEdit, QFileDialog
+    QWidget, QVBoxLayout, QStackedWidget, QHBoxLayout, QLabel, QLineEdit, QFileDialog, QStackedLayout
 )
 from PySide6.QtGui import QPainter, QBrush, QLinearGradient, QColor, QFont, QAction
 
 from app.ui.library.qfluentwidgets import (
     ScrollArea, HeaderCardWidget, SegmentedWidget, setFont, FluentIcon, MessageBox,
-    PushButton, CaptionLabel, TextEdit, SpinBox, ComboBox, Slider, LineEdit
+    PushButton, CaptionLabel, TextEdit, SpinBox, ComboBox, Slider, LineEdit,
+    TeachingTip, InfoBarIcon, TeachingTipTailPosition
 )
 
 from app.ui.widgets.font_card import FontCard, get_available_fonts
@@ -20,9 +21,14 @@ from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
 
 from app.ui.common.task_params import bind_widget_to_param, TaskParams
+from app.ui.common.event_bus import global_event_bus
+from app.ui.common.task_status import TaskStatusModel
+from app.controllers.task_manager import TaskManager
+from app.workers.watermark_add_work import WatermarkAddWork
 
 
 watermark_add_params = TaskParams()
+task_status_model = TaskStatusModel()
 
 class FileSelectorCard(HeaderCardWidget):
     def __init__(self, parent=None):
@@ -43,8 +49,10 @@ class FileSelectorCard(HeaderCardWidget):
         self.viewLayout.addLayout(main_layout)
 
         singleFileSelector = FileSelectorWidget(self)
+        singleFileSelector.item_selected.connect(lambda file_path: global_event_bus.watermarkAdd_InputFileUpdate.emit(file_path))
         bind_widget_to_param(singleFileSelector, "item_selected", watermark_add_params, "input_path", transform=None)
         batchFilesSelector = DirectorySelectorWidget(self)
+        batchFilesSelector.item_selected.connect(lambda file_path: global_event_bus.watermarkAdd_InputFileUpdate.emit(file_path))
         bind_widget_to_param(batchFilesSelector, "item_selected", watermark_add_params, "input_path", transform=None)
 
         self.addSubInterface(singleFileSelector, 'FileSelectorWidget', self.tr("文件"))
@@ -356,6 +364,7 @@ class WatermarkSettingsCard(HeaderCardWidget):
             watermark_location_combo, "currentTextChanged", watermark_add_params, 
             "watermark_location", transform=lambda x: self.watermark_location_map[x] if x in self.watermark_location_map else None
         )
+        watermark_location_combo.currentTextChanged.emit(watermark_location_combo.currentText())
         watermark_location_layout.addWidget(watermark_location_combo)
         watermark_location_layout.addSpacing(10)
 
@@ -551,8 +560,8 @@ class HeaderWidget(QWidget):
         header_layout.addWidget(title_label)  
         header_layout.addStretch(1)
 
-        extract_btn = PushButton(text="🔍 提取水印")
-        extract_btn.setStyleSheet("""
+        self.extract_btn = PushButton(text="🔍 提取水印")
+        self.extract_btn.setStyleSheet("""
             PushButton {
                 background-color: rgba(255, 255, 255, 0.2);
                 color: white;
@@ -568,10 +577,10 @@ class HeaderWidget(QWidget):
                 background-color: rgba(255, 255, 255, 0.15);
             }                     
         """)
-        header_layout.addWidget(extract_btn)
+        header_layout.addWidget(self.extract_btn)
 
-        process_btn = PushButton(text=self.tr("▶️ 开始处理"))
-        process_btn.setStyleSheet("""
+        self.process_btn = PushButton(text=self.tr("▶️ 开始处理"))
+        self.process_btn.setStyleSheet("""
             PushButton {
                 background-color: white;
                 color: #667eea;
@@ -587,15 +596,17 @@ class HeaderWidget(QWidget):
                 background-color: #5a67d8;
             }
         """)
-        header_layout.addWidget(process_btn)
+        header_layout.addWidget(self.process_btn)
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         main_layout.addWidget(header)
 
-        process_btn.clicked.connect(self.add_watermark_process)
-        extract_btn.clicked.connect(self.extract_process)
+        self.process_btn.clicked.connect(self.add_watermark_process)
+        self.extract_btn.clicked.connect(self.extract_process)
+
+        self.task_manager = TaskManager(max_workers=4)
 
     def add_watermark_process(self):
         task_params = watermark_add_params.to_dict()
@@ -604,14 +615,53 @@ class HeaderWidget(QWidget):
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
         w = TaskInfoMessageBox(task_params, "watermark-add", self.window())
-        w.exec()
-
+        if not w.exec():
+            return
+        
+        total_tasks = []
         input_path = task_params["input_path"]
+        task_status_model.reset()
         if os.path.isdir(input_path):
             for one_file in os.listdir(input_path):
                 task_params["input_path"] = os.path.join(input_path, one_file)
+                task_instance = WatermarkAddWork(**task_params)
+                func, args, kwargs = task_instance.to_worker()
+                total_tasks.append((func, args, kwargs))
         else:
-            pass
+            task_instance = WatermarkAddWork(**task_params)
+            func, args, kwargs = task_instance.to_worker()
+            total_tasks.append((func, args, kwargs))
+
+        task_status_model.set_total(len(total_tasks))
+
+        for func, args, kwargs in total_tasks:
+            input_path = kwargs["input_path"]
+            future = self.task_manager.submit(func, *args, **kwargs)
+            
+            future.finished.connect(
+                lambda result, path=input_path: self._task_finished(path, result)
+            )
+            future.failed.connect(
+                lambda e, path=input_path: task_status_model.report_failure(path, e)
+            )
+            future.cancelled.connect(
+                lambda path=input_path: task_status_model.report_failure(path, "任务被取消")
+            )
+
+        TeachingTip.create(
+            target=self.process_btn,
+            icon=InfoBarIcon.SUCCESS,
+            title="通知",
+            content=self.tr("水印添加任务提交成功"),
+            isClosable=True,
+            tailPosition=TeachingTipTailPosition.BOTTOM,
+            duration=2000,
+            parent=self
+        )
+
+    def _task_finished(self, input_path, output_path):
+        task_status_model.report_success()
+        global_event_bus.watermarkAdd_TaskFinished.emit(input_path, output_path)
 
     def _params_check(self, params):
         error_msg = ""
@@ -639,16 +689,64 @@ class PreviewWidget(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(5)
 
-        preview_widget = SyncImageViewer(img1="", img2="", parent=self)
-        # preview_widget = SyncVideoViewer(self)
-        main_layout.addWidget(preview_widget, 1)
+        self.stack = QStackedLayout()
+        self.stack.setContentsMargins(0, 0, 0, 0)
 
-        image_navigation_widget = ImageNavigationWidget(parent=self)
-        main_layout.addWidget(image_navigation_widget)
+        self.placeholder_widget = QLabel("请选择图片或视频文件进行预览")
+        setFont(self.placeholder_widget, 20)
+        self.placeholder_widget.setAlignment(Qt.AlignCenter)
+
+        self.image_viewer = SyncImageViewer(img1="", img2="", parent=self)
+        self.video_viewer = SyncVideoViewer(self)
+
+        self.stack.addWidget(self.placeholder_widget)
+        self.stack.addWidget(self.image_viewer)
+        self.stack.addWidget(self.video_viewer) 
+
+        main_layout.addLayout(self.stack, 1)
+
+        self.image_navigation_widget = ImageNavigationWidget(parent=self)
+        main_layout.addWidget(self.image_navigation_widget)
 
         # 底部状态栏
-        status_info_widget = StatusInfoWidget(self)
+        status_info_widget = StatusInfoWidget(task_status_model, self)
         main_layout.addWidget(status_info_widget)
+
+        self.files_preview_info = {}
+
+        global_event_bus.watermarkAdd_InputFileUpdate.connect(self.update_init_preview)
+        global_event_bus.watermarkAdd_TaskFinished.connect(self.update_preview)
+        global_event_bus.watermarkAdd_PreviewFile.connect(self._on_preview_file)
+
+    def update_init_preview(self, file_path):
+        self.image_navigation_widget.clear_images()
+        self.files_preview_info = {}
+        if not file_path:
+            self.stack.setCurrentIndex(0)
+            return
+        if os.path.isdir(file_path):
+            tmp_file_path = os.path.join(file_path, os.listdir(file_path)[0])
+        else:
+            tmp_file_path = file_path
+        ext = tmp_file_path.lower().split(".")[-1]
+        if ext in ("jpg", "jpeg", "png", "bmp", "webp", "avif"):
+            self.stack.setCurrentIndex(1)
+        elif ext in ("mp4", "avi", "mov", "mkv"):
+            self.stack.setCurrentIndex(2)
+        else:
+            self.placeholder_widget.setText(f"不支持的文件类型: {ext}")
+            self.stack.setCurrentIndex(0)
+
+    def update_preview(self, input_path, output_path):
+        self.image_navigation_widget.load_images([input_path])
+        self.files_preview_info[input_path] = output_path
+
+    def _on_preview_file(self, path):
+        out = self.files_preview_info.get(path)
+        widget = self.stack.currentWidget()
+
+        if out and widget and hasattr(widget, "set_images"):
+            widget.set_images(img1=path, img2=out)
 
     
 class WatermarkAdd(QWidget):

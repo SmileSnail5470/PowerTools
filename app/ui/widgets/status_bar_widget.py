@@ -2,6 +2,8 @@ from PySide6.QtGui import QFont, QColor, QPainter, QPen, QBrush, QLinearGradient
 from PySide6.QtWidgets import QWidget, QFrame, QHBoxLayout, QLabel, QGraphicsDropShadowEffect, QVBoxLayout, QListWidget, QListWidgetItem
 from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, Property, QRectF, Signal
 from app.ui.library.qfluentwidgets import setFont
+from app.ui.common.task_status import TaskStatusModel
+
 
 class ProgressRing(QWidget):
     def __init__(self, parent=None):
@@ -365,25 +367,14 @@ class FailurePanel(QFrame):
 
 
 class StatusInfoWidget(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, model: TaskStatusModel, parent=None):
         super().__init__(parent)
         self.setObjectName("StatusInfoWidget")
+        self.model = model
+        self.model.updated.connect(self.update_display)
         
-        self.status_data = {
-            'total': 0,
-            'processed': 0,
-            'success': 0,
-            'failed': 0,
-            'failures': [
-                ('example1.pdf', '文件损坏'),
-                ('example2.jpg', '格式不支持')
-            ]
-        }
-        
-        self.processing_timer = None
         self.setup_ui()
         self.setup_style()
-        self.update_display()
         
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -392,22 +383,21 @@ class StatusInfoWidget(QWidget):
         
         # 状态栏
         self.status_bar = QFrame()
-        # self.status_bar.setFixedHeight(100)
         status_layout = QHBoxLayout(self.status_bar)
         status_layout.setContentsMargins(20, 0, 20, 0)
         status_layout.setSpacing(20)
         
         # 统计卡片
-        self.total_card = StatCard(12, self.tr("总任务数"), "default")
+        self.total_card = StatCard(0, self.tr("总任务数"), "default")
         self.total_card.setObjectName("total")
 
-        self.processed_card = StatCard(8, self.tr("已处理"), "processing")
+        self.processed_card = StatCard(0, self.tr("已处理"), "processing")
         self.processed_card.setObjectName("processed")
 
-        self.success_card = StatCard(6, self.tr("成功数"), "success")
+        self.success_card = StatCard(0, self.tr("成功数"), "success")
         self.success_card.setObjectName("success")
 
-        self.failed_card = StatCard(2, self.tr("失败数"), "error")
+        self.failed_card = StatCard(0, self.tr("失败数"), "error")
         self.failed_card.setObjectName("failed")
         
         # 进度环
@@ -450,44 +440,27 @@ class StatusInfoWidget(QWidget):
     def on_stat_clicked(self, stat_name):
         if stat_name == "failed":
             self.toggle_failure_panel()
-        else:
-            self.update_stat(stat_name)
             
     def toggle_failure_panel(self):
         self.failure_panel.set_visible(not self.failure_panel.is_visible())
         
-    def update_stat(self, stat_type):
-        if stat_type == "total":
-            self.status_data['total'] = 15
-        elif stat_type == "processed":
-            self.status_data['processed'] = min(
-                self.status_data['total'], 
-                self.status_data['processed'] + 1
-            )
-        elif stat_type == "success":
-            self.status_data['success'] = min(
-                self.status_data['processed'], 
-                self.status_data['success'] + 1
-            )
-        self.update_display()
-        
-    def update_display(self):
-        self.total_card.update_value(self.status_data['total'])
-        self.processed_card.update_value(self.status_data['processed'])
-        self.success_card.update_value(self.status_data['success'])
-        self.failed_card.update_value(self.status_data['failed'])
+    def update_display(self, data):
+        self.total_card.update_value(data['total'])
+        self.processed_card.update_value(data['processed'])
+        self.success_card.update_value(data['success'])
+        self.failed_card.update_value(data['failed'])
         
         # 更新进度环
-        if self.status_data['total'] == 0:
+        if data['total'] == 0:
             percentage = 0
         else:
-            percentage = (self.status_data['processed'] / self.status_data['total']) * 100
+            percentage = (data['processed'] / data['total']) * 100
         self.progress_ring.set_percentage_animated(percentage)
         
         # 更新失败列表
-        self.update_failure_list()
+        self.update_failure_list(data)
         
-    def update_failure_list(self):
+    def update_failure_list(self, data):
         self.failure_panel.clear_failures()
-        for filename, reason in self.status_data['failures']:
+        for filename, reason in data['failures']:
             self.failure_panel.add_failure(filename, reason)

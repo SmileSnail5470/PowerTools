@@ -1,5 +1,5 @@
 from PySide6.QtCore import QRunnable, Slot
-from task_future import TaskStatus, TaskFuture
+from app.controllers.task_future import TaskStatus, TaskFuture
 import traceback
 
 

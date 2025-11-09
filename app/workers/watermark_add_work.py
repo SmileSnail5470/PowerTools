@@ -7,7 +7,7 @@ class WatermarkAddWork(BaseWorker):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def _hex_to_rgba(hex_color: str, alpha: int = 255):
+    def _hex_to_rgba(self, hex_color: str, alpha: int = 255):
         hex_color = hex_color.lstrip('#')
         if len(hex_color) != 6:
             raise ValueError("hex_color must be #RRGGBB style")
@@ -17,14 +17,11 @@ class WatermarkAddWork(BaseWorker):
         return (r, g, b, alpha)
 
     def run_algorithm(self, progress_cb, cancel_requested, *args, **kwargs):
-        if cancel_requested and cancel_requested():
-            raise InterruptedError("WatermarkAdd task was cancelled before start")
-
         watermark_add_instance = VisibleWatermarkAddition()
         input_path = kwargs["input_path"]
         output_path = kwargs["output_path"]
         output_format = kwargs["output_format"]
-        if output_format == self.tr("保持原格式"):
+        if output_format == "保持原格式":
             output_file = os.path.join(output_path, os.path.basename(input_path))
         else:
             output_file = os.path.join(output_path, "{0}.{1}".format(os.path.basename(input_path).split(".")[0], output_format.lower()))
@@ -60,7 +57,4 @@ class WatermarkAddWork(BaseWorker):
                 shadow_offset=(2,2),
                 jpeg_quality=95,
             )
-
-        if cancel_requested and cancel_requested():
-            raise InterruptedError("WatermarkAdd task was cancelled after execution")
-        return True
+        return output_file
