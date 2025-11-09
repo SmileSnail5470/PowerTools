@@ -162,11 +162,6 @@ class SyncVideoViewer(QWidget):
         layout.addWidget(self.view, 1)
         layout.addWidget(self.playBar, 0)
 
-        self.setVideos(
-            QUrl.fromLocalFile(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "videos", "mov_bbb.mp4")),
-            QUrl.fromLocalFile(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "videos", "mov_bbb.mp4"))
-        )
-
     def setVideos(self, main_url: QUrl, sub_url: QUrl):
         self.player_main.setSource(main_url)
         self.player_sub.setSource(sub_url)

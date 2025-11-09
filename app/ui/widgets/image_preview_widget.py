@@ -1,10 +1,11 @@
 import os
-from PySide6.QtCore import Signal, Qt, QTimer, QRect, Property, QEasingCurve, QPropertyAnimation, QThreadPool, QRunnable, QRectF
+from PySide6.QtCore import Signal, Qt, QTimer, QRect, Property, QEasingCurve, QPropertyAnimation, QThreadPool, QRunnable, QUrl, QEventLoop
 from PySide6.QtWidgets import (
     QGraphicsView, QWidget , QVBoxLayout, QGraphicsScene, QGraphicsPixmapItem, QGraphicsTextItem, 
     QScrollBar, QProgressBar, QPushButton, QFrame, QHBoxLayout, QScrollArea
 )
 from PySide6.QtGui import QPixmap, QWheelEvent, QColor, QPainter, QBrush, QPen
+from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink
 from app.ui.library.qfluentwidgets import setFont, qconfig, Theme 
 from app.ui.common.event_bus import global_event_bus
 
@@ -408,23 +409,58 @@ class TransparentNavButton(AnimatedButton):
 
 
 class LoaderWorker(QRunnable):
-    def __init__(self, image_path, callback):
+    def __init__(self, image_path, callback, media_type="image"):
         super().__init__()
         self.image_path = image_path
         self.callback = callback
+        self.media_type = media_type
 
     def run(self):
-        if os.path.exists(self.image_path):
+        if not os.path.exists(self.image_path):
+            return
+        if self.media_type == "image":
             pix = QPixmap(self.image_path)
             if not pix.isNull():
                 self.callback(pix)
+        else:
+            self._load_video_thumbnail()
+
+    def _load_video_thumbnail(self):
+        player = QMediaPlayer()
+        sink = QVideoSink()
+        player.setVideoSink(sink)
+        player.setAudioOutput(QAudioOutput())  # 静音
+        player.setSource(QUrl.fromLocalFile(self.image_path))
+
+        frame_captured = {"image": None}
+        loop = QEventLoop()
+
+        def on_video_frame(frame):
+            image = frame.toImage()
+            if not image.isNull():
+                frame_captured["image"] = image
+                loop.quit()
+
+        sink.videoFrameChanged.connect(on_video_frame)
+
+        player.play()                       # 触发首帧
+        QTimer.singleShot(1500, loop.quit)  # 超时保护
+        loop.exec()
+        player.stop()
+        player.deleteLater()
+        sink.deleteLater()
+
+        if frame_captured["image"]:
+            pix = QPixmap.fromImage(frame_captured["image"])
+            self.callback(pix)
 
 
 class ThumbnailButton(AnimatedButton):
     thread_pool = QThreadPool.globalInstance()
 
-    def __init__(self, index, image_path, parent=None):
+    def __init__(self, index, image_path, media_type="image", parent=None):
         super().__init__("", parent)
+        self.media_type = media_type
         self.index = index
         self.image_path = image_path
         self.pixmap = None
@@ -454,7 +490,7 @@ class ThumbnailButton(AnimatedButton):
             painter.drawRoundedRect(self.rect().adjusted(3, 3, -3, -3), 6, 6)
 
             # 异步加载
-            worker = LoaderWorker(self.image_path, self.on_loaded)
+            worker = LoaderWorker(self.image_path, self.on_loaded, media_type=self.media_type)
             self.thread_pool.start(worker)
 
         if self._is_hovered or self.is_active:
@@ -473,6 +509,8 @@ class ThumbnailButton(AnimatedButton):
             painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 6, 6)
 
     def on_loaded(self, pixmap: QPixmap):
+        if not pixmap or pixmap.isNull():
+            return
         self.pixmap = pixmap.scaled(
             self.width() - 6,
             self.height() - 6,
@@ -566,14 +604,14 @@ class ImageNavigationWidget(QWidget):
             }
         """)
 
-    def load_images(self, image_paths):
+    def load_images(self, image_paths, media_type="image"):
         if not image_paths:
             return
         old_images_num = len(self.total_images)
         self.total_images.extend(image_paths)
         for i, path in enumerate(image_paths):
             i += old_images_num
-            thumb = ThumbnailButton(i, path)
+            thumb = ThumbnailButton(i, path, media_type=media_type)
             thumb.clicked.connect(lambda checked, idx=i: self.go_to_image(idx))
             self.thumbnail_layout.insertWidget(self.thumbnail_layout.count() - 1, thumb)
         self.current_index = 0

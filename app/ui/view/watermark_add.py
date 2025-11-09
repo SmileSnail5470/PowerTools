@@ -713,6 +713,7 @@ class PreviewWidget(QWidget):
         main_layout.addWidget(status_info_widget)
 
         self.files_preview_info = {}
+        self.media_type = "image"
 
         global_event_bus.watermarkAdd_InputFileUpdate.connect(self.update_init_preview)
         global_event_bus.watermarkAdd_TaskFinished.connect(self.update_preview)
@@ -721,6 +722,7 @@ class PreviewWidget(QWidget):
     def update_init_preview(self, file_path):
         self.image_navigation_widget.clear_images()
         self.files_preview_info = {}
+        self.media_type = "image"
         if not file_path:
             self.stack.setCurrentIndex(0)
             return
@@ -731,22 +733,26 @@ class PreviewWidget(QWidget):
         ext = tmp_file_path.lower().split(".")[-1]
         if ext in ("jpg", "jpeg", "png", "bmp", "webp", "avif"):
             self.stack.setCurrentIndex(1)
+            self.media_type = "image"
         elif ext in ("mp4", "avi", "mov", "mkv"):
             self.stack.setCurrentIndex(2)
+            self.media_type = "video"
         else:
             self.placeholder_widget.setText(f"不支持的文件类型: {ext}")
             self.stack.setCurrentIndex(0)
 
     def update_preview(self, input_path, output_path):
         self.files_preview_info[input_path] = output_path
-        self.image_navigation_widget.load_images([input_path])
+        self.image_navigation_widget.load_images([input_path], self.media_type)
 
     def _on_preview_file(self, path):
         out = self.files_preview_info.get(path)
         widget = self.stack.currentWidget()
 
-        if out and widget and hasattr(widget, "set_images"):
+        if self.media_type=="image" and out and widget and hasattr(widget, "set_images"):
             widget.set_images(img1=path, img2=out)
+        elif self.media_type=="video" and out and widget and hasattr(widget, "setVideos"):
+            widget.setVideos(main_url=path, sub_url=out)
 
     
 class WatermarkAdd(QWidget):
