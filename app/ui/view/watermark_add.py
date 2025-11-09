@@ -416,7 +416,7 @@ class WatermarkSettingsCard(HeaderCardWidget):
         setFont(text_label, 13)
         text_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
         opacity_slider_top_layout.addWidget(text_label)
-        self.slider_value_label = QLabel("20%")
+        self.slider_value_label = QLabel("70%")
         setFont(self.slider_value_label, 13)
         self.slider_value_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
         opacity_slider_top_layout.addStretch(1)
@@ -424,7 +424,7 @@ class WatermarkSettingsCard(HeaderCardWidget):
         watermark_location_layout.addLayout(opacity_slider_top_layout)
         slider = Slider(Qt.Horizontal)
         slider.setRange(0, 100)
-        slider.setValue(20)
+        slider.setValue(70)
         slider.valueChanged.connect(self.update_value)
         bind_widget_to_param(slider, "valueChanged", watermark_add_params, "watermark_opacity", transform=None)
         slider.valueChanged.emit(slider.value())
@@ -738,8 +738,8 @@ class PreviewWidget(QWidget):
             self.stack.setCurrentIndex(0)
 
     def update_preview(self, input_path, output_path):
-        self.image_navigation_widget.load_images([input_path])
         self.files_preview_info[input_path] = output_path
+        self.image_navigation_widget.load_images([input_path])
 
     def _on_preview_file(self, path):
         out = self.files_preview_info.get(path)
