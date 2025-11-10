@@ -5,6 +5,7 @@ import platform
 import subprocess
 from pathlib import Path
 import threading
+import tempfile
 
 Position = Union[str, Tuple[int, int]]
 
@@ -14,7 +15,7 @@ class VisibleWatermarkAddition:
     _font_cache_lock = threading.Lock()
 
     def __init__(self):
-        pass
+        self.ffmpeg_exe = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "ffmpeg", "bin", "ffmpeg")
 
     def _find_system_fonts_once(self) -> List[str]:
         if self._sys_fonts_cache is not None:
@@ -55,7 +56,7 @@ class VisibleWatermarkAddition:
         fonts = self._find_system_fonts_once()
         if target:
             for p in fonts:
-                if target in os.path.basename(p).lower() or target in p.lower():
+                if target in os.path.basename(p).lower() or target in p.lower() or target.split(" ")[0] in p.lower():
                     return p
             if platform.system() == "Windows":
                 try:
@@ -163,7 +164,7 @@ class VisibleWatermarkAddition:
                 lines.append(cur)
             return lines
 
-    def add_text_watermark(
+    def image_add_text_watermark(
         self,
         input_image_path: str,
         output_image_path: str,
@@ -263,13 +264,13 @@ class VisibleWatermarkAddition:
                 bg.save(output_image_path, "JPEG", quality=jpeg_quality, optimize=True)
         else:
             if pnginfo:
-                out.save(output_image_path, "PNG", pnginfo=pnginfo)
+                out.save(output_image_path, pnginfo=pnginfo)
             elif exif_data:
-                out.save(output_image_path, "PNG", exif=exif_data)
+                out.save(output_image_path, exif=exif_data)
             else:
-                out.save(output_image_path, "PNG")
+                out.save(output_image_path)
 
-    def add_image_watermark(
+    def image_add_image_watermark(
         self,
         input_image_path: str,
         watermark_image_path: str,
@@ -301,7 +302,7 @@ class VisibleWatermarkAddition:
             wm = wm.resize((target_w, target_h), Image.LANCZOS)
 
         if rotation:
-            wm = wm.rotate(rotation, expand=True)
+            wm = wm.rotate(rotation + 360, expand=True)
 
         opacity = max(0.0, min(1.0, opacity))
         if opacity < 1.0:
@@ -330,8 +331,174 @@ class VisibleWatermarkAddition:
                 bg.save(output_image_path, "JPEG", quality=jpeg_quality, optimize=True)
         else:
             if pnginfo:
-                out.save(output_image_path, "PNG", pnginfo=pnginfo)
+                out.save(output_image_path, pnginfo=pnginfo)
             elif exif_data:
-                out.save(output_image_path, "PNG", exif=exif_data)
+                out.save(output_image_path, exif=exif_data)
             else:
-                out.save(output_image_path, "PNG")
+                out.save(output_image_path)
+
+    def video_add_text_watermark(
+        self,
+        input_video_path: str,
+        output_video_path: str,
+        text: str,
+        font_name: Optional[str] = None,
+        font_size: int = 36,
+        scale: float = 1.0,
+        color: Tuple[int, int, int, float] = (255, 255, 255, 0.8),
+        position: Position = "bottom-right",
+        margin: int = 20,
+        rotation: float = 0.0,
+        shadow: bool = True,
+        shadow_offset: Tuple[int, int] = (2, 2),
+        hardware_accel: bool = True,
+        codec: str = "libx264",
+        crf: int = 18,
+        timeout: int = 1200
+    ):
+        if not os.path.exists(input_video_path):
+            raise FileNotFoundError(f"Input video not found: {input_video_path}")
+
+        font_path = self._get_font_path(font_name)
+        if not font_path:
+            raise RuntimeError("Cannot find system font")
+
+        rgba = color
+        r, g, b, a = rgba
+        alpha = max(0.0, min(a, 1.0)) if isinstance(a, float) else (a / 255.0)
+        shadow_expr = f":shadowcolor=black:shadowx={shadow_offset[0]}:shadowy={shadow_offset[1]}" if shadow else ""
+
+        position_expr = self._get_ffmpeg_position_expr(position, margin)
+
+        font_size = max(6, int(font_size * scale))
+
+        fontcolor_expr = f"#{r:02x}{g:02x}{b:02x}@{alpha}"
+
+        drawtext_filter = (
+            f"drawtext=text='{text}':fontfile='{font_path}':"
+            f"fontsize={font_size}:fontcolor={fontcolor_expr}"
+            f"{shadow_expr}:x={position_expr[0]}:y={position_expr[1]}"
+        )
+
+        if rotation:
+            drawtext_filter += f",rotate={rotation}*PI/180:ow=rotw(iw):oh=roth(ih):c=none"
+
+        ffmpeg_cmd = [
+            self.ffmpeg_exe,
+            "-y",
+            "-i", input_video_path,
+            "-vf", drawtext_filter,
+            "-c:v", codec,
+            "-crf", str(crf),
+            "-c:a", "copy",
+            "-movflags", "+faststart",
+            output_video_path
+        ]
+
+        if hardware_accel and platform.system() != "Windows":
+            ffmpeg_cmd.insert(1, "-hwaccel")
+            ffmpeg_cmd.insert(2, "auto")
+
+        try:
+            subprocess.run(
+                ffmpeg_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
+                timeout=timeout
+            )
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"ffmpeg failed: {e.stderr.strip()}")
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("ffmpeg process timed out")
+
+    def video_add_image_watermark(
+        self,
+        input_video_path: str,
+        watermark_image_path: str,
+        output_video_path: str,
+        position: Position = "bottom-right",
+        opacity: float = 0.5,
+        scale: float = 1.0,
+        rotation: float = 0.0,
+        margin: int = 20,
+        codec: str = "libx264",
+        crf: int = 18,
+        hardware_accel: bool = True,
+        timeout: int = 1200
+    ):
+        if not os.path.exists(input_video_path):
+            raise FileNotFoundError(f"Input video not found: {input_video_path}")
+        if not os.path.exists(watermark_image_path):
+            raise FileNotFoundError(f"Watermark image not found: {watermark_image_path}")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_wm = os.path.join(tmp_dir, "wm.png")
+
+            wm = Image.open(watermark_image_path).convert("RGBA")
+            if rotation:
+                wm = wm.rotate(rotation + 360, expand=True)
+            if scale != 1.0:
+                w, h = wm.size
+                wm = wm.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+                print(wm.size)
+            if opacity < 1.0:
+                alpha = wm.split()[-1]
+                alpha = ImageEnhance.Brightness(alpha).enhance(opacity)
+                wm.putalpha(alpha)
+            wm.save(tmp_wm)
+
+            # 计算 overlay 位置表达式
+            x_expr, y_expr = self._get_ffmpeg_position_expr(position, margin)
+
+            overlay_filter = f"overlay={x_expr}:{y_expr}"
+
+            ffmpeg_cmd = [
+                self.ffmpeg_exe,
+                "-y",
+                "-i", input_video_path,
+                "-i", tmp_wm,
+                "-filter_complex", overlay_filter,
+                "-c:v", codec,
+                "-crf", str(crf),
+                "-c:a", "copy",
+                "-movflags", "+faststart",
+                output_video_path
+            ]
+
+            if hardware_accel and platform.system() != "Windows":
+                ffmpeg_cmd.insert(1, "-hwaccel")
+                ffmpeg_cmd.insert(2, "auto")
+
+            try:
+                subprocess.run(
+                    ffmpeg_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=True,
+                    timeout=timeout
+                )
+            except subprocess.CalledProcessError as e:
+                raise RuntimeError(f"ffmpeg failed: {e.stderr.strip()}")
+            except subprocess.TimeoutExpired:
+                raise RuntimeError("ffmpeg process timed out")
+
+    def _get_ffmpeg_position_expr(self, position: Position, margin: int) -> Tuple[str, str]:
+        if isinstance(position, tuple):
+            return str(position[0]), str(position[1])
+        pos = position.lower()
+        if "left" in pos:
+            x = f"{margin}"
+        elif "right" in pos:
+            x = f"main_w-overlay_w-{margin}"
+        else:
+            x = f"(main_w-overlay_w)/2"
+        if "top" in pos:
+            y = f"{margin}"
+        elif "bottom" in pos:
+            y = f"main_h-overlay_h-{margin}"
+        else:
+            y = f"(main_h-overlay_h)/2"
+        return x, y

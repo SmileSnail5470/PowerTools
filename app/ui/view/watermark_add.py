@@ -23,6 +23,7 @@ from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
 from app.ui.common.task_params import bind_widget_to_param, TaskParams
 from app.ui.common.event_bus import global_event_bus
 from app.ui.common.task_status import TaskStatusModel
+from app.ui.common.utils import get_file_type
 from app.controllers.task_manager import TaskManager
 from app.workers.watermark_add_work import WatermarkAddWork
 
@@ -470,14 +471,28 @@ class OutputSettingsCard(HeaderCardWidget):
         setFont(output_format_label, 13)
         output_format_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
         output_settings_layout.addWidget(output_format_label)
-        output_format_combo = ComboBox()
-        bind_widget_to_param(output_format_combo, "currentTextChanged", watermark_add_params, "output_format", transform=None)
-        output_format_combo.addItems([
-            self.tr("保持原格式"), "JPG", "PNG"
-        ])
-        output_settings_layout.addWidget(output_format_combo)
+        self.output_format_combo = ComboBox()
+        self.output_format_combo.addItems([self.tr("保持原格式")])
+        bind_widget_to_param(self.output_format_combo, "currentTextChanged", watermark_add_params, "output_format", transform=None)
+        output_settings_layout.addWidget(self.output_format_combo)
 
         self.viewLayout.addWidget(output_settings)
+
+        global_event_bus.watermarkAdd_InputFileUpdate.connect(self.update_output_format_combox)
+
+    def update_output_format_combox(self, file_path):
+        self.output_format_combo.clear()
+        if not file_path:
+            self.output_format_combo.addItems([self.tr("保持原格式")])
+            return
+        if os.path.isdir(file_path):
+            file_type = get_file_type(os.path.join(file_path, os.listdir(file_path)[0]))
+        else:
+            file_type = get_file_type(file_path)
+        if file_type == "image":
+            self.output_format_combo.addItems([self.tr("保持原格式"), "JPG", "PNG"])
+        else:
+            self.output_format_combo.addItems([self.tr("保持原格式")])
 
     def save_location_browse(self):
         directory = QFileDialog.getExistingDirectory(
@@ -732,11 +747,12 @@ class PreviewWidget(QWidget):
             tmp_file_path = os.path.join(file_path, os.listdir(file_path)[0])
         else:
             tmp_file_path = file_path
+        file_type = get_file_type(tmp_file_path)
         ext = tmp_file_path.lower().split(".")[-1]
-        if ext in ("jpg", "jpeg", "png", "bmp", "webp", "avif"):
+        if file_type == "image":
             self.stack.setCurrentIndex(1)
             self.media_type = "image"
-        elif ext in ("mp4", "avi", "mov", "mkv"):
+        elif file_type == "video":
             self.stack.setCurrentIndex(2)
             self.media_type = "video"
         else:

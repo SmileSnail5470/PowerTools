@@ -1,3 +1,5 @@
+from app.ui.common.utils import get_file_type
+
 class BaseWorker():
     def __init__(self, *args, **kwargs):
         self.args = args
@@ -20,3 +22,6 @@ class BaseWorker():
             return result
 
         return task_func, self.args, self.kwargs
+    
+    def file_type(self, input_file):
+        return get_file_type(input_file=input_file)
