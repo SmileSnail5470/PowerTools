@@ -1,5 +1,5 @@
 import os
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QCoreApplication
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QStackedWidget, QHBoxLayout, QLabel, QLineEdit, QFileDialog, QStackedLayout
 )
@@ -623,6 +623,10 @@ class HeaderWidget(QWidget):
 
         self.task_manager = TaskManager(max_workers=4)
 
+        app = QCoreApplication.instance()
+        if app:
+            app.aboutToQuit.connect(self._cleanup_task_manager)
+
     def add_watermark_process(self):
         task_params = watermark_add_params.to_dict()
         error_msg = self._params_check(params=task_params)
@@ -695,6 +699,11 @@ class HeaderWidget(QWidget):
     def extract_process(self):
         pass
 
+    def _cleanup_task_manager(self):
+        if hasattr(self, "task_manager") and self.task_manager:
+            self.task_manager.close()
+            self.task_manager = None
+
 
 class PreviewWidget(QWidget):
     def __init__(self, parent=None):
@@ -708,7 +717,7 @@ class PreviewWidget(QWidget):
         self.stack = QStackedLayout()
         self.stack.setContentsMargins(0, 0, 0, 0)
 
-        self.placeholder_widget = QLabel("请选择图片或视频文件进行预览")
+        self.placeholder_widget = QLabel("请选择图片或视频文件进行预览", parent=self)
         setFont(self.placeholder_widget, 20)
         self.placeholder_widget.setAlignment(Qt.AlignCenter)
 
@@ -770,7 +779,7 @@ class PreviewWidget(QWidget):
         if self.media_type=="image" and out and widget and hasattr(widget, "set_images"):
             widget.set_images(img1=path, img2=out)
         elif self.media_type=="video" and out and widget and hasattr(widget, "setVideos"):
-            widget.setVideos(main_url=path, sub_url=out)
+            widget.setVideos(main_path=path, sub_path=out)
 
     
 class WatermarkAdd(QWidget):

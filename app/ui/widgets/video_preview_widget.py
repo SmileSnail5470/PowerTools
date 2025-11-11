@@ -162,9 +162,9 @@ class SyncVideoViewer(QWidget):
         layout.addWidget(self.view, 1)
         layout.addWidget(self.playBar, 0)
 
-    def setVideos(self, main_url: QUrl, sub_url: QUrl):
-        self.player_main.setSource(main_url)
-        self.player_sub.setSource(sub_url)
+    def setVideos(self, main_path: str, sub_path: str):
+        self.player_main.setSource( QUrl.fromLocalFile(main_path))
+        self.player_sub.setSource(QUrl.fromLocalFile(sub_path))
         self._updateVideoLayout()
 
     def _updateVideoLayout(self):

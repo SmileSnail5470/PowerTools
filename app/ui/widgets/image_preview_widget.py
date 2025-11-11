@@ -1,11 +1,12 @@
+from functools import lru_cache
 import os
-from PySide6.QtCore import Signal, Qt, QTimer, QRect, Property, QEasingCurve, QPropertyAnimation, QThreadPool, QRunnable, QUrl, QEventLoop
+import subprocess
+from PySide6.QtCore import Signal, Qt, QTimer, QRect, Property, QEasingCurve, QPropertyAnimation, QThreadPool, QRunnable, QBuffer, QIODevice
 from PySide6.QtWidgets import (
     QGraphicsView, QWidget , QVBoxLayout, QGraphicsScene, QGraphicsPixmapItem, QGraphicsTextItem, 
     QScrollBar, QProgressBar, QPushButton, QFrame, QHBoxLayout, QScrollArea
 )
 from PySide6.QtGui import QPixmap, QWheelEvent, QColor, QPainter, QBrush, QPen
-from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink
 from app.ui.library.qfluentwidgets import setFont, qconfig, Theme 
 from app.ui.common.event_bus import global_event_bus
 
@@ -423,36 +424,57 @@ class LoaderWorker(QRunnable):
             if not pix.isNull():
                 self.callback(pix)
         else:
-            self._load_video_thumbnail()
+            pix = self._extract_video_frame(video_path=self.image_path)
+            if pix and not pix.isNull():
+                self.callback(pix)
 
-    def _load_video_thumbnail(self):
-        player = QMediaPlayer()
-        sink = QVideoSink()
-        player.setVideoSink(sink)
-        player.setAudioOutput(QAudioOutput())  # 静音
-        player.setSource(QUrl.fromLocalFile(self.image_path))
+    @staticmethod
+    @lru_cache(maxsize=512)
+    def _extract_video_frame(video_path: str, size=(48, 48)) -> QPixmap:
+        width, height = size
+        pix = None
 
-        frame_captured = {"image": None}
-        loop = QEventLoop()
+        try:
+            cmd = [
+                os.getenv("POWERTOOLS_FFMPEG", os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
+                    "resources", "ffmpeg", "bin", "ffmpeg"
+                    )
+                ),
+                "-hide_banner",
+                "-loglevel", "error",
+                "-y",
+                "-i", video_path,
+                "-frames:v", "1",
+                "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease",
+                "-f", "image2pipe",
+                "-vcodec", "png",
+                "pipe:1"
+            ]
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                check=True,
+                timeout=5
+            )
+            data = result.stdout
+            if data:
+                buffer = QBuffer()
+                buffer.setData(data)
+                buffer.open(QIODevice.ReadOnly)
+                pix = QPixmap()
+                pix.loadFromData(buffer.data(), "PNG")
+                buffer.close()
 
-        def on_video_frame(frame):
-            image = frame.toImage()
-            if not image.isNull():
-                frame_captured["image"] = image
-                loop.quit()
+        except subprocess.TimeoutExpired:
+            raise Exception(f"[LoaderWorker] Timeout extracting thumbnail: {video_path}")
+        except subprocess.CalledProcessError as e:
+            raise Exception(f"[LoaderWorker] ffmpeg error: {video_path} -> {e}")
+        except Exception as e:
+            raise Exception(f"[LoaderWorker] Unexpected error: {video_path} -> {e}")
 
-        sink.videoFrameChanged.connect(on_video_frame)
-
-        player.play()                       # 触发首帧
-        QTimer.singleShot(1500, loop.quit)  # 超时保护
-        loop.exec()
-        player.stop()
-        player.deleteLater()
-        sink.deleteLater()
-
-        if frame_captured["image"]:
-            pix = QPixmap.fromImage(frame_captured["image"])
-            self.callback(pix)
+        return pix
 
 
 class ThumbnailButton(AnimatedButton):

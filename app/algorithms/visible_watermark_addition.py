@@ -15,7 +15,10 @@ class VisibleWatermarkAddition:
     _font_cache_lock = threading.Lock()
 
     def __init__(self):
-        self.ffmpeg_exe = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "ffmpeg", "bin", "ffmpeg")
+        self.ffmpeg_exe = os.getenv(
+            "POWERTOOLS_FFMPEG", 
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "ffmpeg", "bin", "ffmpeg")
+        )
 
     def _find_system_fonts_once(self) -> List[str]:
         if self._sys_fonts_cache is not None:
@@ -362,6 +365,12 @@ class VisibleWatermarkAddition:
         font_path = self._get_font_path(font_name)
         if not font_path:
             raise RuntimeError("Cannot find system font")
+        
+        # 适配 windows 路径
+        font_path = font_path.replace("\\", "/").replace(":", "\\:")
+        input_video_path = os.path.abspath(input_video_path).replace("\\", "/")
+        output_video_path = os.path.abspath(output_video_path).replace("\\", "/")
+
 
         rgba = color
         r, g, b, a = rgba
@@ -402,7 +411,7 @@ class VisibleWatermarkAddition:
         try:
             subprocess.run(
                 ffmpeg_cmd,
-                stdout=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 text=True,
                 check=True,
@@ -442,7 +451,6 @@ class VisibleWatermarkAddition:
             if scale != 1.0:
                 w, h = wm.size
                 wm = wm.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
-                print(wm.size)
             if opacity < 1.0:
                 alpha = wm.split()[-1]
                 alpha = ImageEnhance.Brightness(alpha).enhance(opacity)
@@ -474,7 +482,7 @@ class VisibleWatermarkAddition:
             try:
                 subprocess.run(
                     ffmpeg_cmd,
-                    stdout=subprocess.PIPE,
+                    stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
                     text=True,
                     check=True,
