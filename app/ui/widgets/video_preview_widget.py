@@ -1,5 +1,4 @@
-import os
-from PySide6.QtCore import Qt, Signal, QUrl, QSizeF, QTimer, Slot
+from PySide6.QtCore import Qt, Signal, QUrl, QSizeF, QTimer, Slot, QCoreApplication
 from PySide6.QtGui import QPainter, QColor, QBrush
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QHBoxLayout, QVBoxLayout, QWidget, QGraphicsRectItem
@@ -109,6 +108,10 @@ class SyncVideoViewer(QWidget):
 
     def __init__(self, parent=None, sync_interval=200, drift_threshold=150):
         super().__init__(parent)
+        app = QCoreApplication.instance()
+        if app:
+            app.aboutToQuit.connect(self.stopPlayers)
+
         self.sync_interval = sync_interval
         self.drift_threshold = drift_threshold
 
@@ -198,3 +201,12 @@ class SyncVideoViewer(QWidget):
             pos_sub = self.player_sub.position()
             if abs(pos_main - pos_sub) > self.drift_threshold:
                 self.player_sub.setPosition(pos_main)
+
+    def stopPlayers(self):
+        for player in (self.player_main, self.player_sub):
+            if player:
+                player.pause()           # 先暂停播放
+                player.setPosition(0)    # 重置到开头
+                player.setSource(QUrl()) # 清空媒体源
+                player.stop()            # 停止解码
+                player.deleteLater()     # 延迟释放

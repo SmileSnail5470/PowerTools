@@ -621,7 +621,7 @@ class HeaderWidget(QWidget):
         self.process_btn.clicked.connect(self.add_watermark_process)
         self.extract_btn.clicked.connect(self.extract_process)
 
-        self.task_manager = TaskManager(max_workers=4)
+        self.task_manager = TaskManager(max_workers=8)
 
         app = QCoreApplication.instance()
         if app:

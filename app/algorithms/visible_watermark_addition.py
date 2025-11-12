@@ -357,6 +357,9 @@ class VisibleWatermarkAddition:
         hardware_accel: bool = True,
         codec: str = "libx264",
         crf: int = 18,
+        ca: str = "aac",
+        ba: str = "192k",
+        ar: str = "48000",
         timeout: int = 1200
     ):
         if not os.path.exists(input_video_path):
@@ -377,7 +380,7 @@ class VisibleWatermarkAddition:
         alpha = max(0.0, min(a, 1.0)) if isinstance(a, float) else (a / 255.0)
         shadow_expr = f":shadowcolor=black:shadowx={shadow_offset[0]}:shadowy={shadow_offset[1]}" if shadow else ""
 
-        position_expr = self._get_ffmpeg_position_expr(position, margin)
+        position_expr = self._get_ffmpeg_position_expr(position, margin, is_text=True)
 
         font_size = max(6, int(font_size * scale))
 
@@ -399,7 +402,9 @@ class VisibleWatermarkAddition:
             "-vf", drawtext_filter,
             "-c:v", codec,
             "-crf", str(crf),
-            "-c:a", "copy",
+            "-c:a", ca,
+            "-b:a", ba,
+            "-ar", ar,
             "-movflags", "+faststart",
             output_video_path
         ]
@@ -434,6 +439,9 @@ class VisibleWatermarkAddition:
         margin: int = 20,
         codec: str = "libx264",
         crf: int = 18,
+        ca: str = "aac",
+        ba: str = "192k",
+        ar: str = "48000",
         hardware_accel: bool = True,
         timeout: int = 1200
     ):
@@ -458,7 +466,7 @@ class VisibleWatermarkAddition:
             wm.save(tmp_wm)
 
             # 计算 overlay 位置表达式
-            x_expr, y_expr = self._get_ffmpeg_position_expr(position, margin)
+            x_expr, y_expr = self._get_ffmpeg_position_expr(position, margin, is_text=False)
 
             overlay_filter = f"overlay={x_expr}:{y_expr}"
 
@@ -470,7 +478,9 @@ class VisibleWatermarkAddition:
                 "-filter_complex", overlay_filter,
                 "-c:v", codec,
                 "-crf", str(crf),
-                "-c:a", "copy",
+                "-c:a", ca,
+                "-b:a", ba,
+                "-ar", ar,
                 "-movflags", "+faststart",
                 output_video_path
             ]
@@ -493,20 +503,25 @@ class VisibleWatermarkAddition:
             except subprocess.TimeoutExpired:
                 raise RuntimeError("ffmpeg process timed out")
 
-    def _get_ffmpeg_position_expr(self, position: Position, margin: int) -> Tuple[str, str]:
+    def _get_ffmpeg_position_expr(self, position: Position, margin: int, is_text: bool = False) -> Tuple[str, str]:
         if isinstance(position, tuple):
             return str(position[0]), str(position[1])
         pos = position.lower()
+        w_var = "text_w" if is_text else "overlay_w"
+        h_var = "text_h" if is_text else "overlay_h"
+
         if "left" in pos:
             x = f"{margin}"
         elif "right" in pos:
-            x = f"main_w-overlay_w-{margin}"
+            x = f"main_w-{w_var}-{margin}"
         else:
-            x = f"(main_w-overlay_w)/2"
+            x = f"(main_w-{w_var})/2"
+
         if "top" in pos:
             y = f"{margin}"
         elif "bottom" in pos:
-            y = f"main_h-overlay_h-{margin}"
+            y = f"main_h-{h_var}-{margin}"
         else:
-            y = f"(main_h-overlay_h)/2"
+            y = f"(main_h-{h_var})/2"
+
         return x, y
