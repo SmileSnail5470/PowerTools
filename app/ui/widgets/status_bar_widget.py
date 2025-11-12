@@ -94,7 +94,7 @@ class StatCard(QFrame):
         self._value_translate = 0.0
         self._underline_width = 0.0
         
-        self.setFixedSize(100, 80)
+        # self.setFixedSize(100, 80)
         self.setFrameStyle(QFrame.NoFrame)
         self.setStyleSheet("""
             QFrame {
@@ -428,12 +428,10 @@ class StatusInfoWidget(QWidget):
         
     def setup_style(self):
         self.setStyleSheet("""
-            QWidget#StatusInfoWidget {
-                background: white;
-                border-radius: 4px;
-            }
             QFrame {
                 background: white;
+                border-radius: 8px;
+                border: 1px solid rgba(200, 200, 200, 0.3);
             }
         """)
         

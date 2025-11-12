@@ -730,12 +730,18 @@ class PreviewWidget(QWidget):
 
         main_layout.addLayout(self.stack, 1)
 
+        bottom_layout = QHBoxLayout()
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_layout.setSpacing(4)
+
         self.image_navigation_widget = ImageNavigationWidget(parent=self)
-        main_layout.addWidget(self.image_navigation_widget)
+        bottom_layout.addWidget(self.image_navigation_widget, 3)
 
         # 底部状态栏
         status_info_widget = StatusInfoWidget(task_status_model, self)
-        main_layout.addWidget(status_info_widget)
+        bottom_layout.addWidget(status_info_widget, 2)
+
+        main_layout.addLayout(bottom_layout)
 
         self.files_preview_info = {}
         self.media_type = "image"

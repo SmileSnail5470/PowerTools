@@ -3,13 +3,13 @@ import os
 import subprocess
 from PySide6.QtCore import (
     Signal, Qt, QTimer, QRect, Property, QEasingCurve, QPropertyAnimation, 
-    QThreadPool, QRunnable, QBuffer, QIODevice, QRectF
+    QThreadPool, QRunnable, QBuffer, QIODevice
 )
 from PySide6.QtWidgets import (
     QGraphicsView, QWidget , QVBoxLayout, QGraphicsScene, QGraphicsPixmapItem, QGraphicsTextItem, 
-    QScrollBar, QProgressBar, QPushButton, QFrame, QHBoxLayout, QScrollArea
+    QScrollBar, QProgressBar, QPushButton, QFrame, QHBoxLayout, QScrollArea, QSizePolicy
 )
-from PySide6.QtGui import QPixmap, QWheelEvent, QColor, QPainter, QBrush, QPen, QLinearGradient, QPainterPath
+from PySide6.QtGui import QPixmap, QWheelEvent, QColor, QPainter, QBrush, QPen, QLinearGradient
 from app.ui.library.qfluentwidgets import setFont, qconfig, Theme 
 from app.ui.common.event_bus import global_event_bus
 
@@ -483,9 +483,6 @@ class LoaderWorker(QRunnable):
 class ThumbnailButton(AnimatedButton):
     thread_pool = QThreadPool.globalInstance()
 
-    play_requested = Signal(int, str)  # index, image_path
-    pause_requested = Signal(int, str)
-
     def __init__(self, index, image_path, media_type="image", parent=None):
         super().__init__("", parent)
         self.media_type = media_type
@@ -494,7 +491,6 @@ class ThumbnailButton(AnimatedButton):
         self.pixmap = None
         self._is_hovered = False
         self.is_active = False
-        self.is_playing = False 
         self.setFixedSize(48, 48)
         self.setCursor(Qt.PointingHandCursor)
 
@@ -532,31 +528,10 @@ class ThumbnailButton(AnimatedButton):
             painter.setPen(Qt.NoPen)
             painter.drawRoundedRect(self.rect().adjusted(2, 2, -2, -2), 6, 6)
 
-        if self.media_type == "video":
-            painter.setRenderHint(QPainter.Antialiasing)
-            icon_rect = QRectF(rect.width() / 2 - 8, rect.height() / 2 - 8, 16, 16)
-            path = QPainterPath()
-            if self.is_playing:
-                # 暂停图标
-                bar_width = 4
-                space = 4
-                path.addRect(icon_rect.x(), icon_rect.y(), bar_width, icon_rect.height())
-                path.addRect(icon_rect.x() + bar_width + space, icon_rect.y(), bar_width, icon_rect.height())
-            else:
-                # 播放图标（三角形）
-                path.moveTo(icon_rect.x(), icon_rect.y())
-                path.lineTo(icon_rect.x(), icon_rect.bottom())
-                path.lineTo(icon_rect.right(), icon_rect.center().y())
-                path.closeSubpath()
-
-            painter.setBrush(QColor(255, 255, 255, 220))
-            painter.setPen(Qt.NoPen)
-            painter.drawPath(path)
-
         painter.restore()
 
         if self.is_active:
-            pen = QPen(QColor(128, 150, 255, 128), 3)  # 蓝色边框
+            pen = QPen(QColor(128, 150, 255, 128), 6)  # 蓝色边框
             pen.setJoinStyle(Qt.RoundJoin)
             painter.setPen(pen)
             painter.setBrush(Qt.NoBrush)
@@ -590,22 +565,12 @@ class ThumbnailButton(AnimatedButton):
             self._animation.start()
             self.update()
 
-    def mousePressEvent(self, event):
-        if self.media_type == "video":
-            if self.is_playing:
-                self.is_playing = False
-                self.pause_requested.emit(self.index, self.image_path)
-            else:
-                self.is_playing = True
-                self.play_requested.emit(self.index, self.image_path)
-        super().mousePressEvent(event)
-        self.update()
-
 
 class ImageNavigationWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("ImageNavigationWidget")
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.total_images = []
         self.current_index = 0
         self.setup_ui()
@@ -644,7 +609,7 @@ class ImageNavigationWidget(QWidget):
         """)
         self.thumbnail_layout = QHBoxLayout(thumbnail_frame)
         self.thumbnail_layout.setSpacing(15)
-        self.thumbnail_layout.setContentsMargins(6, 3, 6, 3)
+        self.thumbnail_layout.setContentsMargins(10, 6, 10, 6)
         self.thumbnail_layout.addStretch()
 
         scroll_area = QScrollArea()
