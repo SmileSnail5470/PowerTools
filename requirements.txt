@@ -7,4 +7,4 @@ pywin32==311; platform_system=="Windows"
 pyobjc==11.1; platform_system=="Darwin"
 PyCocoa==25.4.8; platform_system=="Darwin"
 xcffib==1.11.2; sys_platform=="linux"
-matplotlib==3.10.7
+ffmpeg-python==0.2.0

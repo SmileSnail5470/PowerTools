@@ -56,11 +56,7 @@ class WatermarkAddWork(BaseWorker):
                     margin=10,
                     codec="libx264",
                     crf=18,
-                    ca="aac",
-                    ba="192k",
-                    ar="48000",
-                    hardware_accel=True,
-                    timeout=1200
+                    hardware_accel=True
                 )
         else:
             if file_type == "image":
@@ -98,10 +94,6 @@ class WatermarkAddWork(BaseWorker):
                     shadow_offset=(1, 1),
                     hardware_accel=True,
                     codec="libx264",
-                    crf=18,
-                    ca="aac",
-                    ba="192k",
-                    ar="48000",
-                    timeout=1200
+                    crf=18
                 )
         return output_file

@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 import threading
 import tempfile
+import ffmpeg
 
 Position = Union[str, Tuple[int, int]]
 
@@ -15,10 +16,12 @@ class VisibleWatermarkAddition:
     _font_cache_lock = threading.Lock()
 
     def __init__(self):
-        self.ffmpeg_exe = os.getenv(
-            "POWERTOOLS_FFMPEG", 
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "ffmpeg", "bin", "ffmpeg")
+        ffmpeg_bin = os.getenv(
+            "POWERTOOLS_FFMPEG_BIN", 
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "ffmpeg", "bin")
         )
+        self.ffmpeg_exe = os.path.join(ffmpeg_bin, "ffmpeg.exe" if platform.system().lower() == "windows" else "ffmpeg")
+        self.ffprobe_exe = os.path.join(ffmpeg_bin, "ffprobe.exe" if platform.system().lower() == "windows" else "ffprobe")
 
     def _find_system_fonts_once(self) -> List[str]:
         if self._sys_fonts_cache is not None:
@@ -357,10 +360,6 @@ class VisibleWatermarkAddition:
         hardware_accel: bool = True,
         codec: str = "libx264",
         crf: int = 18,
-        ca: str = "aac",
-        ba: str = "192k",
-        ar: str = "48000",
-        timeout: int = 1200
     ):
         if not os.path.exists(input_video_path):
             raise FileNotFoundError(f"Input video not found: {input_video_path}")
@@ -378,7 +377,6 @@ class VisibleWatermarkAddition:
         rgba = color
         r, g, b, a = rgba
         alpha = max(0.0, min(a, 1.0)) if isinstance(a, float) else (a / 255.0)
-        shadow_expr = f":shadowcolor=black:shadowx={shadow_offset[0]}:shadowy={shadow_offset[1]}" if shadow else ""
 
         position_expr = self._get_ffmpeg_position_expr(position, margin, is_text=True)
 
@@ -386,46 +384,43 @@ class VisibleWatermarkAddition:
 
         fontcolor_expr = f"#{r:02x}{g:02x}{b:02x}@{alpha}"
 
-        drawtext_filter = (
-            f"drawtext=text='{text}':fontfile='{font_path}':"
-            f"fontsize={font_size}:fontcolor={fontcolor_expr}"
-            f"{shadow_expr}:x={position_expr[0]}:y={position_expr[1]}"
+        drawtext_kwargs = dict(
+            text=text,
+            fontfile=font_path,
+            fontsize=font_size,
+            fontcolor=fontcolor_expr,
+            x=position_expr[0],
+            y=position_expr[1],
         )
+        if shadow:
+            drawtext_kwargs.update(
+                shadowcolor="black",
+                shadowx=shadow_offset[0],
+                shadowy=shadow_offset[1]
+            )
+
+        stream = ffmpeg.input(input_video_path)
+        stream = stream.drawtext(**drawtext_kwargs)
 
         if rotation:
-            drawtext_filter += f",rotate={rotation}*PI/180:ow=rotw(iw):oh=roth(ih):c=none"
+            stream = stream.filter("rotate", f"{rotation}*PI/180", ow="rotw(iw)", oh="roth(ih)", c="none")
 
-        ffmpeg_cmd = [
-            self.ffmpeg_exe,
-            "-y",
-            "-i", input_video_path,
-            "-vf", drawtext_filter,
-            "-c:v", codec,
-            "-crf", str(crf),
-            "-c:a", ca,
-            "-b:a", ba,
-            "-ar", ar,
-            "-movflags", "+faststart",
-            output_video_path
-        ]
+        stream = ffmpeg.output(
+            stream,
+            output_video_path,
+            vcodec=codec,
+            crf=crf,
+            acodec="copy",
+            movflags="+faststart"
+        )
 
+        run_kwargs = {"cmd": self.ffmpeg_exe}
+        run_kwargs["capture_stdout"] = True
+        run_kwargs["capture_stderr"] = True
         if hardware_accel and platform.system() != "Windows":
-            ffmpeg_cmd.insert(1, "-hwaccel")
-            ffmpeg_cmd.insert(2, "auto")
+            run_kwargs["cmd"] = [self.ffmpeg_exe, "-hwaccel", "auto"]
 
-        try:
-            subprocess.run(
-                ffmpeg_cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=True,
-                timeout=timeout
-            )
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"ffmpeg failed: {e.stderr.strip()}")
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("ffmpeg process timed out")
+        ffmpeg.run(stream, overwrite_output=True, **run_kwargs)
 
     def video_add_image_watermark(
         self,
@@ -439,11 +434,7 @@ class VisibleWatermarkAddition:
         margin: int = 20,
         codec: str = "libx264",
         crf: int = 18,
-        ca: str = "aac",
-        ba: str = "192k",
-        ar: str = "48000",
-        hardware_accel: bool = True,
-        timeout: int = 1200
+        hardware_accel: bool = True
     ):
         if not os.path.exists(input_video_path):
             raise FileNotFoundError(f"Input video not found: {input_video_path}")
@@ -468,40 +459,26 @@ class VisibleWatermarkAddition:
             # 计算 overlay 位置表达式
             x_expr, y_expr = self._get_ffmpeg_position_expr(position, margin, is_text=False)
 
-            overlay_filter = f"overlay={x_expr}:{y_expr}"
+            video = ffmpeg.input(input_video_path)
+            watermark = ffmpeg.input(tmp_wm)
+            stream = ffmpeg.overlay(video, watermark, x=x_expr, y=y_expr)
 
-            ffmpeg_cmd = [
-                self.ffmpeg_exe,
-                "-y",
-                "-i", input_video_path,
-                "-i", tmp_wm,
-                "-filter_complex", overlay_filter,
-                "-c:v", codec,
-                "-crf", str(crf),
-                "-c:a", ca,
-                "-b:a", ba,
-                "-ar", ar,
-                "-movflags", "+faststart",
-                output_video_path
-            ]
+            stream = ffmpeg.output(
+                stream,
+                output_video_path,
+                vcodec=codec,
+                crf=crf,
+                acodec="copy",
+                movflags="+faststart"
+            )
 
+            run_kwargs = {"cmd": self.ffmpeg_exe}
+            run_kwargs["capture_stdout"] = True
+            run_kwargs["capture_stderr"] = True
             if hardware_accel and platform.system() != "Windows":
-                ffmpeg_cmd.insert(1, "-hwaccel")
-                ffmpeg_cmd.insert(2, "auto")
+                run_kwargs["cmd"] = [self.ffmpeg_exe, "-hwaccel", "auto"]
 
-            try:
-                subprocess.run(
-                    ffmpeg_cmd,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    check=True,
-                    timeout=timeout
-                )
-            except subprocess.CalledProcessError as e:
-                raise RuntimeError(f"ffmpeg failed: {e.stderr.strip()}")
-            except subprocess.TimeoutExpired:
-                raise RuntimeError("ffmpeg process timed out")
+            ffmpeg.run(stream, overwrite_output=True, **run_kwargs)
 
     def _get_ffmpeg_position_expr(self, position: Position, margin: int, is_text: bool = False) -> Tuple[str, str]:
         if isinstance(position, tuple):

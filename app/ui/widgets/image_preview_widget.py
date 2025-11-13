@@ -1,6 +1,7 @@
 from functools import lru_cache
 import os
-import subprocess
+import ffmpeg
+import platform
 from PySide6.QtCore import (
     Signal, Qt, QTimer, QRect, Property, QEasingCurve, QPropertyAnimation, 
     QThreadPool, QRunnable, QBuffer, QIODevice
@@ -435,49 +436,35 @@ class LoaderWorker(QRunnable):
     @lru_cache(maxsize=512)
     def _extract_video_frame(video_path: str, size=(48, 48)) -> QPixmap:
         width, height = size
-        pix = None
 
-        try:
-            cmd = [
-                os.getenv("POWERTOOLS_FFMPEG", os.path.join(
-                    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
-                    "resources", "ffmpeg", "bin", "ffmpeg"
-                    )
-                ),
-                "-hide_banner",
-                "-loglevel", "error",
-                "-y",
-                "-i", video_path,
-                "-frames:v", "1",
-                "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease",
-                "-f", "image2pipe",
-                "-vcodec", "png",
-                "pipe:1"
-            ]
-            result = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                check=True,
-                timeout=5
-            )
-            data = result.stdout
-            if data:
-                buffer = QBuffer()
-                buffer.setData(data)
-                buffer.open(QIODevice.ReadOnly)
-                pix = QPixmap()
-                pix.loadFromData(buffer.data(), "PNG")
-                buffer.close()
+        ffmpeg_bin = os.getenv(
+            "POWERTOOLS_FFMPEG_BIN", 
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resources", "ffmpeg", "bin")
+        )
+        ffmpeg_exe = os.path.join(ffmpeg_bin, "ffmpeg.exe" if platform.system().lower() == "windows" else "ffmpeg")
+        print(ffmpeg_exe)
 
-        except subprocess.TimeoutExpired:
-            raise Exception(f"[LoaderWorker] Timeout extracting thumbnail: {video_path}")
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"[LoaderWorker] ffmpeg error: {video_path} -> {e}")
-        except Exception as e:
-            raise Exception(f"[LoaderWorker] Unexpected error: {video_path} -> {e}")
+        stream = (
+            ffmpeg.input(video_path)
+            .filter("scale", width, height, force_original_aspect_ratio="decrease")
+            .output("pipe:1", vframes=1, format="png")
+        )
+        out_bytes, _ = ffmpeg.run(
+            stream,
+            capture_stdout=False,
+            capture_stderr=False,
+            cmd=ffmpeg_exe,
+            overwrite_output=True
+        )
 
-        return pix
+        pixmap = QPixmap()
+        buffer = QBuffer()
+        buffer.setData(out_bytes)
+        buffer.open(QIODevice.ReadOnly)
+        pixmap.loadFromData(buffer.data(), "PNG")
+        buffer.close()
+
+        return pixmap
 
 
 class ThumbnailButton(AnimatedButton):
