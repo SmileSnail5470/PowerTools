@@ -166,9 +166,31 @@ class SyncVideoViewer(QWidget):
         layout.addWidget(self.playBar, 0)
 
     def setVideos(self, main_path: str, sub_path: str):
+        self._cleanup_players()
         self.player_main.setSource( QUrl.fromLocalFile(main_path))
         self.player_sub.setSource(QUrl.fromLocalFile(sub_path))
         self._updateVideoLayout()
+
+        # self._show_first_frame(self.player_main)
+        # self._show_first_frame(self.player_sub)
+
+    def _show_first_frame(self, player: MediaPlayer):
+        def _on_media_status_changed(status):
+            if status == player.MediaStatus.LoadedMedia:
+                player.mediaStatusChanged.disconnect(_on_media_status_changed)
+                QTimer.singleShot(0, _load_first_frame)
+
+        def _load_first_frame():
+            player.setPosition(0)
+            player.play()
+            QTimer.singleShot(150, lambda: player.pause())
+
+        try:
+            player.mediaStatusChanged.disconnect(_on_media_status_changed)
+        except Exception:
+            pass
+
+        player.mediaStatusChanged.connect(_on_media_status_changed)
 
     def _updateVideoLayout(self):
         w, h = self.view.width(), self.view.height() / 2
@@ -193,6 +215,13 @@ class SyncVideoViewer(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
         self._updateVideoLayout()
+
+    def _cleanup_players(self):
+        for player in (self.player_main, self.player_sub):
+            if player:
+                player.pause()
+                player.stop()
+                player.setSource(QUrl())
 
     @Slot()
     def _sync_videos(self):

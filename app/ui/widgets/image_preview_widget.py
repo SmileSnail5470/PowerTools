@@ -442,17 +442,17 @@ class LoaderWorker(QRunnable):
             os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resources", "ffmpeg", "bin")
         )
         ffmpeg_exe = os.path.join(ffmpeg_bin, "ffmpeg.exe" if platform.system().lower() == "windows" else "ffmpeg")
-        print(ffmpeg_exe)
 
         stream = (
             ffmpeg.input(video_path)
             .filter("scale", width, height, force_original_aspect_ratio="decrease")
-            .output("pipe:1", vframes=1, format="png")
+            .output("pipe:1", vframes=1, format="image2pipe", vcodec="png")
+            .global_args("-hide_banner", "-loglevel", "error")
         )
         out_bytes, _ = ffmpeg.run(
             stream,
-            capture_stdout=False,
-            capture_stderr=False,
+            capture_stdout=True,
+            capture_stderr=True,
             cmd=ffmpeg_exe,
             overwrite_output=True
         )
