@@ -718,6 +718,7 @@ class PreviewWidget(QWidget):
         self.stack.setContentsMargins(0, 0, 0, 0)
 
         self.placeholder_widget = QLabel("请选择图片或视频文件进行预览", parent=self)
+        self.placeholder_widget.setStyleSheet("color: #888888;")  # 设置为浅灰色
         setFont(self.placeholder_widget, 20)
         self.placeholder_widget.setAlignment(Qt.AlignCenter)
 

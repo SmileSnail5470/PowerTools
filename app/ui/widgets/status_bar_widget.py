@@ -1,6 +1,9 @@
 from PySide6.QtGui import QFont, QColor, QPainter, QPen, QBrush, QLinearGradient, QPixmap
-from PySide6.QtWidgets import QWidget, QFrame, QHBoxLayout, QLabel, QGraphicsDropShadowEffect, QVBoxLayout, QListWidget, QListWidgetItem
-from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, Property, QRectF, Signal
+from PySide6.QtWidgets import (
+    QWidget, QFrame, QHBoxLayout, QLabel, QGraphicsDropShadowEffect, QVBoxLayout, QListWidget, 
+    QListWidgetItem, QPushButton, QApplication
+)
+from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, Property, QRectF, Signal, QRect
 from app.ui.library.qfluentwidgets import setFont
 from app.ui.common.task_status import TaskStatusModel
 
@@ -131,7 +134,7 @@ class StatCard(QFrame):
                 background: transparent;
             }}
         """)
-        setFont(self.value_label, 28, QFont.Bold)
+        setFont(self.value_label, 24, QFont.Bold)
         
         # 说明标签
         self.desc_label = QLabel(self.label)
@@ -246,49 +249,74 @@ class StatCard(QFrame):
         painter.end()
 
 
-class FailurePanel(QFrame):
+class FailurePopupWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("FailurePopupWidget")
+        self.setWindowFlags(Qt.Popup | Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+
         self.setup_ui()
-        self.setup_style()
-        self._visible = False
+        self.setup_shadow()
+        self.hide()
         
     def setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 24, 16)
-        layout.setSpacing(12)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(6, 6, 6, 6)
+
+        self.content_widget = QWidget()
+        self.content_widget.setObjectName("contentWidget")
+        content_layout = QVBoxLayout(self.content_widget)
+        content_layout.setContentsMargins(16, 12, 16, 12)
+        content_layout.setSpacing(10)
         
         # 头部
         header_layout = QHBoxLayout()
-        header_layout.setSpacing(8)
+        header_layout.setSpacing(6)
         
         # 失败图标
-        self.failure_icon = QLabel("!")
+        self.failure_icon = QLabel("❌")
         self.failure_icon.setFixedSize(20, 20)
         self.failure_icon.setAlignment(Qt.AlignCenter)
         self.failure_icon.setStyleSheet("""
             QLabel {
-                background: #d13438;
-                color: white;
-                border-radius: 10px;
+                color: #d13438;
             }
         """)
-        setFont(self.failure_icon, 10, QFont.Bold)
+        setFont(self.failure_icon, 10)
         
         # 失败标题
         self.failure_title = QLabel(self.tr("失败的文件列表"))
         self.failure_title.setStyleSheet("""
             QLabel {
-                color: #d13438;
+                color: #b91c1c;
             }
         """)
-        setFont(self.failure_title, 14, QFont.DemiBold)
+        setFont(self.failure_title, 12, QFont.DemiBold)
+
+        self.close_button = QPushButton("✕")
+        self.close_button.setFixedSize(24, 24)
+        self.close_button.setStyleSheet("""
+            QPushButton {
+                border: none;
+                background: transparent;
+                color: #737373;
+                font-size: 16px;
+                border-radius: 12px;
+            }
+            QPushButton:hover {
+                background: rgba(220, 38, 38, 0.1);
+                color: #dc2626;
+            }
+        """)
+        self.close_button.clicked.connect(self.hide)
         
         header_layout.addWidget(self.failure_icon)
         header_layout.addWidget(self.failure_title)
         header_layout.addStretch()
+        header_layout.addWidget(self.close_button)
         
-        layout.addLayout(header_layout)
+        content_layout.addLayout(header_layout)
         
         # 失败列表
         self.failure_list = QListWidget()
@@ -299,63 +327,71 @@ class FailurePanel(QFrame):
                 background: transparent;
             }
             QListWidget::item {
-                background: white;
-                border-radius: 6px;
-                padding: 8px 12px;
-                margin-bottom: 6px;
-                color: #323130;
+                background: #fff;
+                border-radius: 8px;
+                padding: 6px 10px;
+                margin-bottom: 4px;
+                color: #374151;
             }
             QListWidget::item:hover {
                 background: #fee2e2;
             }
-            QListWidget::item:selected {
-                background: #fecaca;
-            }
         """)
-        setFont(self.failure_list, 13, QFont.Normal)
+        setFont(self.failure_list, 10, QFont.Normal)
         
-        layout.addWidget(self.failure_list)
-        
-    def setup_style(self):
-        self.setStyleSheet("""
-            QFrame {
-                background: #fef2f2;
-                border: 1px solid #fecaca;
-                border-radius: 8px;
-            }
-        """)
-        
-    def set_visible(self, visible):
-        self._visible = visible
-        if visible:
-            self.show()
-            self.animate_show()
-        else:
-            self.animate_hide()
-            
-    def is_visible(self):
-        return self._visible
-        
-    def animate_show(self):
-        self.animation = QPropertyAnimation(self, b"maximumHeight")
-        self.animation.setDuration(300)
-        self.animation.setStartValue(0)
-        self.animation.setEndValue(200)
-        self.animation.setEasingCurve(QEasingCurve.OutCubic)
-        self.animation.finished.connect(lambda: setattr(self, "_visible", True))
-        self.animation.start()
+        content_layout.addWidget(self.failure_list)
 
-    def animate_hide(self):
-        self.animation = QPropertyAnimation(self, b"maximumHeight")
-        self.animation.setDuration(300)
-        self.animation.setStartValue(self.maximumHeight())
-        self.animation.setEndValue(0)
-        self.animation.setEasingCurve(QEasingCurve.InCubic)
-        def finish():
-            self.hide()
-            self._visible = False
-            self.updateGeometry()
-        self.animation.finished.connect(finish)
+        main_layout.addWidget(self.content_widget)
+
+        self.setStyleSheet("""
+            QWidget#contentWidget {
+                background: rgba(254, 242, 242, 0.95);
+                border: 1px solid #fecaca;
+                border-radius: 12px;
+            }
+        """)
+
+    def setup_shadow(self):
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(24)
+        shadow.setOffset(0, 4)
+        shadow.setColor(QColor(0, 0, 0, 60))
+        self.content_widget.setGraphicsEffect(shadow)
+        
+    def show_at(self, target_widget):
+        card_rect = target_widget.rect()
+        global_pos = target_widget.mapToGlobal(card_rect.bottomLeft())
+
+        self.adjustSize()
+        popup_width = self.width()
+        popup_height = self.height()
+
+        # 获取可视区域
+        screen_rect = QApplication.primaryScreen().availableGeometry()
+
+        popup_x = global_pos.x() + (target_widget.width() - popup_width) // 2
+        popup_y = global_pos.y() + 8  # 下方偏移一点
+
+        # 边界检测（防止超出屏幕）
+        if popup_x + popup_width > screen_rect.right():
+            popup_x = screen_rect.right() - popup_width - 8
+        if popup_x < screen_rect.left():
+            popup_x = screen_rect.left() + 8
+        if popup_y + popup_height > screen_rect.bottom():
+            # 如果太靠下，就显示在目标上方
+            popup_y = global_pos.y() - popup_height - 8
+
+        self.move(popup_x, popup_y)
+        self.show()
+
+        # 弹出动画
+        self.animation = QPropertyAnimation(self, b"geometry")
+        self.animation.setDuration(200)
+        self.animation.setEasingCurve(QEasingCurve.OutCubic)
+        start_rect = QRect(popup_x, popup_y - 10, popup_width, popup_height)
+        end_rect = QRect(popup_x, popup_y, popup_width, popup_height)
+        self.animation.setStartValue(start_rect)
+        self.animation.setEndValue(end_rect)
         self.animation.start()
         
     def add_failure(self, filename, reason):
@@ -417,14 +453,10 @@ class StatusInfoWidget(QWidget):
         status_layout.addWidget(self.progress_ring)
         
         # 失败信息面板
-        self.failure_panel = FailurePanel() 
+        self.failure_popup = FailurePopupWidget()
         
         # 添加到主布局
         main_layout.addWidget(self.status_bar)
-        main_layout.addWidget(self.failure_panel)
-        
-        # 初始隐藏失败面板
-        self.failure_panel.hide()
         
     def setup_style(self):
         self.setStyleSheet("""
@@ -437,10 +469,14 @@ class StatusInfoWidget(QWidget):
         
     def on_stat_clicked(self, stat_name):
         if stat_name == "failed":
-            self.toggle_failure_panel()
+            self.toggle_failure_popup()
             
-    def toggle_failure_panel(self):
-        self.failure_panel.set_visible(not self.failure_panel.is_visible())
+    def toggle_failure_popup(self):
+        if self.failure_popup.isVisible():
+            self.failure_popup.hide()
+        else:
+            
+            self.failure_popup.show_at(self.failed_card)
         
     def update_display(self, data):
         self.total_card.update_value(data['total'])
@@ -459,6 +495,6 @@ class StatusInfoWidget(QWidget):
         self.update_failure_list(data)
         
     def update_failure_list(self, data):
-        self.failure_panel.clear_failures()
+        self.failure_popup.clear_failures()
         for filename, reason in data['failures']:
-            self.failure_panel.add_failure(filename, reason)
+            self.failure_popup.add_failure(filename, reason)
