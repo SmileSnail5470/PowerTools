@@ -76,7 +76,7 @@ class TaskInfoMessageBox(MessageBoxBase):
                     continue
                 if is_image_watermark and key in ["font", "font_size", "font_color", "watermark_text"]:
                     continue
-                elif not is_image_watermark and key in ["watermark_image"]:
+                if not is_image_watermark and key in ["watermark_image"]:
                     continue
                 param_widget = self.create_param_widget(param_name_map[key], value if value not in value_map else value_map[value])
                 params_grid.addWidget(param_widget, row, col)

@@ -717,12 +717,12 @@ class HeaderWidget(QWidget):
         if not params:
             error_msg = self.tr("请设置水印参数")
             return error_msg, task_params
-        if "input_path" not in params:
+        if "input_path" not in params or not params["input_path"]:
             error_msg = self.tr("请选择要处理的文件或目录")
             return error_msg, task_params
         else:
             task_params["input_path"] = params["input_path"]
-        if "output_path" not in params:
+        if "output_path" not in params or not params["output_path"]:
             error_msg = self.tr("请设置文件保存位置")
             return error_msg, task_params
         else:
@@ -735,8 +735,9 @@ class HeaderWidget(QWidget):
             task_params["watermark_type"] = params["watermark_type"]
 
         if params["watermark_type"] == "visible":
-            if "watermark_content" in params and params["watermark_content"] == "ImageSettings":
-                if "watermark_image" not in params:
+            task_params["watermark_content"] = params["watermark_content"]
+            if params["watermark_content"] == "ImageSettings":
+                if "watermark_image" not in params or not params["watermark_image"]:
                     error_msg = self.tr("请选择水印图片")
                     return error_msg, task_params
                 task_params["watermark_image"] = params["watermark_image"]
