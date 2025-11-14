@@ -62,6 +62,8 @@ class VisibleWatermarkAddition:
         fonts = self._find_system_fonts_once()
         if target:
             for p in fonts:
+                if not p.endswith((".ttf", ".otf", ".ttc")):
+                    continue
                 if target in os.path.basename(p).lower() or target in p.lower() or target.split(" ")[0] in p.lower():
                     return p
             if platform.system() == "Windows":

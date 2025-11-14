@@ -22,9 +22,9 @@ class WatermarkAddWork(BaseWorker):
         output_path = kwargs["output_path"]
         output_format = kwargs["output_format"]
         if output_format == "保持原格式":
-            output_file = os.path.join(output_path, os.path.basename(input_path))
+            output_file = os.path.join(output_path, "{0}_watermark.{1}".format(os.path.basename(input_path).split(".")[0], os.path.basename(input_path).split(".")[1]))
         else:
-            output_file = os.path.join(output_path, "{0}.{1}".format(os.path.basename(input_path).split(".")[0], output_format.lower()))
+            output_file = os.path.join(output_path, "{0}_watermark.{1}".format(os.path.basename(input_path).split(".")[0], output_format.lower()))
         file_type = self.file_type(input_file=input_path)
 
         if file_type is None:

@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, Signal, QUrl, QSizeF, QTimer, Slot, QCoreApplication
+from PySide6.QtCore import Qt, QUrl, QSizeF, QTimer, Slot, QCoreApplication
 from PySide6.QtGui import QPainter, QColor, QBrush
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QHBoxLayout, QVBoxLayout, QWidget, QGraphicsRectItem
@@ -99,13 +99,10 @@ class CustomMediaPlayBar(MediaPlayBarBase):
         self.hBoxLayout.addWidget(self.progressSlider, 1)
         self.hBoxLayout.addWidget(self.volumeButton, 0)
 
-        self.setFixedHeight(48)
+        self.setFixedHeight(40)
 
 
 class SyncVideoViewer(QWidget):
-    playbackStateChanged = Signal(bool)
-    positionChanged = Signal(int)
-
     def __init__(self, parent=None, sync_interval=200, drift_threshold=150):
         super().__init__(parent)
         app = QCoreApplication.instance()
@@ -157,7 +154,6 @@ class SyncVideoViewer(QWidget):
 
         self.sync_timer = QTimer(self)
         self.sync_timer.timeout.connect(self._sync_videos)
-        self.sync_timer.start(self.sync_interval)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -171,26 +167,14 @@ class SyncVideoViewer(QWidget):
         self.player_sub.setSource(QUrl.fromLocalFile(sub_path))
         self._updateVideoLayout()
 
-        # self._show_first_frame(self.player_main)
-        # self._show_first_frame(self.player_sub)
+        self._show_first_frame()
+        self.sync_timer.start(self.sync_interval)
 
-    def _show_first_frame(self, player: MediaPlayer):
-        def _on_media_status_changed(status):
-            if status == player.MediaStatus.LoadedMedia:
-                player.mediaStatusChanged.disconnect(_on_media_status_changed)
-                QTimer.singleShot(0, _load_first_frame)
-
-        def _load_first_frame():
-            player.setPosition(0)
-            player.play()
-            QTimer.singleShot(150, lambda: player.pause())
-
-        try:
-            player.mediaStatusChanged.disconnect(_on_media_status_changed)
-        except Exception:
-            pass
-
-        player.mediaStatusChanged.connect(_on_media_status_changed)
+    def _show_first_frame(self):
+        self.player_main.pause()
+        self.player_sub.pause()
+        self.player_main.setPosition(0)
+        self.player_sub.setPosition(0)
 
     def _updateVideoLayout(self):
         w, h = self.view.width(), self.view.height() / 2
@@ -217,6 +201,8 @@ class SyncVideoViewer(QWidget):
         self._updateVideoLayout()
 
     def _cleanup_players(self):
+        if self.sync_timer.isActive():
+            self.sync_timer.stop()
         for player in (self.player_main, self.player_sub):
             if player:
                 player.pause()
@@ -232,10 +218,11 @@ class SyncVideoViewer(QWidget):
                 self.player_sub.setPosition(pos_main)
 
     def stopPlayers(self):
+        if self.sync_timer.isActive():
+            self.sync_timer.stop()
         for player in (self.player_main, self.player_sub):
             if player:
-                player.pause()           # 先暂停播放
-                player.setPosition(0)    # 重置到开头
-                player.setSource(QUrl()) # 清空媒体源
-                player.stop()            # 停止解码
-                player.deleteLater()     # 延迟释放
+                player.pause()
+                player.setSource(QUrl())
+                player.stop()
+                player.deleteLater()
