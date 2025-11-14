@@ -19,6 +19,7 @@ from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigation
 from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
+from app.ui.widgets.blind_watermark_text_widget import BlindWatermarkInputPanel
 
 from app.ui.common.task_params import bind_widget_to_param, TaskParams
 from app.ui.common.event_bus import global_event_bus
@@ -203,6 +204,13 @@ class WatermarkContentCard(HeaderCardWidget):
 
         self.viewLayout.setContentsMargins(10, 10, 10, 10)
         self.viewLayout.addLayout(main_layout)
+
+        # 盲水印文本界面
+        self.blind_watermark_input = BlindWatermarkInputPanel()
+        self.blind_watermark_input.hide()
+        bind_widget_to_param(self.blind_watermark_input, "textUpdate", watermark_add_params, "watermark_text", transform=None)
+        self.blind_watermark_input.textUpdate.emit(self.blind_watermark_input.input.text())
+        main_layout.addWidget(self.blind_watermark_input)
         
         # 文字水印设置界面
         textSettings = QWidget()
@@ -216,7 +224,7 @@ class WatermarkContentCard(HeaderCardWidget):
         text_settings_layout.addWidget(text_label_1)
         self.text_edit = TextEdit()
         self.text_edit.setPlaceholderText(self.tr("输入水印文字"))
-        self.text_edit.setText("@ PowerTools")
+        self.text_edit.setText("POWERTOOLS")
         self.text_edit.setFixedHeight(50)
         setFont(self.text_edit, 13)
         bind_widget_to_param(self, "watermark_text_changed", watermark_add_params, "watermark_text", transform=None)
@@ -331,6 +339,16 @@ class WatermarkContentCard(HeaderCardWidget):
     def watermark_text_update(self):
         self.watermark_text_changed.emit(self.text_edit.toPlainText())
 
+    def set_watermark_type(self, type_name: str):
+        if type_name == "blind":
+            self.blind_watermark_input.show()
+            self.stackedWidget.hide()
+            self.pivot.hide()
+        else:
+            self.blind_watermark_input.hide()
+            self.pivot.show()
+            self.stackedWidget.show()
+
 class WatermarkSettingsCard(HeaderCardWidget):
     degree = "\u00B0"
     watermark_location_map = {
@@ -441,6 +459,9 @@ class WatermarkSettingsCard(HeaderCardWidget):
 
     def update_zoom_value(self, val):
         self.slider_zoom_value_label.setText(str(val)+"%")
+
+    def set_visible(self, type_name: str):
+        self.setVisible(type_name == "visible")
 
 class OutputSettingsCard(HeaderCardWidget):
     def __init__(self, parent=None):
@@ -556,6 +577,13 @@ class ControlPanelWidget(ScrollArea):
         self.enableTransparentBackground()
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
+        watermarkTypeSelectorCard.watermark_type.connect(
+            lambda t: watermarkContentCard.set_watermark_type(t)
+        )
+        watermarkTypeSelectorCard.watermark_type.connect(
+            lambda t: watermarkSettingsCard.set_visible(t)
+        )
+
 
 class HeaderWidget(QWidget):
     def __init__(self, parent=None):
@@ -628,8 +656,8 @@ class HeaderWidget(QWidget):
             app.aboutToQuit.connect(self._cleanup_task_manager)
 
     def add_watermark_process(self):
-        task_params = watermark_add_params.to_dict()
-        error_msg = self._params_check(params=task_params)
+        init_params = watermark_add_params.to_dict()
+        error_msg, task_params = self._params_check(params=init_params)
         if error_msg:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
@@ -671,7 +699,7 @@ class HeaderWidget(QWidget):
         TeachingTip.create(
             target=self.process_btn,
             icon=InfoBarIcon.SUCCESS,
-            title="通知",
+            title=self.tr("通知"),
             content=self.tr("水印添加任务提交成功"),
             isClosable=True,
             tailPosition=TeachingTipTailPosition.BOTTOM,
@@ -685,16 +713,45 @@ class HeaderWidget(QWidget):
 
     def _params_check(self, params):
         error_msg = ""
+        task_params = {}
         if not params:
             error_msg = self.tr("请设置水印参数")
-        elif "input_path" not in params:
+            return error_msg, task_params
+        if "input_path" not in params:
             error_msg = self.tr("请选择要处理的文件或目录")
-        elif "output_path" not in params:
+            return error_msg, task_params
+        else:
+            task_params["input_path"] = params["input_path"]
+        if "output_path" not in params:
             error_msg = self.tr("请设置文件保存位置")
-        elif "watermark_content" in params and params["watermark_content"] == "ImageSettings":
-            if "watermark_image" not in params:
-                error_msg = self.tr("请选择水印图片")
-        return error_msg
+            return error_msg, task_params
+        else:
+            task_params["output_path"] = params["output_path"]
+            task_params["output_format"] = params["output_format"]
+        if "watermark_type" not in params:
+            error_msg = self.tr("请选择水印类型")
+            return error_msg, task_params
+        else:
+            task_params["watermark_type"] = params["watermark_type"]
+
+        if params["watermark_type"] == "visible":
+            if "watermark_content" in params and params["watermark_content"] == "ImageSettings":
+                if "watermark_image" not in params:
+                    error_msg = self.tr("请选择水印图片")
+                    return error_msg, task_params
+                task_params["watermark_image"] = params["watermark_image"]
+            else:
+                task_params["watermark_text"] = params["watermark_text"]
+                task_params["font"] = params["font"]
+                task_params["font_size"] = params["font_size"]
+                task_params["font_color"] = params["font_color"]
+            task_params["watermark_rotation"] = params["watermark_rotation"]
+            task_params["watermark_zoom"] = params["watermark_zoom"]
+            task_params["watermark_opacity"] = params["watermark_opacity"]
+            task_params["watermark_location"] = params["watermark_location"]
+        else:
+            task_params["watermark_text"] = params["watermark_text"]
+        return error_msg, task_params
 
     def extract_process(self):
         pass
