@@ -57,7 +57,6 @@ class BlindWatermarkInputPanel(QWidget):
 
         self.input = QLineEdit()
         self.input.setPlaceholderText(self.tr("输入水印文字"))
-        self.input.setText("POWERTOOLS")
         self.input.setMinimumHeight(36)
         setFont(self.input, 13)
         self.input.textChanged.connect(lambda s: self.textUpdate.emit(s))

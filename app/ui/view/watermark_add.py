@@ -20,6 +20,7 @@ from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
 from app.ui.widgets.blind_watermark_text_widget import BlindWatermarkInputPanel
+from app.ui.widgets.gradient_header_widget import GradientHeader
 
 from app.ui.common.task_params import bind_widget_to_param, TaskParams
 from app.ui.common.event_bus import global_event_bus
@@ -209,7 +210,7 @@ class WatermarkContentCard(HeaderCardWidget):
         self.blind_watermark_input = BlindWatermarkInputPanel()
         self.blind_watermark_input.hide()
         bind_widget_to_param(self.blind_watermark_input, "textUpdate", watermark_add_params, "watermark_text", transform=None)
-        self.blind_watermark_input.textUpdate.emit(self.blind_watermark_input.input.text())
+        self.blind_watermark_input.textUpdate.emit("POWERTOOLS")
         main_layout.addWidget(self.blind_watermark_input)
         
         # 文字水印设置界面
@@ -524,26 +525,6 @@ class OutputSettingsCard(HeaderCardWidget):
         )
         if directory:
             self.save_location_line_edit.setText(directory)
-
-
-class GradientHeader(QWidget):
-    """渐变标题栏"""
-    def __init__(self, parent=None):
-        super().__init__(parent=parent)
-        self.setFixedHeight(80)
-        self.gradient = QLinearGradient(0, 0, self.width(), self.height())
-        self.gradient.setColorAt(0, QColor(102, 126, 234))  # #667eea
-        self.gradient.setColorAt(1, QColor(118, 75, 162))   # #764ba2
-    
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.gradient.setStart(0, 0)
-        self.gradient.setFinalStop(self.width(), self.height())
-    
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QBrush(self.gradient))
 
 
 class ControlPanelWidget(ScrollArea):
