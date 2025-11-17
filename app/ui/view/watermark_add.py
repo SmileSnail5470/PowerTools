@@ -3,7 +3,7 @@ from PySide6.QtCore import Qt, Signal, QCoreApplication
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QStackedWidget, QHBoxLayout, QLabel, QLineEdit, QFileDialog, QStackedLayout
 )
-from PySide6.QtGui import QPainter, QBrush, QLinearGradient, QColor, QFont, QAction
+from PySide6.QtGui import QFont, QAction
 
 from app.ui.library.qfluentwidgets import (
     ScrollArea, HeaderCardWidget, SegmentedWidget, setFont, FluentIcon, MessageBox,

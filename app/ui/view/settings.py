@@ -1,10 +1,35 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QWidget, QVBoxLayout, QLabel, QFrame, QLineEdit, QPushButton, QFileDialog, QGroupBox
+from PySide6.QtWidgets import QHBoxLayout, QWidget, QVBoxLayout, QLabel, QFrame, QLineEdit, QPushButton, QFileDialog, QGroupBox, QSizePolicy
 from PySide6.QtGui import QFont, QIcon
 
-from app.ui.library.qfluentwidgets import setFont, ScrollArea
+from app.ui.library.qfluentwidgets import setFont, ScrollArea 
 
 from app.ui.widgets.gradient_header_widget import GradientHeader
+
+
+class StatusBadge(QWidget):
+    def __init__(self, text: str, color: str, parent=None):
+        super().__init__(parent)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        dot = QWidget()
+        dot.setFixedSize(12, 12)
+        dot.setStyleSheet(f"""
+            background: {color};
+            border-radius: 6px;
+        """)
+
+        label = QLabel(text)
+        label.setStyleSheet("color: #374151; padding: 0; margin: 0;")
+        setFont(label, 11)
+
+        layout.addWidget(dot)
+        layout.addWidget(label)
+
+        self.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
 
 
 class SoftwareCard(QFrame):
@@ -22,7 +47,7 @@ class SoftwareCard(QFrame):
 
         name_layout = QHBoxLayout()
         icon_label = QLabel(icon['symbol'])
-        icon_label.setFixedSize(48, 48)
+        icon_label.setFixedSize(40, 40)
         icon_label.setAlignment(Qt.AlignCenter)
         setFont(icon_label, 20)
         icon_label.setStyleSheet(f"""
@@ -33,29 +58,28 @@ class SoftwareCard(QFrame):
             }}
         """)
         name_info = QVBoxLayout()
+        name_info.setSpacing(2)
         name_label = QLabel(self.name)
-        setFont(name_label, 15, QFont.Bold)
+        setFont(name_label, 16, QFont.Bold)
         name_label.setStyleSheet("color: #1f2937;")
         desc_label = QLabel(description)
-        setFont(desc_label, 13, QFont.Bold)
+        setFont(desc_label, 12, QFont.Bold)
         desc_label.setStyleSheet("color: #6b7280;")
         name_info.addWidget(name_label)
         name_info.addWidget(desc_label)
         name_layout.addWidget(icon_label)
         name_layout.addLayout(name_info)
 
-        self.status_label = QLabel()
-        self.status_label.setContentsMargins(8, 4, 8, 4)
-        self._update_status()
+        self.status_label = self._build_status_badge()
 
         header_layout = QHBoxLayout()
         header_layout.addLayout(name_layout)
         header_layout.addStretch()
-        header_layout.addWidget(self.status_label)
+        header_layout.addWidget(self.status_label, alignment=Qt.AlignVCenter)
 
         path_layout = QHBoxLayout()
         self.path_input = QLineEdit()
-        self.path_input.setPlaceholderText(self.tr(f"{self.name} 可执行文件路径"))
+        self.path_input.setPlaceholderText(self.tr(f"请配置 {self.name} 软件路径"))
         setFont(self.path_input, 14)
         self.path_input.setStyleSheet("""
             QLineEdit {
@@ -69,13 +93,13 @@ class SoftwareCard(QFrame):
 
         browse_btn = QPushButton()
         browse_btn.setIcon(QIcon.fromTheme("document-open"))
-        browse_btn.setStyleSheet(self._btn_style("#f3f4f6", "#e5e7eb"))
+        browse_btn.setStyleSheet(self._btn_style(bg="#f3f4f6", hover="#d1d5db"))
         setFont(browse_btn, 12, QFont.Bold)
-        browse_btn.clicked.connect(lambda: self._select_path())
+        browse_btn.clicked.connect(lambda: self._select_path(select_file=False))
 
-        test_btn = QPushButton("测试")
-        test_btn.setStyleSheet(self._btn_style("#4f46e5", "#4338ca", color="white"))
-        setFont(test_btn, 10, QFont.Bold)
+        test_btn = QPushButton(self.tr("验证"))
+        test_btn.setStyleSheet(self._btn_style(bg="#4f46e5", hover="#4338ca", color="white"))
+        setFont(test_btn, 12, QFont.Bold)
         test_btn.clicked.connect(self._test_ok)
 
         path_layout.addWidget(self.path_input)
@@ -97,6 +121,14 @@ class SoftwareCard(QFrame):
             }
         """)
 
+    def _build_status_badge(self):
+        if self.status == "ok":
+            return StatusBadge("OK", "#16a34a")  # 绿色
+        elif self.status == "failed":
+            return StatusBadge("Failed", "#dc2626")  # 红色
+        else:
+            return StatusBadge("未验证", "#eab308")  # 黄色
+
     def _btn_style(self, bg, hover, color="#374151"):
         return f"""
             QPushButton {{
@@ -112,21 +144,31 @@ class SoftwareCard(QFrame):
         """
 
     def _update_status(self):
-        if self.status == "connected":
-            self.status_label.setText("已连接")
+        setFont(self.status_label, 11)
+        if self.status == "ok":
+            self.status_label.setText("OK")
             self.status_label.setStyleSheet("""
-                QLabel { background: #dcfce7; color: #16a34a; border-radius: 20px;
-                        font-size: 12px; font-weight: 500; padding: 4px 12px; }
+                QLabel { 
+                    background: #dcfce7;
+                    color: #16a34a; 
+                    border-radius: 10px;
+                    padding: 1px 6px; 
+                    margin: 0px;
+                }
             """)
         else:
-            self.status_label.setText("未连接")
+            self.status_label.setText("Failed" if self.status=="failed" else self.tr("未验证"))
             self.status_label.setStyleSheet("""
-                QLabel { background: #fee2e2; color: #dc2626; border-radius: 20px;
-                        font-size: 12px; font-weight: 500; padding: 4px 12px; }
+                QLabel { 
+                    background: #fee2e2;
+                    color: #dc2626; 
+                    border-radius: 10px;
+                    padding: 1px 6px; 
+                    margin: 0px;
+                }
             """)
 
     def _test_ok(self):
-        self.status_label.setText("测试中...")
         setFont(self.status_label, 12, QFont.DemiBold)
         self.status_label.setStyleSheet("""
             QLabel { 
@@ -137,15 +179,25 @@ class SoftwareCard(QFrame):
             }""")
         pass
 
-    def _select_path(self):
-        directory = QFileDialog.getExistingDirectory(
-            self,
-            "选择文件夹",
-            "",
-            QFileDialog.Option.ShowDirsOnly
-        )
-        if directory:
-            self.path_input.setText(directory)
+    def _select_path(self, select_file=True):
+        if not select_file:
+            directory = QFileDialog.getExistingDirectory(
+                self,
+                "选择文件夹",
+                "",
+                QFileDialog.Option.ShowDirsOnly
+            )
+            if directory:
+                self.path_input.setText(directory)
+        else:
+            files, _ = QFileDialog.getOpenFileNames(
+                self,
+                "选择文件",
+                "", 
+                "所有文件 (*)"
+            )
+            if files:
+                self.path_input.setText(files)
 
 class Settings(QWidget):
     def __init__(self, parent=None):
@@ -201,26 +253,35 @@ class Settings(QWidget):
 
     def _create_software_settings(self):
         group = QGroupBox(self.tr("🔌 软件配置"))
-        group.setStyleSheet(self._group_style())
+        group.setStyleSheet("""
+            QGroupBox { 
+                background: white; 
+                border: none; 
+                border-radius: 16px; 
+                padding-top: 24px; 
+                color:#1a1a1a;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left:24px; 
+                padding:0 10px 0 10px; 
+            }
+        """)
         setFont(group, 18, QFont.Bold)
         layout = QVBoxLayout(group)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(12)
 
-        self.software_cards = []
-        ffmpeg_card = SoftwareCard("FFmpeg", {"gradient": ["#667eea","#764ba2"], "symbol":"🎬"}, "视频处理引擎", "ok")
-        ffmpeg_card.path_input.setPlaceholderText(self.tr("请配置 ffmpeg 软件包所在目录路径"))
-        paddleOCR_card = SoftwareCard("PaddleOCR", {"gradient": ["#f093fb","#f5576c"], "symbol":"🔤"}, "文字识别引擎", "failed")
+        ffmpeg_card = SoftwareCard(
+            name="FFmpeg", 
+            icon={"gradient": ["#667eea","#764ba2"], "symbol":"🎬"}, 
+            description=self.tr("视频处理引擎"), 
+            status=""
+        )
 
-        self.software_cards.extend([ffmpeg_card, paddleOCR_card])
+        self.software_cards = [ffmpeg_card]
 
         for card in self.software_cards:
             layout.addWidget(card)
 
         return group
-    
-    def _group_style(self):
-        return """
-            QGroupBox { background:white; border:none; border-radius:16px; padding-top:24px; color:#1a1a1a; }
-            QGroupBox::title { subcontrol-origin:margin; left:24px; padding:0 10px 0 10px; }
-        """
