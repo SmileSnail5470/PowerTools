@@ -1,6 +1,6 @@
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer, Signal, QParallelAnimationGroup
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QGridLayout, QGraphicsOpacityEffect
-from PySide6.QtGui import QFont, QPainter, QLinearGradient, QColor, QBrush, QCursor, QRadialGradient
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QGridLayout
+from PySide6.QtGui import QFont, QPainter, QLinearGradient, QColor, QCursor, QRadialGradient
 
 from app.ui.library.qfluentwidgets import ScrollArea, setFont
 
@@ -94,10 +94,10 @@ class FeatureCard(QFrame):
                 QLabel {
                     color: #4CAF50;
                     min-width: 20px;
+                    font-size: 13;
                 }
             """)
-            setFont(check_label, 13, QFont.Bold)
-            feature_label = QLabel(feature)
+            feature_label = QLabel(self.tr(feature))
             feature_label.setStyleSheet("""
                 QLabel {
                     color: #666666;
@@ -271,8 +271,8 @@ class Home(QWidget):
         header_layout.setContentsMargins(30, 20, 30, 20)
         header_layout.setSpacing(10)
         
-        title_label = QLabel(self.tr("⚡ 主页"))
-        setFont(title_label, fontSize=24, weight=QFont.DemiBold)
+        title_label = QLabel(self.tr("🏠 主页"))
+        setFont(title_label, fontSize=24, weight=QFont.Bold)
         title_label.setStyleSheet("""
             QLabel {
                 color: white;
@@ -285,9 +285,6 @@ class Home(QWidget):
     
     def _setup_content(self, main_layout: QVBoxLayout):
         scroll = ScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.enableTransparentBackground()
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         
         content = QWidget()
         content_layout = QVBoxLayout(content)
@@ -302,6 +299,11 @@ class Home(QWidget):
         content_layout.addWidget(features)
         
         scroll.setWidget(content)
+
+        scroll.setWidgetResizable(True)
+        scroll.enableTransparentBackground()
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
         main_layout.addWidget(scroll)
     
     def _create_hero_section(self):
@@ -311,7 +313,7 @@ class Home(QWidget):
     def _create_features_section(self):
         features = QWidget()
         features_layout = QVBoxLayout(features)
-        features_layout.setContentsMargins(10, 0, 18, 10)
+        features_layout.setContentsMargins(10, 0, 16, 10)
         features_layout.setAlignment(Qt.AlignCenter)
         
         cards_widget = QWidget()
@@ -364,8 +366,9 @@ class Home(QWidget):
         self.window().stackedWidget.setCurrentIndex(index)
     
     def paintEvent(self, event):
-        p = QPainter(self)
-        grad = QLinearGradient(0, 0, self.width(), self.height())
-        grad.setColorAt(0, QColor(102, 126, 234))
-        grad.setColorAt(1, QColor(118, 75, 162))
-        p.fillRect(self.rect(), QBrush(grad))
+        # p = QPainter(self)
+        # grad = QLinearGradient(0, 0, self.width(), self.height())
+        # grad.setColorAt(0, QColor(255, 255, 255, 80))   # 上半透明白色
+        # grad.setColorAt(1, QColor(245, 245, 245, 50))   # 下半透明米白色，透明度更低
+        # p.fillRect(self.rect(), QBrush(grad))
+        super().paintEvent(event)

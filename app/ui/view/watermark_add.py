@@ -574,7 +574,7 @@ class HeaderWidget(QWidget):
         header_layout.setContentsMargins(30, 20, 30, 20)
         header_layout.setSpacing(10)
 
-        title_label = QLabel(self.tr("🎨 水印添加工具"))
+        title_label = QLabel(self.tr("💧 水印添加工具"))
         setFont(title_label, fontSize=24, weight=QFont.DemiBold)
         title_label.setStyleSheet("""
             QLabel {
