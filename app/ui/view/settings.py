@@ -13,6 +13,7 @@ from app.ui.library.qfluentwidgets import(
 )
 
 from app.ui.widgets.gradient_header_widget import GradientHeader
+from app.ui.common.config import cfg
 
 
 class StatusBadge(QWidget):
