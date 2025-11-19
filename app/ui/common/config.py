@@ -32,6 +32,10 @@ def isWin11():
     return sys.platform == 'win32' and sys.getwindowsversion().build >= 22000
 
 
+def update_ffmpeg_path(path: str):
+    os.environ["POWERTOOLS_FFMPEG_BIN"] = path
+
+
 class Config(QConfig):
     """ Config of application """
     # main window
@@ -50,6 +54,7 @@ class Config(QConfig):
 
     # 软件设置
     ffmpeg_path = ConfigItem("SoftwareSettings", "FFmpegPath", "", FolderValidator())
+    ffmpeg_path.valueChanged.connect(update_ffmpeg_path)
 
 
 cfg = Config()

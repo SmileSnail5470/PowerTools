@@ -9,11 +9,21 @@ from PySide6.QtGui import QFont, QColor, QPainter, QPen
 
 from app.ui.library.qfluentwidgets import(
     setFont, ScrollArea, TeachingTip, InfoBarIcon, TeachingTipTailPosition, FluentIcon, isDarkTheme,
-    BodyLabel, CaptionLabel, ComboBox
+    BodyLabel, CaptionLabel, ComboBox, Theme
 )
 
 from app.ui.widgets.gradient_header_widget import GradientHeader
-from app.ui.common.config import cfg
+from app.ui.common.config import cfg, Language
+
+
+theme_map = {
+    "浅色": Theme.LIGHT,
+    "深色": Theme.DARK
+}
+language_map = {
+    "简体中文": Language.CHINESE_SIMPLIFIED,
+    "英语": Language.ENGLISH
+}
 
 
 class StatusBadge(QWidget):
@@ -96,6 +106,7 @@ class SoftwareCard(QFrame):
         path_layout = QHBoxLayout()
         self.path_input = QLineEdit()
         self.path_input.setPlaceholderText(self.tr(f"请配置 {self.name} 软件路径"))
+        self.path_input.textChanged.connect(self._update_global_config)
         setFont(self.path_input, 14)
         self.path_input.setStyleSheet("""
             QLineEdit {
@@ -221,6 +232,10 @@ class SoftwareCard(QFrame):
             )
             if files:
                 self.path_input.setText(files)
+
+    def _update_global_config(self, path: str):
+        if self.name.lower() == "ffmpeg":
+            cfg.ffmpeg_path.value = path
 
 class ToggleSwitch(QWidget):
     toggled = Signal(bool)
@@ -518,18 +533,21 @@ class Settings(QWidget):
         settings = CustomGroupBox(title=self.tr("⚙️ 通用设置"))
         
         auto_start_switch = ToggleSwitch()
+        auto_start_switch.toggled.connect(lambda flag: setattr(cfg.autoStartup, "value", flag))
         auto_start_card = CustomCardGroupWidget(title=self.tr("开机自启动"), content=self.tr("系统启动时自动运行程序"), parent=self)
         auto_start_card.addWidget(auto_start_switch, stretch=0)
         auto_start_card.setSeparatorVisible(True)
         settings_cards.append(auto_start_card)
 
         auto_update_switch = ToggleSwitch()
+        auto_update_switch.toggled.connect(lambda flag: setattr(cfg.autoUpdate, "value", flag))
         auto_update_card = CustomCardGroupWidget(title=self.tr("自动更新"), content=self.tr("自动检查并安装新版本"), parent=self)
         auto_update_card.addWidget(auto_update_switch, stretch=0)
         auto_update_card.setSeparatorVisible(True)
         settings_cards.append(auto_update_card)
 
         self.cache_line_edit = QLineEdit()
+        self.cache_line_edit.textChanged.connect(lambda path: setattr(cfg.cachePath, "value", path))
         self.cache_line_edit.setPlaceholderText(self.tr(f"请配置软件缓存文件保存路径"))
         setFont(self.cache_line_edit, 14)
         self.cache_line_edit.setStyleSheet("""
@@ -554,6 +572,7 @@ class Settings(QWidget):
         settings_cards.append(cache_location_card)
 
         theme_combox = ComboBox()
+        theme_combox.currentTextChanged.connect(lambda text: setattr(cfg.uiTheme, "value", theme_map[text]))
         setFont(theme_combox, 14)
         theme_combox.addItems(["浅色"])
         theme_card = CustomCardGroupWidget(title=self.tr("界面主题"), content=self.tr("选择您喜欢的界面风格"), parent=self)
@@ -562,6 +581,7 @@ class Settings(QWidget):
         settings_cards.append(theme_card)
 
         language_combox = ComboBox()
+        language_combox.currentTextChanged.connect(lambda text: setattr(cfg.language, "value", language_map[text]))
         setFont(language_combox, 14)
         language_combox.addItems(["简体中文"])
         language_card = CustomCardGroupWidget(title=self.tr("语言设置"), content=self.tr("选择界面显示语言"), parent=self)
