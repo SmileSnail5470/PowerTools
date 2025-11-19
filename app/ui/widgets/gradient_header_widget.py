@@ -4,12 +4,12 @@ from PySide6.QtGui import QBrush, QPainter, QLinearGradient, QColor
 
 class GradientHeader(QWidget):
     """渐变标题栏"""
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, start: QColor = QColor(102, 126, 234), stop: QColor = QColor(118, 75, 162)):
         super().__init__(parent=parent)
         self.setFixedHeight(80)
         self.gradient = QLinearGradient(0, 0, self.width(), self.height())
-        self.gradient.setColorAt(0, QColor(102, 126, 234))  # #667eea
-        self.gradient.setColorAt(1, QColor(118, 75, 162))   # #764ba2
+        self.gradient.setColorAt(0, start)  # #667eea
+        self.gradient.setColorAt(1, stop)   # #764ba2
     
     def resizeEvent(self, event):
         super().resizeEvent(event)

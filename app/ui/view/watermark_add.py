@@ -26,7 +26,7 @@ from app.ui.common.task_params import bind_widget_to_param, TaskParams
 from app.ui.common.event_bus import global_event_bus
 from app.ui.common.task_status import TaskStatusModel
 from app.ui.common.utils import get_file_type
-from app.controllers.task_manager import TaskManager
+from app.controllers.task_manager import global_task_manager
 from app.workers.watermark_add_work import WatermarkAddWork
 
 
@@ -630,12 +630,6 @@ class HeaderWidget(QWidget):
         self.process_btn.clicked.connect(self.add_watermark_process)
         self.extract_btn.clicked.connect(self.extract_process)
 
-        self.task_manager = TaskManager(max_workers=8)
-
-        app = QCoreApplication.instance()
-        if app:
-            app.aboutToQuit.connect(self._cleanup_task_manager)
-
     def add_watermark_process(self):
         init_params = watermark_add_params.to_dict()
         error_msg, task_params = self._params_check(params=init_params)
@@ -665,7 +659,7 @@ class HeaderWidget(QWidget):
 
         for func, args, kwargs in total_tasks:
             input_path = kwargs["input_path"]
-            future = self.task_manager.submit(func, *args, **kwargs)
+            future = global_task_manager.submit(func, *args, **kwargs)
             
             future.finished.connect(
                 lambda result, path=input_path: self._task_finished(path, result)
@@ -737,11 +731,6 @@ class HeaderWidget(QWidget):
 
     def extract_process(self):
         pass
-
-    def _cleanup_task_manager(self):
-        if hasattr(self, "task_manager") and self.task_manager:
-            self.task_manager.close()
-            self.task_manager = None
 
 
 class PreviewWidget(QWidget):

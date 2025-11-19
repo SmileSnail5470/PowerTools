@@ -56,3 +56,6 @@ class TaskManager(QObject):
         self.shutdown(wait=True)
         self.pool.clear()
         self.pool = None
+
+
+global_task_manager = TaskManager()

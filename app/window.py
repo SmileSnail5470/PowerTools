@@ -122,6 +122,8 @@ class MainWindow(FluentWindow):
     def closeEvent(self, e):
         self.themeListener.terminate()
         self.themeListener.deleteLater()
+        from app.controllers.task_manager import global_task_manager
+        global_task_manager.close()
         super().closeEvent(e)
 
     def _onThemeChangedFinished(self):
