@@ -1,0 +1,24 @@
+{
+    "name": "visible_watermark",
+    "version": "1.0.0",
+    "runtime": "python",
+    "entry_point": "app.algorithms.visible_watermark_addition.watermark_addition:VisibleWatermarkAddition",
+    "description": "图片/视频显式水印添加算法，支持文字与图片双模式。",
+    "capabilities": [
+        "image.watermark.visible",
+        "video.watermark.visible"
+    ],
+    "init_kwargs": {},
+    "health_check": null,
+    "artifacts": {
+        "python": [
+            "visible_watermark_addition.py"
+        ],
+        "binary": []
+    },
+    "metadata": {
+        "maintainer": "SmileSnail5470",
+        "supports_async": true,
+        "thread_safe": true
+    }
+}

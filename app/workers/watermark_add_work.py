@@ -1,6 +1,6 @@
 import os
 from app.workers.work_base import BaseWorker
-from app.algorithms.visible_watermark_addition import VisibleWatermarkAddition
+from app.workers.algorithm_manager import global_algorithm_manager
 
 
 class WatermarkAddWork(BaseWorker):
@@ -17,7 +17,7 @@ class WatermarkAddWork(BaseWorker):
         return (r, g, b, alpha)
 
     def run_algorithm(self, progress_cb, cancel_requested, *args, **kwargs):
-        watermark_add_instance = VisibleWatermarkAddition()
+        watermark_add_instance = global_algorithm_manager.create_instance(name="visible_watermark")
         input_path = kwargs["input_path"]
         output_path = kwargs["output_path"]
         output_format = kwargs["output_format"]
