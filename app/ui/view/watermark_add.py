@@ -717,6 +717,9 @@ class HeaderWidget(QWidget):
                     return error_msg, task_params
                 task_params["watermark_image"] = params["watermark_image"]
             else:
+                if not params["watermark_text"]:
+                    error_msg = self.tr("请设置水印文本")
+                    return error_msg, task_params
                 task_params["watermark_text"] = params["watermark_text"]
                 task_params["font"] = params["font"]
                 task_params["font_size"] = params["font_size"]
@@ -726,6 +729,9 @@ class HeaderWidget(QWidget):
             task_params["watermark_opacity"] = params["watermark_opacity"]
             task_params["watermark_location"] = params["watermark_location"]
         else:
+            if not params["watermark_text"]:
+                error_msg = self.tr("请设置水印文本")
+                return error_msg, task_params
             task_params["watermark_text"] = params["watermark_text"]
         return error_msg, task_params
 
