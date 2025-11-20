@@ -1,6 +1,6 @@
 import os
 import sys
-workdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+workdir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(workdir)
 
 os.environ["QT_LOGGING_RULES"] = "qt.multimedia.*=false"
@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, QTranslator
 
 from app.ui.common.config import cfg
-from window import MainWindow
+from app.window import MainWindow
 from app.ui.library.qfluentwidgets import FluentTranslator
 
 from app.configs.config import UpdateFontFamilies
