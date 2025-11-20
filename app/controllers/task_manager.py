@@ -1,23 +1,38 @@
 import uuid
 import threading
+from typing import Optional, Dict, Callable
 from PySide6.QtCore import QThreadPool, QObject, Signal
 from app.controllers.worker import Worker
 from app.controllers.task_future import TaskFuture
 
 
 class TaskManager(QObject):
-
+    """任务管理器，负责管理异步任务的提交、取消和生命周期"""
+    
     all_done = Signal()
 
     def __init__(self, max_workers: int = 8, parent=None):
         super().__init__(parent)
         self.pool = QThreadPool.globalInstance()
         self.pool.setMaxThreadCount(max_workers)
-        self._tasks = {}
+        self._tasks: Dict[str, TaskFuture] = {}
         self._lock = threading.Lock()
         self._shutting_down = False
 
-    def submit(self, func, *args, **kwargs) -> TaskFuture:
+    def submit(self, func: Callable, *args, **kwargs) -> TaskFuture:
+        """提交一个新任务
+        
+        Args:
+            func: 要执行的函数
+            *args: 位置参数
+            **kwargs: 关键字参数
+            
+        Returns:
+            TaskFuture: 任务未来对象
+            
+        Raises:
+            RuntimeError: 如果任务管理器正在关闭
+        """
         if self._shutting_down:
             raise RuntimeError("TaskManager is shutting down, cannot submit new tasks.")
 
@@ -31,19 +46,73 @@ class TaskManager(QObject):
         self.pool.start(worker)
         return future
 
-    def cancel(self, job_id: str):
+    def cancel(self, job_id: str) -> bool:
+        """取消指定的任务
+        
+        Args:
+            job_id: 任务ID
+            
+        Returns:
+            bool: 如果任务存在且成功取消返回True，否则返回False
+        """
         with self._lock:
             future = self._tasks.get(job_id)
-        return future.cancel() if future else False
+            if future is None:
+                return False
+            # 在锁内获取future，但cancel操作本身是线程安全的
+            return future.cancel()
 
-    def get_future(self, job_id: str):
+    def get_future(self, job_id: str) -> Optional[TaskFuture]:
+        """获取指定任务ID的Future对象
+        
+        Args:
+            job_id: 任务ID
+            
+        Returns:
+            TaskFuture或None
+        """
         with self._lock:
             return self._tasks.get(job_id)
 
-    def shutdown(self, wait=True, timeout=None):
+    def cleanup_completed_tasks(self) -> int:
+        """清理已完成的任务，释放内存
+        
+        Returns:
+            int: 清理的任务数量
+        """
+        with self._lock:
+            completed_ids = [
+                job_id for job_id, future in self._tasks.items()
+                if future.done
+            ]
+            for job_id in completed_ids:
+                del self._tasks[job_id]
+            return len(completed_ids)
+
+    def get_active_task_count(self) -> int:
+        """获取当前活跃任务数量
+        
+        Returns:
+            int: 活跃任务数量
+        """
+        with self._lock:
+            return sum(1 for future in self._tasks.values() if not future.done)
+
+    def shutdown(self, wait: bool = True, timeout: Optional[int] = None):
+        """关闭任务管理器
+        
+        Args:
+            wait: 是否等待所有任务完成
+            timeout: 等待超时时间（毫秒），None表示无限等待
+        """
         self._shutting_down = True
 
-        for future in self._tasks.values():
+        # 在锁内获取所有future的副本，避免在遍历时字典被修改
+        with self._lock:
+            futures = list(self._tasks.values())
+        
+        # 在锁外执行cancel操作，避免死锁
+        for future in futures:
             future.cancel()
 
         if wait:
@@ -53,9 +122,11 @@ class TaskManager(QObject):
             self._tasks.clear()
 
     def close(self):
-        self.shutdown(wait=True)
-        self.pool.clear()
-        self.pool = None
+        """关闭并清理任务管理器"""
+        if not self._shutting_down:
+            self.shutdown(wait=True)
+        if self.pool is not None:
+            self.pool.clear()
 
 
 global_task_manager = TaskManager()

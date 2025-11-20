@@ -23,6 +23,8 @@ class MainWindow(FluentWindow):
 
     def __init__(self):
         super().__init__()
+        self.navigationInterface.setExpandWidth(222)
+
         self.initWindow()
 
         # create system theme listener
