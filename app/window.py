@@ -13,6 +13,7 @@ from app.ui.view.screenshot import Screenshot
 from app.ui.view.scroll_screenshot import ScrollScreenshot
 from app.ui.view.watermark_add import WatermarkAdd
 from app.ui.view.watermark_remove import WatermarkRemove
+from app.ui.widgets.resources_monitor_widget import ResourcesMonitorWidget
 
 from app.ui.common.config import cfg
 from app.ui.common.icon import Icon
@@ -97,6 +98,8 @@ class MainWindow(FluentWindow):
         self.setMinimumWidth(1300)
         self.setWindowIcon(QIcon(':/powertools/images/logo.png'))
         self.setWindowTitle(self.tr("PowerTools"))
+
+        self.titleBar.hBoxLayout.insertWidget(2, ResourcesMonitorWidget(self))
 
         # only win11 enable mica effect
         self.setMicaEffectEnabled(cfg.get(cfg.micaEnabled))
