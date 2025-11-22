@@ -1,7 +1,7 @@
 import os
 import psutil
 import time
-from PySide6.QtCore import Qt, QTimer, QObject, Signal, QThread
+from PySide6.QtCore import Qt, QObject, Signal, QThread
 from PySide6.QtGui import QColor, QMouseEvent, QFont
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QFrame, QGraphicsDropShadowEffect
 import qtawesome as qta
@@ -65,7 +65,7 @@ class ResourceMonitorWorker(QObject):
                         cpu = proc.cpu_percent(interval=None) / psutil.cpu_count()
                         
                         # rss 是物理内存 (Resident Set Size)
-                        mem = proc.memory_info().rss / (1024 * 1024) # 转换为 MB
+                        mem = proc.memory_info().rss / (1024 ** 3) # 转换为 GB
                         
                         total_cpu += cpu
                         total_mem += mem
@@ -74,14 +74,17 @@ class ResourceMonitorWorker(QObject):
                         pass
 
                 # 发送数据到 UI
-                self.data_updated.emit(total_cpu, total_mem)
+                self.data_updated.emit(round(total_cpu, 1), round(total_mem, 1))
 
             except psutil.NoSuchProcess:
                 break
             except Exception:
                 pass
 
-            time.sleep(3)
+            for _ in range(30):
+                if not self._is_running:
+                    break
+                time.sleep(0.1)
         
         self.finished.emit()
 
@@ -100,7 +103,7 @@ class ResourceItem(QFrame):
         self.setObjectName("ResourceItem")
         
         self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(8, 4, 8, 4)
+        self.layout.setContentsMargins(8, 10, 8, 10)
         self.layout.setSpacing(8)
 
         self.icon_label = QLabel()
@@ -115,12 +118,12 @@ class ResourceItem(QFrame):
         self.info_layout.setSpacing(0)
         
         self.value_label = QLabel("0" + unit)
-        setFont(self.value_label, 14, QFont.Bold)
+        setFont(self.value_label, 11, QFont.Bold)
         self.value_label.setObjectName("ResourceValue")
         self.value_label.setAlignment(Qt.AlignLeft)
         
         self.title_label = QLabel(label_text)
-        setFont(self.title_label, 10)
+        setFont(self.title_label, 9)
         self.title_label.setObjectName("ResourceLabel")
         self.title_label.setAlignment(Qt.AlignLeft)
         
@@ -139,7 +142,7 @@ class ResourceItem(QFrame):
     def update_data(self, value, raw_value):
         self.value_label.setText(f"{value}{self.unit}")
         
-        if raw_value < 50:
+        if raw_value is None or raw_value < 50:
             color = "#107c10"
             shadow = "rgba(16, 124, 16, 0.2)"
         elif raw_value < 80:
@@ -159,8 +162,9 @@ class VerticalDivider(QFrame):
     def __init__(self):
         super().__init__()
         self.setFrameShape(QFrame.VLine)
-        self.setFixedSize(1, 24)
-        self.setStyleSheet("background-color: rgba(255, 255, 255, 0.3); border: none;")
+        self.setFixedSize(2, 24)
+        self.setStyleSheet("background-color: transparent; border: none;")
+
 
 class ResourcesMonitorWidget(QWidget):
     def __init__(self, parent=None):
@@ -168,22 +172,21 @@ class ResourcesMonitorWidget(QWidget):
         
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setWindowTitle("Win11 Compact Monitor")
 
-        self.container = QFrame(self)
+        self.container = QFrame()
         self.container.setObjectName("ToolbarContainer")
         
         self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(10, 10, 10, 10)
+        self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.addWidget(self.container)
         
         self.toolbar_layout = QHBoxLayout(self.container)
-        self.toolbar_layout.setContentsMargins(8, 8, 8, 8)
+        self.toolbar_layout.setContentsMargins(0, 0, 0, 0)
         self.toolbar_layout.setSpacing(4)
 
         self.cpu_item = ResourceItem('fa5s.microchip', 'CPU', '%')
-        self.mem_item = ResourceItem('fa5s.memory', '内存', '%')
-        self.task_item = ResourceItem('fa5s.tasks', '任务', '')
+        self.mem_item = ResourceItem('fa5s.memory', '内存', 'GB')
+        self.task_item = ResourceItem('fa5s.tasks', '活跃任务', '')
 
         self.toolbar_layout.addWidget(self.cpu_item)
         self.toolbar_layout.addWidget(VerticalDivider())
@@ -199,15 +202,15 @@ class ResourcesMonitorWidget(QWidget):
         shadow.setColor(QColor(0, 0, 0, 20))
         self.container.setGraphicsEffect(shadow)
 
-        self.drag_pos = None
-
         self._start_monitor()
+
+        self.total_mem = psutil.virtual_memory().total / (1024 ** 3)
 
     def setup_styles(self):
         style_sheet = """
         #ToolbarContainer {
-            background-color: rgba(255, 255, 255, 220); /* 0.8 alpha approx */
-            border: 1px solid rgba(255, 255, 255, 80);  /* 0.3 alpha */
+            background-color: transparent;
+            border: 1px solid rgba(255, 255, 255, 80);
             border-radius: 8px;
         }
 
@@ -237,39 +240,30 @@ class ResourcesMonitorWidget(QWidget):
     def update_resources(self, cpu_percent: float, mem_mb: float):
         self.cpu_item.update_data(cpu_percent, cpu_percent)
         
-        self.mem_item.update_data(mem_mb, mem_mb)
+        self.mem_item.update_data(mem_mb, mem_mb / self.total_mem * 100)
         
         task_val = global_task_manager.get_active_task_count()
-        self.task_item.update_data(task_val, task_val)
-
-    def mousePressEvent(self, event: QMouseEvent):
-        if event.button() == Qt.LeftButton:
-            self.drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-            event.accept()
-
-    def mouseMoveEvent(self, event: QMouseEvent):
-        if event.buttons() == Qt.LeftButton and self.drag_pos:
-            self.move(event.globalPosition().toPoint() - self.drag_pos)
-            event.accept()
-
-    def mouseReleaseEvent(self, event: QMouseEvent):
-        self.drag_pos = None
+        global_task_manager.cleanup_completed_tasks()
+        self.task_item.update_data(task_val, None)
 
     def _start_monitor(self):
-        self.monitor_thread = QThread()
+        self.monitor_thread = QThread(self)
         self.worker = ResourceMonitorWorker()
         self.worker.moveToThread(self.monitor_thread)
         
         # 连接信号
         self.monitor_thread.started.connect(self.worker.run)
         self.worker.data_updated.connect(self.update_resources)
-        self.worker.finished.connect(self.monitor_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.finished.connect(self.monitor_thread.quit)
         self.monitor_thread.finished.connect(self.monitor_thread.deleteLater)
         
         self.monitor_thread.start()
 
     def clear(self):
         self.worker.stop()
+        self.monitor_thread.quit()
         self.monitor_thread.wait()
+        self.worker = None
+        self.monitor_thread = None
         

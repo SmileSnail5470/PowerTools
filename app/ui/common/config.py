@@ -33,6 +33,8 @@ def isWin11():
 
 
 def update_ffmpeg_path(path: str):
+    if not path:
+        return
     os.environ["POWERTOOLS_FFMPEG_BIN"] = path
 
 

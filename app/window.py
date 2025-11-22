@@ -1,4 +1,4 @@
-from PySide6.QtCore import QSize, QTimer
+from PySide6.QtCore import QSize, QTimer, Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
@@ -98,8 +98,12 @@ class MainWindow(FluentWindow):
         self.setMinimumWidth(1300)
         self.setWindowIcon(QIcon(':/powertools/images/logo.png'))
         self.setWindowTitle(self.tr("PowerTools"))
-
-        self.titleBar.hBoxLayout.insertWidget(2, ResourcesMonitorWidget(self))
+        
+        self.resource_monitor_widget = ResourcesMonitorWidget(self)
+        # 资源监控组件居中显示
+        self.titleBar.hBoxLayout.insertStretch(2, stretch=2)
+        self.titleBar.hBoxLayout.insertWidget(3, self.resource_monitor_widget, stretch=0)
+        self.titleBar.hBoxLayout.insertStretch(4, stretch=1)
 
         # only win11 enable mica effect
         self.setMicaEffectEnabled(cfg.get(cfg.micaEnabled))
@@ -129,6 +133,8 @@ class MainWindow(FluentWindow):
         self.themeListener.deleteLater()
         from app.controllers.task_manager import global_task_manager
         global_task_manager.close()
+
+        self.resource_monitor_widget.clear()
         super().closeEvent(e)
 
     def _onThemeChangedFinished(self):
