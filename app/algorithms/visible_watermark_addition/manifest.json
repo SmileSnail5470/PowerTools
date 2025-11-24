@@ -11,14 +11,8 @@
     "init_kwargs": {},
     "health_check": null,
     "artifacts": {
-        "python": [
-            "visible_watermark_addition.py"
-        ],
+        "python": [],
         "binary": []
     },
-    "metadata": {
-        "maintainer": "SmileSnail5470",
-        "supports_async": true,
-        "thread_safe": true
-    }
+    "enabled": true
 }

@@ -1,0 +1,26 @@
+{
+  "name": "example_algorithm",
+  "version": "1.0.0",
+  "runtime": "python",
+  "enabled": true,
+  "python_paths": ["src", "lib"],
+  "capabilities": ["denoise", "enhance"],
+  "entry_points": {
+    "default": "module_main:AlgorithmClass",
+    "cli": "module_main:cli_entry",
+    "utils": "module_utils:Helper"
+  },
+  "init_kwargs": {
+    "param1": 123,
+    "param2": "abc"
+  },
+  "artifacts": {
+    "binary": "bin/example.so",
+    "shared_libs": ["lib/lib1.so", "lib/lib2.so"]
+  },
+  "command": ["./run_algo.sh", "--flag"], 
+  "working_dir": ".",
+  "env": {
+    "PATH": "/usr/local/bin"
+  }
+}
