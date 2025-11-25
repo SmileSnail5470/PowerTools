@@ -7,7 +7,7 @@ import yaml
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from app.algorithms import ALGORITHMS_ROOT
 
@@ -16,8 +16,6 @@ from app.algorithms import ALGORITHMS_ROOT
 class AlgorithmDescriptor:
     name: str
     version: str
-    runtime: str
-    entry_point: str
     base_path: Path
     manifest: Dict[str, Any]
 
@@ -25,57 +23,51 @@ class AlgorithmDescriptor:
         capabilities: Iterable[str] = self.manifest.get("capabilities", [])
         return capability in capabilities
 
-    def create_instance(self) -> Any:
-        runtime = (self.runtime or "python").lower().strip()
-        if runtime == "python":
-            return self._create_python_instance()
-        if runtime == "ctypes":
-            return self._create_ctypes_handle()
-        if runtime == "subprocess":
-            return self._create_subprocess_adapter()
-        raise ValueError(f"Unsupported runtime '{self.runtime}' for algorithm '{self.name}'")
+    def get_python_method_metadata(self, capability: str) -> Dict[str, Any]:
+        entry_points = self.manifest.get("entry_points", {})
+        if capability not in entry_points:
+            raise ValueError(f"Algorithm '{self.name}' does not support capability '{capability}'")
+        entry_point = entry_points[capability]
+        return entry_point
 
-    def _create_python_instance(self) -> Any:
-        module_path, attr = self._split_entry_point()
-        self._ensure_python_path()
+    def create_instance(self, capability: str) -> Any:
+        entry_points = self.manifest.get("entry_points", {})
+        if capability not in entry_points:
+            raise ValueError(f"Algorithm '{self.name}' does not support capability '{capability}'")
+        entry_point = entry_points[capability]
+        runtime = entry_point["runtime"]
+        if runtime == "python":
+            return self._create_python_instance(entry_point=entry_point)
+        if runtime == "ctypes":
+            return self._create_ctypes_handle(entry_point=entry_point)
+        if runtime == "subprocess":
+            return self._create_subprocess_adapter(entry_point=entry_point)
+        raise ValueError(f"Unsupported runtime '{runtime}' for algorithm '{self.name}'")
+
+    def _create_python_instance(self, entry_point: dict) -> Any:
+        module_path, attr = entry_point["module"], entry_point["attr"]
         module = importlib.import_module(module_path)
         target = getattr(module, attr)
-        init_kwargs = self.manifest.get("init_kwargs", {})
+        init_kwargs = entry_point.get("init_kwargs", {})
         return target(**init_kwargs) if callable(target) else target
 
-    def _create_ctypes_handle(self) -> Any:
+    def _create_ctypes_handle(self, entry_point: dict) -> Any:
         import ctypes
 
-        binary_rel = self.manifest.get("binary") or self.manifest.get("artifacts", {}).get("binary")
-        if not binary_rel:
-            raise ValueError(f"Algorithm '{self.name}' misses 'binary' definition for ctypes runtime")
+        binary_rel = entry_point["binary"][sys.platform.lower()]
         binary_path = (self.base_path / binary_rel).resolve()
         if not binary_path.exists():
             raise FileNotFoundError(f"Binary for '{self.name}' not found: {binary_path}")
         return ctypes.CDLL(str(binary_path))
 
-    def _create_subprocess_adapter(self) -> "SubprocessAlgorithmAdapter":
-        command = self.manifest.get("command")
+    def _create_subprocess_adapter(self, entry_point: dict) -> "SubprocessAlgorithmAdapter":
+        command = entry_point.get("command")
         if not command:
             raise ValueError(f"Algorithm '{self.name}' must declare 'command' for subprocess runtime")
-        cwd = str((self.base_path / self.manifest.get("working_dir", ".")).resolve())
+        cwd = str((self.base_path / entry_point.get("working_dir", ".")).resolve())
         env = os.environ.copy()
-        env.update(self.manifest.get("env", {}))
+        env.update(entry_point.get("env", {}))
         return SubprocessAlgorithmAdapter(command=command, cwd=cwd, env=env)
-
-    def _split_entry_point(self) -> List[str]:
-        if ":" not in self.entry_point:
-            raise ValueError(
-                f"Entry point '{self.entry_point}' for algorithm '{self.name}' must be 'module:attr' format"
-            )
-        return self.entry_point.split(":", 1)
-
-    def _ensure_python_path(self) -> None:
-        extra_paths = self.manifest.get("python_paths") or []
-        for rel_path in extra_paths:
-            abs_path = str((self.base_path / rel_path).resolve())
-            if abs_path not in sys.path:
-                sys.path.append(abs_path)
 
 
 class SubprocessAlgorithmAdapter:
@@ -101,7 +93,7 @@ class SubprocessAlgorithmAdapter:
 
 
 class AlgorithmManager:
-    MANIFEST_FILES = ("manifest.json", "manifest.yaml", "manifest.yml")
+    MANIFEST_FILES = ("manifest.json", "manifest.yml")
 
     def __init__(self, base_dir: Path):
         self.base_dir = base_dir
@@ -140,9 +132,9 @@ class AlgorithmManager:
             latest_version = sorted(versions.keys())[-1]
             return versions[latest_version]
 
-    def create_instance(self, name: str, version: Optional[str] = None) -> Any:
+    def create_instance(self, name: str, capability: str, version: Optional[str] = None) -> Tuple[Any, Dict[str, Any]]:
         descriptor = self.get_descriptor(name, version)
-        return descriptor.create_instance()
+        return descriptor.create_instance(capability), descriptor.get_python_method_metadata(capability)
 
     def _resolve_manifest(self, directory: Path) -> Optional[Path]:
         if not directory.is_dir():
@@ -167,18 +159,32 @@ class AlgorithmManager:
     def _build_descriptor(self, manifest: Dict[str, Any], manifest_path: Path) -> AlgorithmDescriptor:
         name = manifest.get("name")
         version = manifest.get("version", "0.0.0")
-        runtime = manifest.get("runtime", "python")
-        entry_point = manifest.get("entry_point")
-        if not name or not entry_point:
-            raise ValueError(f"Invalid manifest at {manifest_path}: missing 'name' or 'entry_point'")
+        entry_points = manifest.get("entry_points")
+        if not name or not entry_points:
+            raise ValueError(f"Invalid manifest at {manifest_path}: missing 'name' or 'entry_points'")
+        self._ensure_python_path(manifest)
         base_path = manifest_path.parent
         return AlgorithmDescriptor(
             name=name,
             version=str(version),
-            runtime=str(runtime),
-            entry_point=str(entry_point),
             base_path=base_path,
             manifest=manifest,
         )
+    
+    def _ensure_python_path(self, manifest: Dict[str, Any]) -> None:
+        config_paths = manifest.get("python_paths", [])
+        for p in config_paths:
+            # 展开环境变量，例如 ${HOME}、${APP_PATH}
+            p = os.path.expandvars(p)
+
+            # 转为 Path 对象
+            path_obj = Path(p)
+
+            if not path_obj.is_absolute():
+                path_obj = (Path(__file__).parent / path_obj).resolve()
+
+            if os.path.exists(path_obj) and path_obj.is_dir():
+                if path_obj not in sys.path:
+                    sys.path.append(path_obj)
 
 global_algorithm_manager = AlgorithmManager(ALGORITHMS_ROOT)

@@ -1,26 +1,63 @@
 {
-  "name": "example_algorithm",
-  "version": "1.0.0",
-  "runtime": "python",
-  "enabled": true,
-  "python_paths": ["src", "lib"],
-  "capabilities": ["denoise", "enhance"],
-  "entry_points": {
-    "default": "module_main:AlgorithmClass",
-    "cli": "module_main:cli_entry",
-    "utils": "module_utils:Helper"
-  },
-  "init_kwargs": {
-    "param1": 123,
-    "param2": "abc"
-  },
-  "artifacts": {
-    "binary": "bin/example.so",
-    "shared_libs": ["lib/lib1.so", "lib/lib2.so"]
-  },
-  "command": ["./run_algo.sh", "--flag"], 
-  "working_dir": ".",
-  "env": {
-    "PATH": "/usr/local/bin"
-  }
+    "name": "blind_watermark_addition",
+    "version": "1.0.0",
+    "enabled": true,
+    "python_paths": [
+        "${APP_EXTRA_PATH}",
+        "${APP_ROOT_PATH}/resources/deps"
+    ],
+    "capabilities": [
+        "image.watermark.blind.addition",
+        "video.watermark.blind.addition",
+        "image.watermark.blind.extraction",
+        "video.watermark.blind.extraction"
+    ],
+    "entry_points": {
+        "image.watermark.blind.addition": {
+            "runtime": "python",
+            "module": "app.algorithms.blind_watermark_addition.watermark_addition_image",
+            "attr": "WatermarkAdditionImage",
+            "init_kwargs": {},
+            "method": "watermark_addition",
+            "method_args": {
+                "input_image_path": "str", 
+                "output_file": "str",
+                "message": "str"
+            }
+        },
+        "image.watermark.blind.extraction": {
+            "runtime": "python",
+            "module": "app.algorithms.blind_watermark_addition.watermark_addition_image",
+            "attr": "WatermarkAdditionImage",
+            "init_kwargs": {},
+            "method": "watermark_extraction",
+            "method_args": {
+                "input_image_path": "str"
+            }
+        },
+        "video.watermark.blind.addition": {
+            "runtime": "python",
+            "module": "app.algorithms.blind_watermark_addition.watermark_addition_video",
+            "attr": "WatermarkAdditionVideo",
+            "init_kwargs": {},
+            "method": "watermark_addition",
+            "method_args": {
+                "input_path": "str", 
+                "output_file": "str", 
+                "message": "str", 
+                "chunk_size": "int"
+            }
+        },
+        "video.watermark.blind.extraction": {
+            "runtime": "python",
+            "module": "app.algorithms.blind_watermark_addition.watermark_addition_video",
+            "attr": "WatermarkAdditionVideo",
+            "init_kwargs": {},
+            "method": "watermark_extraction",
+            "method_args": {
+                "input_path": "str",
+                "chunk_size": "int"
+            }
+        }
+    }
 }

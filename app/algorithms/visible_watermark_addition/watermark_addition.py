@@ -18,7 +18,7 @@ class VisibleWatermarkAddition:
     def __init__(self):
         ffmpeg_bin = os.getenv(
             "POWERTOOLS_FFMPEG_BIN", 
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "ffmpeg", "bin")
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resources", "ffmpeg", "bin")
         )
         self.ffmpeg_exe = os.path.join(ffmpeg_bin, "ffmpeg.exe" if platform.system().lower() == "windows" else "ffmpeg")
         self.ffprobe_exe = os.path.join(ffmpeg_bin, "ffprobe.exe" if platform.system().lower() == "windows" else "ffprobe")
