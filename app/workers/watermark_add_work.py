@@ -111,7 +111,7 @@ class WatermarkAddWork(BaseWorker):
                 params = {
                     "input_image_path": input_path,
                     "output_file": output_file,
-                    "message": kwargs["invisible_watermark_text"]
+                    "message": kwargs["watermark_text"]
                 }
                 self.call_algorithm(instance=watermark_add_instance, method_metadata=metadata, input_args=params)
             else:
@@ -119,7 +119,7 @@ class WatermarkAddWork(BaseWorker):
                 params = {
                     "input_path": input_path,
                     "output_file": output_file,
-                    "message": kwargs["invisible_watermark_text"],
+                    "message": kwargs["watermark_text"],
                     "chunk_size": 8
                 }
                 self.call_algorithm(instance=watermark_add_instance, method_metadata=metadata, input_args=params)
