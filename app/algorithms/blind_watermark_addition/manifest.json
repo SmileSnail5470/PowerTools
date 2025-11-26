@@ -3,7 +3,7 @@
     "version": "1.0.0",
     "enabled": true,
     "python_paths": [
-        "${APP_EXTRA_PATH}"
+        "${POWERTOOLS_LOCAL_AI_MODEL_DEPS}"
     ],
     "capabilities": [
         "image.watermark.blind.addition",

@@ -29,34 +29,39 @@ class WorkerSignals(QObject):
     progress = Signal(str)
     finished = Signal(bool, str)
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
 
 class InitWorker(QRunnable):
-    def __init__(self, task_name: str):
+    def __init__(self, task_name: str, parent: QObject = None):
         super().__init__()
         self.task_name = task_name
-        self.signals = WorkerSignals()
+        self.signals = WorkerSignals(parent=parent)
+        self.cancelled = False
+
+    def cancel(self):
+        self.cancelled = True
+
+    def _step(self, msg):
+        if self.cancelled:
+            raise RuntimeError("初始化已被用户取消")
+        self.signals.progress.emit(msg)
+        QThread.msleep(800)
 
     def run(self):
         try:
-            self.signals.progress.emit("正在检查环境依赖…")
-            QThread.msleep(800)
+            self._step("正在检查环境依赖…")
+            self._step("正在加载模型文件…")
+            self._step("正在初始化执行引擎…")
 
-            self.signals.progress.emit("正在加载模型文件…")
-            QThread.msleep(800)
+            res = False
 
-            self.signals.progress.emit("正在初始化执行引擎…")
-            QThread.msleep(800)
-
-            # 模拟成功
-            ok = True
-
-            if ok:
+            if res:
                 self.signals.progress.emit("环境初始化成功")
                 self.signals.finished.emit(True, "")
-                return
-
-            # 模拟失败
-            raise RuntimeError("模型文件加载失败：缺失 core.bin")
+            else:
+                raise RuntimeError("模型文件加载失败：缺失 core.bin")
 
         except Exception as e:
             self.signals.finished.emit(False, str(e))
@@ -99,19 +104,17 @@ class InitProgressDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setModal(True)
-        self.setMinimumWidth(460)
-        self.setWindowFlag(Qt.FramelessWindowHint)  # 去掉标题栏
+        self.setMinimumWidth(660)
+        self.setWindowFlag(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
 
-        # 主布局，带阴影背景
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(12, 12, 12, 12)
 
-        # 背景 widget + 圆角 + 阴影
         self.bg_widget = QDialog()
         self.bg_widget.setStyleSheet("""
             QDialog {
-                background-color: #ffffff;
+                background-color: rgba(245, 246, 250, 0.95);
                 border-radius: 14px;
             }
         """)
@@ -119,21 +122,37 @@ class InitProgressDialog(QDialog):
         bg_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.addWidget(self.bg_widget)
 
-        # 标题
+        header_layout = QHBoxLayout()
         title_label = QLabel(self.tr("🔧 环境初始化中，请稍候…"))
-        title_label.setFont(QFont("Segoe UI", 14, QFont.Bold))
-        title_label.setStyleSheet("color: #1f2937; margin-bottom: 12px;")
-        bg_layout.addWidget(title_label)
+        setFont(title_label, 14, QFont.Bold)
+        title_label.setStyleSheet("color: #1f2937;")
+        header_layout.addWidget(title_label)
 
-        # 进度条，Win11 风格
+        self.close_btn = QPushButton("✕")
+        self.close_btn.setFixedSize(28, 28)
+        setFont(self.close_btn, 14)
+        self.close_btn.setStyleSheet("""
+            QPushButton {
+                border: none;
+                background: transparent;
+            }
+            QPushButton:hover {
+                color: #ef4444;
+            }
+        """)
+        self.close_btn.clicked.connect(self.close)
+        header_layout.addWidget(self.close_btn)
+        header_layout.setAlignment(self.close_btn, Qt.AlignRight)
+        bg_layout.addLayout(header_layout)
+
         self.progress = QProgressBar()
-        self.progress.setRange(0, 0)  # 无限滚动
+        self.progress.setRange(0, 0)
         self.progress.setTextVisible(False)
         self.progress.setStyleSheet("""
             QProgressBar {
                 height: 14px;
                 border-radius: 7px;
-                background: #f3f4f6;
+                background: #e5e7eb;
             }
             QProgressBar::chunk {
                 background-color: qlineargradient(
@@ -145,18 +164,16 @@ class InitProgressDialog(QDialog):
         """)
         bg_layout.addWidget(self.progress)
 
-        # 日志框，Win11 Fluent 样式
         self.log_box = QTextEdit()
         self.log_box.setReadOnly(True)
+        setFont(self.log_box, 12)
         self.log_box.setStyleSheet("""
             QTextEdit {
-                background: #f9fafb;
+                background: #fefefe;
                 border: 1px solid #e5e7eb;
                 border-radius: 10px;
                 padding: 10px;
                 color: #374151;
-                font-family: 'Segoe UI';
-                font-size: 12pt;
             }
         """)
         self.log_box.setMinimumHeight(180)
@@ -165,6 +182,12 @@ class InitProgressDialog(QDialog):
     def append_log(self, text: str):
         self.log_box.append(text)
         self.log_box.verticalScrollBar().setValue(self.log_box.verticalScrollBar().maximum())
+
+    def enableCloseBtn(self):
+        self.close_btn.show()
+
+    def disableCloseBtn(self):
+        self.close_btn.hide()
 
 
 class SoftwareCard(QFrame):
@@ -818,38 +841,43 @@ class Settings(QWidget):
         """
     
     def _bind_ai_toggle(self, switch: ToggleSwitch, badge: StatusBadge, config_attr):
-        def on_toggle(flag):
-            if flag:
-                badge.setLabel(text=self.tr("环境初始化中…"), color="#60a5fa")
+        switch.toggled.connect(
+            lambda flag, switch=switch, badge=badge, config_attr=config_attr: 
+            self._ai_switch_on_toggle(flag=flag, switch=switch, badge=badge, config_attr=config_attr)
+        )
 
-                progress_dialog = InitProgressDialog(title=self.tr("正在初始化环境..."), parent=self)
-                progress_dialog.show()
+    def _ai_switch_on_toggle(self, flag: bool, switch: ToggleSwitch, badge: StatusBadge, config_attr: str):
+        if flag:
+            badge.setLabel(text=self.tr("环境初始化中…"), color="#60a5fa")
 
-                worker = InitWorker(task_name=config_attr)
-                worker.signals.progress.connect(progress_dialog.append_log)
-                worker.signals.finished.connect(
-                    lambda ok, msg, switch=switch, badge=badge, config_attr=config_attr, progress_dialog=progress_dialog: 
-                    self._on_init_finished(ok, msg, switch, badge, config_attr, progress_dialog)
-                )
-                self.thread_pool.start(worker)
-            else:
-                badge.setLabel(text=self.tr("未启用"), color="#eab308")
-        switch.toggled.connect(on_toggle)
+            progress_dialog = InitProgressDialog(title=self.tr("正在初始化环境..."), parent=self)
+            progress_dialog.disableCloseBtn()
+            progress_dialog.show()
+
+            worker = InitWorker(task_name=config_attr, parent=progress_dialog)
+            worker.signals.progress.connect(progress_dialog.append_log)
+            worker.signals.finished.connect(
+                lambda ok, msg, switch=switch, badge=badge, progress_dialog=progress_dialog: 
+                self._on_init_finished(ok, msg, switch, badge, progress_dialog)
+            )
+            self.thread_pool.start(worker)
+        else:
+            badge.setLabel(text=self.tr("未启用"), color="#eab308")
 
     def _on_init_finished(
             self, ok: bool,
             error: str,
             switch: ToggleSwitch, 
             badge: StatusBadge, 
-            config_attr: str, 
-            progress_dialog: InitProgressDialog):
+            progress_dialog: InitProgressDialog
+        ):
         if ok:
             badge.setLabel(text=self.tr("已启用"), color="#22c55e")
             progress_dialog.accept()
         else:
             switch.setActive(False)
             badge.setLabel(text=self.tr("启用失败"), color="#ef4444")
-            setattr(getattr(cfg, config_attr), "value", False)
+            progress_dialog.enableCloseBtn()
             progress_dialog.append_log(f"\n❌ 错误信息：{error}")
             progress_dialog.progress.setRange(0, 1)
 
