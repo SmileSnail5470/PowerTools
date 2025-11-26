@@ -58,6 +58,14 @@ class Config(QConfig):
     ffmpeg_path = ConfigItem("SoftwareSettings", "FFmpegPath", "", FolderValidator())
     ffmpeg_path.valueChanged.connect(update_ffmpeg_path)
 
+    # 本地AI设置
+    localAIModelDeps = ConfigItem("LocalAISettings", "LocalAIModelDeps", os.path.join(pathlib.Path.home(), ".powertools", "local_ai_models"), FolderValidator())
+    localBlindWatermarkEnabled = ConfigItem("LocalAISettings", "LocalBlindWatermarkEnabled", False, BoolValidator())
+    localWatermarkRemovalEnabled = ConfigItem("LocalAISettings", "LocalWatermarkRemovalEnabled", False, BoolValidator())
+
+    # 高级设置
+    logLevel = OptionsConfigItem("AdvancedSettings", "LogLevel", "WARNING", OptionsValidator(["DEBUG", "INFO", "WARNING", "ERROR"]))
+
 
 cfg = Config()
 cfg.themeMode.value = Theme.LIGHT

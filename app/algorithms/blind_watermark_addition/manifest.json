@@ -3,8 +3,7 @@
     "version": "1.0.0",
     "enabled": true,
     "python_paths": [
-        "${APP_EXTRA_PATH}",
-        "${APP_ROOT_PATH}/resources/deps"
+        "${APP_EXTRA_PATH}"
     ],
     "capabilities": [
         "image.watermark.blind.addition",

@@ -1,9 +1,9 @@
 import os
 import platform
-from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, Property, QSize
+from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, Property, QSize, QThreadPool, QRunnable, QObject, QThread
 from PySide6.QtWidgets import(
-    QHBoxLayout, QWidget, QVBoxLayout, QLabel, QFrame, QLineEdit, QPushButton, QFileDialog, QGroupBox, 
-    QSizePolicy
+    QHBoxLayout, QWidget, QVBoxLayout, QLabel, QFrame, QLineEdit, QPushButton, QFileDialog, QGroupBox,
+    QSizePolicy, QDialog, QProgressBar, QTextEdit
 )
 from PySide6.QtGui import QFont, QColor, QPainter, QPen
 
@@ -24,6 +24,42 @@ language_map = {
     "简体中文": Language.CHINESE_SIMPLIFIED,
     "英语": Language.ENGLISH
 }
+
+class WorkerSignals(QObject):
+    progress = Signal(str)
+    finished = Signal(bool, str)
+
+
+class InitWorker(QRunnable):
+    def __init__(self, task_name: str):
+        super().__init__()
+        self.task_name = task_name
+        self.signals = WorkerSignals()
+
+    def run(self):
+        try:
+            self.signals.progress.emit("正在检查环境依赖…")
+            QThread.msleep(800)
+
+            self.signals.progress.emit("正在加载模型文件…")
+            QThread.msleep(800)
+
+            self.signals.progress.emit("正在初始化执行引擎…")
+            QThread.msleep(800)
+
+            # 模拟成功
+            ok = True
+
+            if ok:
+                self.signals.progress.emit("环境初始化成功")
+                self.signals.finished.emit(True, "")
+                return
+
+            # 模拟失败
+            raise RuntimeError("模型文件加载失败：缺失 core.bin")
+
+        except Exception as e:
+            self.signals.finished.emit(False, str(e))
 
 
 class StatusBadge(QWidget):
@@ -50,12 +86,85 @@ class StatusBadge(QWidget):
 
         self.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
 
-    def setLable(self, text: str, color: str):
+    def setLabel(self, text: str, color: str):
         self.label.setText(text)
         self.dot.setStyleSheet(f"""
             background: {color};
             border-radius: 6px;
         """)
+
+
+class InitProgressDialog(QDialog):
+    def __init__(self, title="", parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.setMinimumWidth(460)
+        self.setWindowFlag(Qt.FramelessWindowHint)  # 去掉标题栏
+        self.setAttribute(Qt.WA_TranslucentBackground)
+
+        # 主布局，带阴影背景
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+
+        # 背景 widget + 圆角 + 阴影
+        self.bg_widget = QDialog()
+        self.bg_widget.setStyleSheet("""
+            QDialog {
+                background-color: #ffffff;
+                border-radius: 14px;
+            }
+        """)
+        bg_layout = QVBoxLayout(self.bg_widget)
+        bg_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.addWidget(self.bg_widget)
+
+        # 标题
+        title_label = QLabel(self.tr("🔧 环境初始化中，请稍候…"))
+        title_label.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        title_label.setStyleSheet("color: #1f2937; margin-bottom: 12px;")
+        bg_layout.addWidget(title_label)
+
+        # 进度条，Win11 风格
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 0)  # 无限滚动
+        self.progress.setTextVisible(False)
+        self.progress.setStyleSheet("""
+            QProgressBar {
+                height: 14px;
+                border-radius: 7px;
+                background: #f3f4f6;
+            }
+            QProgressBar::chunk {
+                background-color: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #60a5fa, stop:1 #3b82f6
+                );
+                border-radius: 7px;
+            }
+        """)
+        bg_layout.addWidget(self.progress)
+
+        # 日志框，Win11 Fluent 样式
+        self.log_box = QTextEdit()
+        self.log_box.setReadOnly(True)
+        self.log_box.setStyleSheet("""
+            QTextEdit {
+                background: #f9fafb;
+                border: 1px solid #e5e7eb;
+                border-radius: 10px;
+                padding: 10px;
+                color: #374151;
+                font-family: 'Segoe UI';
+                font-size: 12pt;
+            }
+        """)
+        self.log_box.setMinimumHeight(180)
+        bg_layout.addWidget(self.log_box)
+
+    def append_log(self, text: str):
+        self.log_box.append(text)
+        self.log_box.verticalScrollBar().setValue(self.log_box.verticalScrollBar().maximum())
 
 
 class SoftwareCard(QFrame):
@@ -199,7 +308,7 @@ class SoftwareCard(QFrame):
                 self.status = "ok"
                 text = "OK"
                 color = self._get_status_badge_color()
-            self.status_label.setLable(text=text, color=color)
+            self.status_label.setLabel(text=text, color=color)
 
         if error_msg:
             TeachingTip.create(
@@ -454,6 +563,8 @@ class CustomCardGroupWidget(QWidget):
         self.hBoxLayout.addWidget(widget, stretch=stretch)
 
 class Settings(QWidget):
+    thread_pool = QThreadPool.globalInstance()
+    
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.setObjectName("Settings")
@@ -499,6 +610,9 @@ class Settings(QWidget):
         
         software_settings = self._create_software_settings()
         content_layout.addWidget(software_settings)
+
+        local_ai_settings = self._create_local_ai_settings()
+        content_layout.addWidget(local_ai_settings)
 
         performance_settings = self._create_performance_settings()
         content_layout.addWidget(performance_settings)
@@ -564,7 +678,7 @@ class Settings(QWidget):
         browse_btn.setIcon(FluentIcon.FOLDER_ADD.qicon())
         browse_btn.setStyleSheet(self._btn_style(bg="#f3f4f6", hover="#d1d5db"))
         setFont(browse_btn, 12, QFont.Bold)
-        browse_btn.clicked.connect(lambda: self._select_path())
+        browse_btn.clicked.connect(lambda: self._select_path(self.cache_line_edit))
         cache_location_card = CustomCardGroupWidget(title=self.tr("缓存保存路径"), content=self.tr("设置缓存文件保存位置"), parent=self)
         cache_location_card.addWidget(self.cache_line_edit, stretch=1)
         cache_location_card.addWidget(browse_btn, stretch=0)
@@ -594,16 +708,87 @@ class Settings(QWidget):
 
         return settings
     
+    def _create_local_ai_settings(self):
+        ai_settings_cards = []
+        ai_settings = CustomGroupBox(title=self.tr("🤖 本地AI设置"))
+
+        localAIModelDeps_line_edit = QLineEdit()
+        localAIModelDeps_line_edit.textChanged.connect(lambda path: setattr(cfg.localAIModelDeps, "value", path))
+        localAIModelDeps_line_edit.setPlaceholderText(self.tr(f"请配置本地AI模型依赖保存路径"))
+        setFont(localAIModelDeps_line_edit, 14)
+        localAIModelDeps_line_edit.setStyleSheet("""
+            QLineEdit {
+                padding: 8px 12px;
+                border: 1px solid #d1d5db;
+                border-radius: 8px;
+                background: white;
+                color: #333;
+            }
+            QLineEdit:focus { border: 1px solid #4f46e5; }
+        """)
+        browse_btn = QPushButton()
+        browse_btn.setIcon(FluentIcon.FOLDER_ADD.qicon())
+        browse_btn.setStyleSheet(self._btn_style(bg="#f3f4f6", hover="#d1d5db"))
+        setFont(browse_btn, 12, QFont.Bold)
+        browse_btn.clicked.connect(lambda: self._select_path(localAIModelDeps_line_edit))
+        model_deps_location_card = CustomCardGroupWidget(title=self.tr("AI模型依赖路径"), content=self.tr("设置本地AI模型依赖文件保存位置"), parent=self)
+        model_deps_location_card.addWidget(localAIModelDeps_line_edit, stretch=1)
+        model_deps_location_card.addWidget(browse_btn, stretch=0)
+        model_deps_location_card.setSeparatorVisible(True)
+        ai_settings_cards.append(model_deps_location_card)
+        
+        blind_watermark_switch = ToggleSwitch()
+        blind_watermark_switch.toggled.connect(lambda flag: setattr(cfg.localBlindWatermarkEnabled, "value", flag))
+        blind_watermark_status = StatusBadge(text=self.tr("未启用"), color="#eab308")
+        self._bind_ai_toggle(
+            switch=blind_watermark_switch,
+            badge=blind_watermark_status,
+            config_attr="localBlindWatermarkEnabled"
+        )
+        blind_watermark_card = CustomCardGroupWidget(title=self.tr("盲水印AI能力"), content=self.tr("为图像添加不可见的数字水印，保护版权"), parent=self)
+        blind_watermark_card.addWidget(blind_watermark_status, stretch=0)
+        blind_watermark_card.addWidget(blind_watermark_switch, stretch=0)
+        blind_watermark_card.setSeparatorVisible(True)
+        ai_settings_cards.append(blind_watermark_card)
+
+        watermark_removal_switch = ToggleSwitch()
+        watermark_removal_switch.toggled.connect(lambda flag: setattr(cfg.localWatermarkRemovalEnabled, "value", flag))
+        watermark_removal_status = StatusBadge(text=self.tr("未启用"), color="#eab308")
+        self._bind_ai_toggle(
+            switch=watermark_removal_switch,
+            badge=watermark_removal_status,
+            config_attr="localWatermarkRemovalEnabled"
+        )
+        watermark_removal_card = CustomCardGroupWidget(title=self.tr("水印去除AI能力"), content=self.tr("智能去除图像中的水印和标志"), parent=self)
+        watermark_removal_card.addWidget(watermark_removal_status, stretch=0)
+        watermark_removal_card.addWidget(watermark_removal_switch, stretch=0)
+        watermark_removal_card.setSeparatorVisible(True)
+        ai_settings_cards.append(watermark_removal_card)
+
+        for card in ai_settings_cards:
+            ai_settings.addCard(card=card)
+
+        return ai_settings
+    
     def _create_performance_settings(self):
         performance_settings_cards = []
         performance_settings = CustomGroupBox(title=self.tr("🌟 高级设置"))
+
+        log_level_combox = ComboBox()
+        log_level_combox.currentTextChanged.connect(lambda text: setattr(cfg.logLevel, "value", text.upper()))
+        setFont(log_level_combox, 14)
+        log_level_combox.addItems(["error", "warning", "info", "debug"])
+        log_level_card = CustomCardGroupWidget(title=self.tr("日志级别"), content=self.tr("设置日志记录详细程度"), parent=self)
+        log_level_card.addWidget(log_level_combox, stretch=0)
+        log_level_card.setSeparatorVisible(True)
+        performance_settings_cards.append(log_level_card)
 
         for card in performance_settings_cards:
             performance_settings.addCard(card=card)
 
         return performance_settings
     
-    def _select_path(self):
+    def _select_path(self, widget):
         directory = QFileDialog.getExistingDirectory(
             self,
             "选择文件夹",
@@ -611,7 +796,7 @@ class Settings(QWidget):
             QFileDialog.Option.ShowDirsOnly
         )
         if directory:
-            self.cache_line_edit.setText(directory)
+            widget.setText(directory)
 
     def _btn_style(self, bg, hover, color="#374151"):
         return f"""
@@ -631,3 +816,40 @@ class Settings(QWidget):
                 margin-top: 1px;
             }}
         """
+    
+    def _bind_ai_toggle(self, switch: ToggleSwitch, badge: StatusBadge, config_attr):
+        def on_toggle(flag):
+            if flag:
+                badge.setLabel(text=self.tr("环境初始化中…"), color="#60a5fa")
+
+                progress_dialog = InitProgressDialog(title=self.tr("正在初始化环境..."), parent=self)
+                progress_dialog.show()
+
+                worker = InitWorker(task_name=config_attr)
+                worker.signals.progress.connect(progress_dialog.append_log)
+                worker.signals.finished.connect(
+                    lambda ok, msg, switch=switch, badge=badge, config_attr=config_attr, progress_dialog=progress_dialog: 
+                    self._on_init_finished(ok, msg, switch, badge, config_attr, progress_dialog)
+                )
+                self.thread_pool.start(worker)
+            else:
+                badge.setLabel(text=self.tr("未启用"), color="#eab308")
+        switch.toggled.connect(on_toggle)
+
+    def _on_init_finished(
+            self, ok: bool,
+            error: str,
+            switch: ToggleSwitch, 
+            badge: StatusBadge, 
+            config_attr: str, 
+            progress_dialog: InitProgressDialog):
+        if ok:
+            badge.setLabel(text=self.tr("已启用"), color="#22c55e")
+            progress_dialog.accept()
+        else:
+            switch.setActive(False)
+            badge.setLabel(text=self.tr("启用失败"), color="#ef4444")
+            setattr(getattr(cfg, config_attr), "value", False)
+            progress_dialog.append_log(f"\n❌ 错误信息：{error}")
+            progress_dialog.progress.setRange(0, 1)
+
