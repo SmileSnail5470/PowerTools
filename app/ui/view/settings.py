@@ -419,6 +419,7 @@ class ToggleSwitch(QWidget):
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.setActive(not self._active, animated=True)
+            self.clearFocus()
             event.accept()
         else:
             super().mousePressEvent(event)
