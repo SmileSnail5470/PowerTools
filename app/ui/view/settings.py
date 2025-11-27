@@ -130,11 +130,12 @@ class InitProgressDialog(QDialog):
 
         self.close_btn = QPushButton("✕")
         self.close_btn.setFixedSize(28, 28)
-        setFont(self.close_btn, 14)
+        setFont(self.close_btn, 20)
         self.close_btn.setStyleSheet("""
             QPushButton {
                 border: none;
                 background: transparent;
+                color: #444;
             }
             QPushButton:hover {
                 color: #ef4444;
