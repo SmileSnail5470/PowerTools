@@ -9,3 +9,4 @@ app/algorithms/*/*.so
 app/algorithms/*/*.pyd
 app/algorithms/**/*.yaml
 app/algorithms/*/requirements.txt
+dist/*

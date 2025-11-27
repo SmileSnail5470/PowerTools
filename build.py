@@ -3,74 +3,107 @@ import os
 import shlex
 import subprocess
 import sys
+import platform
 
 
+APP_NAME = "PowerTools"
 VERSION = "0.0.1"
-
+COPYRIGHT = "SmileSnail5470"
+MAIN_ENTRY = "main.py"
+ICON_PATH_MAC = "app/ui/resources/images/logo.icns"
+ICON_PATH_WIN = "app/ui/resources/images/logo.ico"
 
 def find_project_root():
     return os.path.dirname(os.path.abspath(__file__))
 
+def get_base_options(outdir):
+    return [
+        sys.executable, '-m', 'nuitka',
+        '--include-package=pip',
+        '--include-package=setuptools',
+        '--include-package=wheel',
+        '--enable-plugin=pyside6',
+        '--assume-yes-for-downloads',
+        '--output-dir={}'.format(outdir),
+        '--remove-output',
+        '--nofollow-import-to=*.tests',
+        '--noinclude-pytest-mode=nofollow',
+        '--noinclude-unittest-mode=nofollow',
+    ]
 
-def build_command(args, project_root):
-    entrypoint = os.path.join(project_root, 'main.py')
-    if not os.path.exists(entrypoint):
-        raise SystemExit('Could not find entrypoint main.py in project root')
+def build_macos_command(args, project_root, outdir):
+    cmd = get_base_options(outdir)
+    cmd.append('--mode=app-dist')
+    
+    cmd.extend([
+        '--macos-create-app-bundle',
+        '--macos-app-mode=gui', 
+        f'--macos-app-name={APP_NAME}',
+        f'--macos-app-version={VERSION}',
+        f'--macos-signed-app-name=com.{COPYRIGHT}.{APP_NAME}',
+    ])
+    icon_path = os.path.join(project_root, ICON_PATH_MAC)
+    if os.path.exists(icon_path):
+        cmd.append(f'--macos-app-icon={icon_path}')
+    else:
+        print(f"Warning: Icon not found at {icon_path}")
 
-    base_cmd = [sys.executable, '-m', 'nuitka']
+    return cmd
 
-    # Basic options
-    if sys.platform == 'win32':
-        base_cmd += [
-            '--standalone',
-            '--enable-plugins=pyside6'
-        ]
-    elif sys.platform == 'darwin':
-        base_cmd += [
-            '--mode=app-dist',
-            '--enable-plugins=pyside6',
-            '--include-qt-plugins=sensible',
-            '--show-memory',
-            '--show-progress',
-            "--macos-create-app-bundle",
-            "--assume-yes-for-download",
-            "--macos-disable-console",
-            f"--macos-app-version={VERSION}",
-            "--macos-app-name=PowerTools",
-            "--macos-app-icon=app/ui/resources/images/logo.icns",
-            "--copyright=SmileSnail5470",
-            '--output-dir={outdir}'.format(outdir=os.path.abspath(args.output_dir)),
-        ]
+def build_windows_command(args, project_root, outdir):
+    cmd = get_base_options(outdir)
+    cmd.append('--mode=standalone')
+    
+    cmd.extend([
+        '--windows-console-mode=disable',
+        f'--company-name={COPYRIGHT}',
+        f'--product-name={APP_NAME}',
+        f'--file-version={VERSION}',
+        f'--product-version={VERSION}',
+    ])
+    icon_path = os.path.join(project_root, ICON_PATH_WIN)
+    if os.path.exists(icon_path):
+        cmd.append(f'--windows-icon-from-ico={icon_path}')
+    else:
+        print(f"Warning: Icon not found at {icon_path}")
 
-    # Final target
-    base_cmd.append(entrypoint)
-
-    return base_cmd
-
+    return cmd
 
 def main():
     parser = argparse.ArgumentParser(description='Build PowerTools with Nuitka')
     parser.add_argument('--output-dir', default='dist', help='Output directory')
-
     args = parser.parse_args()
 
     project_root = find_project_root()
-
-    cmd = build_command(args, project_root)
-
-    print('Nuitka build command:')
-    print(' '.join(shlex.quote(c) for c in cmd))
-
+    entrypoint = os.path.join(project_root, MAIN_ENTRY)
     outdir = os.path.abspath(args.output_dir)
-    os.makedirs(outdir, exist_ok=True)
+
+    if not os.path.exists(entrypoint):
+        raise SystemExit(f'Could not find entrypoint {MAIN_ENTRY} in {project_root}')
+
+    if sys.platform == 'darwin':
+        cmd = build_macos_command(args, project_root, outdir)
+    elif sys.platform == 'win32':
+        cmd = build_windows_command(args, project_root, outdir)
+    else:
+        raise SystemExit('Unsupported platform: {}'.format(sys.platform))
+
+    cmd.append(entrypoint)
+
+    print('-' * 60)
+    print('Starting Nuitka Build...')
+    print(f'Platform: {platform.system()} {platform.release()}')
+    print('Command:')
+    print(' '.join(shlex.quote(c) for c in cmd))
+    print('-' * 60)
 
     try:
+        os.makedirs(outdir, exist_ok=True)
         subprocess.check_call(cmd, cwd=project_root)
-        print('\nBuild finished. Output in:', outdir)
+        print(f'\n[SUCCESS] Build finished. Output located in: {outdir}')
     except subprocess.CalledProcessError as e:
-        print('\nNuitka build failed with exit code', e.returncode)
-        raise
-
+        print(f'\n[ERROR] Nuitka build failed with exit code {e.returncode}')
+        sys.exit(e.returncode)
 
 if __name__ == '__main__':
     main()
