@@ -13,6 +13,7 @@ MAIN_ENTRY = "main.py"
 ICON_PATH_MAC = "app/ui/resources/images/logo.icns"
 ICON_PATH_WIN = "app/ui/resources/images/logo.ico"
 
+
 def find_project_root():
     return os.path.dirname(os.path.abspath(__file__))
 
@@ -23,12 +24,15 @@ def get_base_options(outdir):
         '--include-package=setuptools',
         '--include-package=wheel',
         '--enable-plugin=pyside6',
+        '--include-qt-plugins=multimedia',
         '--assume-yes-for-downloads',
         '--output-dir={}'.format(outdir),
         '--remove-output',
         '--nofollow-import-to=*.tests',
         '--noinclude-pytest-mode=nofollow',
         '--noinclude-unittest-mode=nofollow',
+        '--include-package=app.algorithms',
+        '--include-data-dir=app/algorithms=app/algorithms',
     ]
 
 def build_macos_command(args, project_root, outdir):
@@ -36,8 +40,7 @@ def build_macos_command(args, project_root, outdir):
     cmd.append('--mode=app-dist')
     
     cmd.extend([
-        '--macos-create-app-bundle',
-        '--macos-app-mode=gui', 
+        '--macos-app-mode=gui',
         f'--macos-app-name={APP_NAME}',
         f'--macos-app-version={VERSION}',
         f'--macos-signed-app-name=com.{COPYRIGHT}.{APP_NAME}',

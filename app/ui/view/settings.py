@@ -128,17 +128,23 @@ class InitProgressDialog(QDialog):
         title_label.setStyleSheet("color: #1f2937;")
         header_layout.addWidget(title_label)
 
-        self.close_btn = QPushButton("✕")
-        self.close_btn.setFixedSize(28, 28)
-        setFont(self.close_btn, 20)
+        self.close_btn = QPushButton("x")
+        self.close_btn.setFixedSize(32, 32)
+        setFont(self.close_btn, 14)
         self.close_btn.setStyleSheet("""
             QPushButton {
                 border: none;
                 background: transparent;
                 color: #444;
+                border-radius: 16px;
             }
             QPushButton:hover {
-                color: #ef4444;
+                color: rgba(232, 17, 35, 0.2);
+                color: #e81123;
+            }
+            QPushButton:pressed {
+                background-color: rgba(232, 17, 35, 0.4);
+                color: white;
             }
         """)
         self.close_btn.clicked.connect(self.close)
