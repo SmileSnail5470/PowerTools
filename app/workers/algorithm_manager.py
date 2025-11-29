@@ -78,16 +78,29 @@ class SubprocessAlgorithmAdapter:
 
     def __call__(self, payload: Dict[str, Any], timeout: Optional[int] = None) -> Dict[str, Any]:
         data = json.dumps(payload).encode("utf-8")
-        completed = subprocess.run(  # noqa: S603
-            self.command,
-            input=data,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd=self.cwd,
-            env=self.env,
-            timeout=timeout,
-            check=True,
-        )
+        if sys.platform != "win32":
+            completed = subprocess.run(  # noqa: S603
+                self.command,
+                input=data,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=self.cwd,
+                env=self.env,
+                timeout=timeout,
+                check=True,
+            )
+        else:
+            completed = subprocess.run(  # noqa: S603
+                self.command,
+                input=data,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=self.cwd,
+                env=self.env,
+                timeout=timeout,
+                check=True,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
         stdout = completed.stdout.decode("utf-8").strip()
         return json.loads(stdout) if stdout else {}
 

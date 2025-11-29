@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 import threading
 import tempfile
-import ffmpeg
+import app.utils.ffmpeg as ffmpeg
 
 Position = Union[str, Tuple[int, int]]
 
@@ -421,6 +421,8 @@ class VisibleWatermarkAddition:
         run_kwargs["capture_stderr"] = True
         if hardware_accel and platform.system() != "Windows":
             run_kwargs["cmd"] = [self.ffmpeg_exe, "-hwaccel", "auto"]
+        if platform.system().lower() == "windows":
+            run_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
 
         ffmpeg.run(stream, overwrite_output=True, **run_kwargs)
 
@@ -479,6 +481,8 @@ class VisibleWatermarkAddition:
             run_kwargs["capture_stderr"] = True
             if hardware_accel and platform.system() != "Windows":
                 run_kwargs["cmd"] = [self.ffmpeg_exe, "-hwaccel", "auto"]
+            if platform.system().lower() == "windows":
+                run_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
 
             ffmpeg.run(stream, overwrite_output=True, **run_kwargs)
 

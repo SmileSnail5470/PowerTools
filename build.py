@@ -27,6 +27,7 @@ def get_base_options(outdir):
         '--include-qt-plugins=multimedia',
         '--assume-yes-for-downloads',
         '--output-dir={}'.format(outdir),
+        '--output-filename={}'.format(APP_NAME),
         '--remove-output',
         '--nofollow-import-to=*.tests',
         '--noinclude-pytest-mode=nofollow',

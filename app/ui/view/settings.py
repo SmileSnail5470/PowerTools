@@ -13,6 +13,7 @@ from app.ui.library.qfluentwidgets import(
 )
 
 from app.ui.widgets.gradient_header_widget import GradientHeader
+from app.ui.library.qframelesswindow.titlebar import CloseButton
 from app.ui.common.config import cfg, Language
 
 
@@ -128,25 +129,7 @@ class InitProgressDialog(QDialog):
         title_label.setStyleSheet("color: #1f2937;")
         header_layout.addWidget(title_label)
 
-        self.close_btn = QPushButton("x")
-        self.close_btn.setFixedSize(32, 32)
-        setFont(self.close_btn, 14)
-        self.close_btn.setStyleSheet("""
-            QPushButton {
-                border: none;
-                background: transparent;
-                color: #444;
-                border-radius: 16px;
-            }
-            QPushButton:hover {
-                color: rgba(232, 17, 35, 0.2);
-                color: #e81123;
-            }
-            QPushButton:pressed {
-                background-color: rgba(232, 17, 35, 0.4);
-                color: white;
-            }
-        """)
+        self.close_btn = CloseButton()
         self.close_btn.clicked.connect(self.close)
         header_layout.addWidget(self.close_btn)
         header_layout.setAlignment(self.close_btn, Qt.AlignRight)

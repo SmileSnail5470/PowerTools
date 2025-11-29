@@ -1,6 +1,7 @@
 from functools import lru_cache
 import os
-import ffmpeg
+import app.utils.ffmpeg as ffmpeg
+import subprocess
 import platform
 from PySide6.QtCore import (
     Signal, Qt, QTimer, QRect, Property, QEasingCurve, QPropertyAnimation, 
@@ -449,13 +450,23 @@ class LoaderWorker(QRunnable):
             .output("pipe:1", vframes=1, format="image2pipe", vcodec="png")
             .global_args("-hide_banner", "-loglevel", "error")
         )
-        out_bytes, _ = ffmpeg.run(
-            stream,
-            capture_stdout=True,
-            capture_stderr=True,
-            cmd=ffmpeg_exe,
-            overwrite_output=True
-        )
+        if platform.system().lower() == "windows":
+            out_bytes, _ = ffmpeg.run(
+                stream,
+                capture_stdout=True,
+                capture_stderr=True,
+                cmd=ffmpeg_exe,
+                overwrite_output=True,
+                creationflags = subprocess.CREATE_NO_WINDOW
+            )
+        else:
+            out_bytes, _ = ffmpeg.run(
+                stream,
+                capture_stdout=True,
+                capture_stderr=True,
+                cmd=ffmpeg_exe,
+                overwrite_output=True
+            )
 
         pixmap = QPixmap()
         buffer = QBuffer()
