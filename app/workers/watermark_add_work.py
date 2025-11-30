@@ -1,6 +1,8 @@
 import os
+import logging
 from app.workers.work_base import BaseWorker
 from app.workers.algorithm_manager import global_algorithm_manager
+from app.utils.logger.decorators import log_exception
 
 
 class WatermarkAddWork(BaseWorker):
@@ -16,6 +18,7 @@ class WatermarkAddWork(BaseWorker):
         b = int(hex_color[4:6], 16)
         return (r, g, b, alpha)
 
+    @log_exception(logger=logging.getLogger('watermark-add'), reraise=False, log_args=True, log_result=True)
     def run_algorithm(self, progress_cb, cancel_requested, *args, **kwargs):
         input_path = kwargs["input_path"]
         output_path = kwargs["output_path"]

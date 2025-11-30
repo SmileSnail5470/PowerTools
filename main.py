@@ -13,11 +13,22 @@ from app.window import MainWindow
 from app.ui.library.qfluentwidgets import FluentTranslator
 
 from app.configs.config import UpdateFontFamilies
+from app.utils.logger import init_logging
 
 
 def main():
+    log_level = cfg.get(cfg.logLevel)
+    log_dir = os.path.join(cfg.get(cfg.cachePath), "logs")
+    log_manager = init_logging(log_dir=log_dir, level=log_level)
+    logger = log_manager.get_logger(name="UI")
+    logger.info("Start PowerTools...")
+    
     # Update font families before starting the application
-    UpdateFontFamilies(cfg=cfg).run()
+    try:
+        UpdateFontFamilies(cfg=cfg).run()
+        logger.debug("Font families config update success")
+    except Exception as e:
+        logger.error(f"Update font families config failed: {e}", exc_info=True)
 
     # Start the application
     if cfg.get(cfg.dpiScale) != "Auto":
@@ -27,6 +38,12 @@ def main():
     # create application
     app = QApplication(sys.argv)
     app.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings)          # 禁止 Qt 在某些情况下自动创建原生控件的兄弟窗口
+    
+    def on_log_level_changed(value):
+        log_manager.update_level(value)
+        logger.info(f"Log level is set: {value}")
+
+    cfg.logLevel.valueChanged.connect(on_log_level_changed)
 
 
     # internationalization
@@ -39,10 +56,21 @@ def main():
     app.installTranslator(powertoolsTranslator)  # 安装 PowerTools 程序翻译器
 
     # create main window
-    w = MainWindow()
-    w.show()
+    try:
+        w = MainWindow()
+        w.show()
+        logger.info("Create main windows and show")
+    except Exception as e:
+        logger.critical(f"Create main windows failed: {e}", exc_info=True)
+        sys.exit(1)
 
-    app.exec()
+    try:
+        app.exec()
+    except Exception as e:
+        logger.critical(f"PowerTools start failed: {e}", exc_info=True)
+        raise
+    finally:
+        logger.info("PowerTools exit")
 
 
 if __name__ == '__main__':

@@ -1,5 +1,7 @@
+import logging
 from typing import Any, Dict, Callable
 from app.ui.common.utils import get_file_type
+from app.utils.logger.decorators import log_performance
 
 TYPE_CASTERS = {
     "str": str,
@@ -51,6 +53,7 @@ class BaseWorker():
             casted[key] = caster(value)
         return casted
 
+    @log_performance(logger=logging.getLogger('performance'), threshold=0.1, log_args=False, log_result=False)
     def call_algorithm(self, instance: Any, method_metadata: dict, input_args: dict):
         callable_method = self._load_python_callable(instance, method_metadata)
         schema = method_metadata.get("method_args", {})

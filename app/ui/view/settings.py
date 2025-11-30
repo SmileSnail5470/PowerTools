@@ -789,9 +789,13 @@ class Settings(QWidget):
         performance_settings = CustomGroupBox(title=self.tr("🌟 高级设置"))
 
         log_level_combox = ComboBox()
+        current_level = cfg.get(cfg.logLevel)
         log_level_combox.currentTextChanged.connect(lambda text: setattr(cfg.logLevel, "value", text.upper()))
         setFont(log_level_combox, 14)
-        log_level_combox.addItems(["error", "warning", "info", "debug"])
+        log_level_combox.addItems(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+        index = log_level_combox.findText(current_level.upper() if isinstance(current_level, str) else current_level)
+        if index >= 0:
+            log_level_combox.setCurrentIndex(index)
         log_level_card = CustomCardGroupWidget(title=self.tr("日志级别"), content=self.tr("设置日志记录详细程度"), parent=self)
         log_level_card.addWidget(log_level_combox, stretch=0)
         log_level_card.setSeparatorVisible(True)

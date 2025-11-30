@@ -42,7 +42,7 @@ class Config(QConfig):
     """ Config of application """
     # main window
     micaEnabled = ConfigItem("MainWindow", "MicaEnabled", isWin11(), BoolValidator())
-    dpiScale = OptionsConfigItem("MainWindow", "DpiScale", "Auto", OptionsValidator([1, 1.25, 1.5, 1.75, 2, "Auto"]), restart=True)
+    dpiScale = OptionsConfigItem("MainWindow", "DpiScale", "Auto", OptionsValidator([1, 1.25, 1.5, 1.75, 2, "Auto"]))
 
     # Material
     blurRadius  = RangeConfigItem("Material", "AcrylicBlurRadius", 15, RangeValidator(0, 40))
@@ -50,9 +50,9 @@ class Config(QConfig):
     # 通用设置
     autoStartup = ConfigItem("GeneralSettings", "AutoStartup", False, BoolValidator())
     autoUpdate = ConfigItem("GeneralSettings", "AutoUpdate", False, BoolValidator())
-    cachePath = ConfigItem("GeneralSettings", "CachePath", os.path.join(pathlib.Path.home(), ".powertools"), FolderValidator())
+    cachePath = ConfigItem("GeneralSettings", "CachePath", os.path.join(pathlib.Path.home(), "PowerToolsCache"), FolderValidator())
     uiTheme = OptionsConfigItem("GeneralSettings", "UiTheme",  Theme.LIGHT, OptionsValidator([ Theme.LIGHT, Theme.DARK]))
-    language = OptionsConfigItem("GeneralSettings", "Language", Language.AUTO, OptionsValidator(Language), LanguageSerializer(), restart=True)
+    language = OptionsConfigItem("GeneralSettings", "Language", Language.AUTO, OptionsValidator(Language), LanguageSerializer())
 
     # 软件设置
     ffmpeg_path = ConfigItem("SoftwareSettings", "FFmpegPath", "", FolderValidator())
@@ -65,7 +65,7 @@ class Config(QConfig):
     localWatermarkRemovalEnabled = ConfigItem("LocalAISettings", "LocalWatermarkRemovalEnabled", False, BoolValidator())
 
     # 高级设置
-    logLevel = OptionsConfigItem("AdvancedSettings", "LogLevel", "WARNING", OptionsValidator(["DEBUG", "INFO", "WARNING", "ERROR"]))
+    logLevel = OptionsConfigItem("AdvancedSettings", "LogLevel", "INFO", OptionsValidator(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]))
 
 
 cfg = Config()
