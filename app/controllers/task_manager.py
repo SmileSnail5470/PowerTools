@@ -1,9 +1,11 @@
 import uuid
+import logging
 import threading
 from typing import Optional, Dict, Callable
 from PySide6.QtCore import QThreadPool, QObject, Signal
 from app.controllers.worker import Worker
 from app.controllers.task_future import TaskFuture
+from app.utils.logger.decorators import log_function_call, log_exception
 
 
 class TaskManager(QObject):
@@ -19,6 +21,8 @@ class TaskManager(QObject):
         self._lock = threading.Lock()
         self._shutting_down = False
 
+    @log_exception(logger=logging.getLogger(), log_args=False, log_result=False)
+    @log_function_call(logger=logging.getLogger(), level=logging.INFO, log_args=True, log_result=False)
     def submit(self, func: Callable, *args, **kwargs) -> TaskFuture:
         """提交一个新任务
         
@@ -121,6 +125,7 @@ class TaskManager(QObject):
         with self._lock:
             self._tasks.clear()
 
+    @log_function_call(logger=logging.getLogger(), level=logging.INFO, log_args=False, log_result=False)
     def close(self):
         """关闭并清理任务管理器"""
         if not self._shutting_down:

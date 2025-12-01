@@ -1,6 +1,7 @@
 import os
 import platform
-from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, Property, QSize, QThreadPool, QRunnable, QObject, QThread
+import subprocess
+from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, Property, QSize, QThreadPool, QRunnable, QObject
 from PySide6.QtWidgets import(
     QHBoxLayout, QWidget, QVBoxLayout, QLabel, QFrame, QLineEdit, QPushButton, QFileDialog, QGroupBox,
     QSizePolicy, QDialog, QProgressBar, QTextEdit
@@ -44,17 +45,24 @@ class InitWorker(QRunnable):
     def cancel(self):
         self.cancelled = True
 
-    def _step(self, msg):
+    def _step(self, task_step: str, msg: str):
         if self.cancelled:
             raise RuntimeError("初始化已被用户取消")
         self.signals.progress.emit(msg)
-        QThread.msleep(800)
+        if task_step == "init-model":
+            pass
+        elif task_step == "init-deps":
+            pass
+        elif task_step == "valid-model":
+            pass
+        else:
+            raise Exception(f"不支持的任务流程 {task_step}")
 
     def run(self):
         try:
-            self._step("正在检查环境依赖…")
-            self._step("正在加载模型文件…")
-            self._step("正在初始化执行引擎…")
+            self._step(task_step="init-model", msg="正在初始化本地模型…")
+            self._step(task_step="init-deps", msg="正在初始化环境依赖…")
+            self._step(task_step="valid-model", msg="正在验证算法环境…")
 
             res = False
 
@@ -311,6 +319,7 @@ class SoftwareCard(QFrame):
         if self.name.lower() == "ffmpeg":
             ffmpeg_exe = os.path.join(self.path_input.text(), "ffmpeg" if platform.system().lower() != "windows" else "ffmpeg.exe")
             ffprobe_exe = os.path.join(self.path_input.text(), "ffprobe.exe" if platform.system().lower() == "windows" else "ffprobe")
+            exe_list = [ffmpeg_exe, ffprobe_exe]
             files_missing_list = [p for p in [ffmpeg_exe, ffprobe_exe] if not os.path.exists(p)]
             if files_missing_list:
                 self.status = "failed"
@@ -318,11 +327,32 @@ class SoftwareCard(QFrame):
                 color = self._get_status_badge_color()
                 error_msg = "\n".join(f"- 文件 {p} 不存在" for p in files_missing_list)
             else:
-                self.status = "ok"
-                text = "OK"
-                color = self._get_status_badge_color()
+                for exe in exe_list:
+                    if not os.access(exe, os.X_OK):
+                        error_msg += f"- 无执行权限: {exe}\n"
+                    try:
+                        proc = subprocess.run(
+                            [exe, "-version"],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            timeout=1,
+                            creationflags=subprocess.CREATE_NO_WINDOW if platform.system().lower() == "windows" else 0
+                        )
+                        if proc.returncode != 0:
+                            error_msg += f"- {os.path.basename(exe)} 执行失败，可能损坏: {exe}\n"
+                    except subprocess.TimeoutExpired:
+                        error_msg += f"- {os.path.basename(exe)} 执行超时，文件可能不是有效的可执行程序: {exe}\n"
+                    except Exception as e:
+                        error_msg += f"- {os.path.basename(exe)} 无法运行: {exe}\n  错误: {e}\n"
+                if not error_msg:
+                    self.status = "ok"
+                    text = "OK"
+                    color = self._get_status_badge_color()
+                else:
+                    self.status = "failed"
+                    text = "Failed"
+                    color = self._get_status_badge_color()
             self.status_label.setLabel(text=text, color=color)
-
         if error_msg:
             TeachingTip.create(
                 target=self.status_label,
@@ -331,7 +361,7 @@ class SoftwareCard(QFrame):
                 content=self.tr(error_msg),
                 isClosable=True,
                 tailPosition=TeachingTipTailPosition.BOTTOM,
-                duration=2000,
+                duration=3000,
                 parent=self
             )
 
@@ -675,8 +705,8 @@ class Settings(QWidget):
         settings_cards.append(auto_update_card)
 
         self.cache_line_edit = QLineEdit()
+        self.cache_line_edit.setText(cfg.get(cfg.cachePath))
         self.cache_line_edit.textChanged.connect(lambda path: setattr(cfg.cachePath, "value", path))
-        self.cache_line_edit.setPlaceholderText(self.tr(f"请配置软件缓存文件保存路径"))
         setFont(self.cache_line_edit, 14)
         self.cache_line_edit.setStyleSheet("""
             QLineEdit {
@@ -757,7 +787,7 @@ class Settings(QWidget):
         self._bind_ai_toggle(
             switch=blind_watermark_switch,
             badge=blind_watermark_status,
-            config_attr="localBlindWatermarkEnabled"
+            local_ai_type="blind_watermark_addition"
         )
         blind_watermark_card = CustomCardGroupWidget(title=self.tr("盲水印AI能力"), content=self.tr("为图像添加不可见的数字水印，保护版权"), parent=self)
         blind_watermark_card.addWidget(blind_watermark_status, stretch=0)
@@ -771,7 +801,7 @@ class Settings(QWidget):
         self._bind_ai_toggle(
             switch=watermark_removal_switch,
             badge=watermark_removal_status,
-            config_attr="localWatermarkRemovalEnabled"
+            local_ai_type="visible_watermark_removal"
         )
         watermark_removal_card = CustomCardGroupWidget(title=self.tr("水印去除AI能力"), content=self.tr("智能去除图像中的水印和标志"), parent=self)
         watermark_removal_card.addWidget(watermark_removal_status, stretch=0)
@@ -790,9 +820,9 @@ class Settings(QWidget):
 
         log_level_combox = ComboBox()
         current_level = cfg.get(cfg.logLevel)
-        log_level_combox.currentTextChanged.connect(lambda text: setattr(cfg.logLevel, "value", text.upper()))
         setFont(log_level_combox, 14)
         log_level_combox.addItems(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+        log_level_combox.currentTextChanged.connect(lambda text: setattr(cfg.logLevel, "value", text.upper()))
         index = log_level_combox.findText(current_level.upper() if isinstance(current_level, str) else current_level)
         if index >= 0:
             log_level_combox.setCurrentIndex(index)
@@ -835,13 +865,13 @@ class Settings(QWidget):
             }}
         """
     
-    def _bind_ai_toggle(self, switch: ToggleSwitch, badge: StatusBadge, config_attr):
+    def _bind_ai_toggle(self, switch: ToggleSwitch, badge: StatusBadge, local_ai_type: str):
         switch.toggled.connect(
-            lambda flag, switch=switch, badge=badge, config_attr=config_attr: 
-            self._ai_switch_on_toggle(flag=flag, switch=switch, badge=badge, config_attr=config_attr)
+            lambda flag, switch=switch, badge=badge, local_ai_type=local_ai_type: 
+            self._ai_switch_on_toggle(flag=flag, switch=switch, badge=badge, local_ai_type=local_ai_type)
         )
 
-    def _ai_switch_on_toggle(self, flag: bool, switch: ToggleSwitch, badge: StatusBadge, config_attr: str):
+    def _ai_switch_on_toggle(self, flag: bool, switch: ToggleSwitch, badge: StatusBadge, local_ai_type: str):
         if flag:
             badge.setLabel(text=self.tr("环境初始化中…"), color="#60a5fa")
 
@@ -849,7 +879,7 @@ class Settings(QWidget):
             progress_dialog.disableCloseBtn()
             progress_dialog.show()
 
-            worker = InitWorker(task_name=config_attr, parent=progress_dialog)
+            worker = InitWorker(task_name=local_ai_type, parent=progress_dialog)
             worker.signals.progress.connect(progress_dialog.append_log)
             worker.signals.finished.connect(
                 lambda ok, msg, switch=switch, badge=badge, progress_dialog=progress_dialog: 

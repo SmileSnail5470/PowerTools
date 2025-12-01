@@ -14,6 +14,7 @@ from app.ui.library.qfluentwidgets import FluentTranslator
 
 from app.configs.config import UpdateFontFamilies
 from app.utils.logger import init_logging
+from app.utils.logger.exceptions import log_unhandled_exceptions
 
 
 def main():
@@ -21,6 +22,7 @@ def main():
     log_dir = os.path.join(cfg.get(cfg.cachePath), "logs")
     log_manager = init_logging(log_dir=log_dir, level=log_level)
     logger = log_manager.get_logger(name="UI")
+    log_unhandled_exceptions(logger=logger)
     logger.info("Start PowerTools...")
     
     # Update font families before starting the application

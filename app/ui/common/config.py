@@ -5,7 +5,7 @@ from enum import Enum
 
 from PySide6.QtCore import QLocale
 from app.ui.library.qfluentwidgets import (
-    qconfig, QConfig, ConfigItem, OptionsConfigItem, BoolValidator, OptionsValidator, RangeConfigItem, 
+    QConfig, ConfigItem, OptionsConfigItem, BoolValidator, OptionsValidator, RangeConfigItem, 
     RangeValidator, Theme, ConfigSerializer, FolderValidator
 )
 
@@ -59,7 +59,8 @@ class Config(QConfig):
     ffmpeg_path.valueChanged.connect(update_ffmpeg_path)
 
     # 本地AI设置
-    localAIModelDeps = ConfigItem("LocalAISettings", "LocalAIModelDeps", os.path.join(pathlib.Path.home(), ".powertools", "local_ai_models"), FolderValidator())
+    os.environ["POWERTOOLS_LOCAL_AI_MODEL_DEPS"] = os.path.join(pathlib.Path.home(), "PowerToolsCache", "deps")
+    localAIModelDeps = ConfigItem("LocalAISettings", "LocalAIModelDeps", os.path.join(pathlib.Path.home(), "PowerToolsCache", "deps"), FolderValidator())
     localAIModelDeps.valueChanged.connect(lambda path: os.environ.update({"POWERTOOLS_LOCAL_AI_MODEL_DEPS": path}))
     localBlindWatermarkEnabled = ConfigItem("LocalAISettings", "LocalBlindWatermarkEnabled", False, BoolValidator())
     localWatermarkRemovalEnabled = ConfigItem("LocalAISettings", "LocalWatermarkRemovalEnabled", False, BoolValidator())
@@ -70,4 +71,3 @@ class Config(QConfig):
 
 cfg = Config()
 cfg.themeMode.value = Theme.LIGHT
-qconfig.load('app/config/config.json', cfg)
