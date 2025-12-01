@@ -2,6 +2,14 @@
     "name": "blind_watermark_addition",
     "version": "1.0.0",
     "enabled": true,
+    "download_url": {
+        "windows": "https://github.com/SmileSnail5470/blind-watermark-addition/actions/runs/19819857297/artifacts/4723239935",
+        "windows_sha256": "5c2f941bbcb65554225631b798accd5bf9eec7e8e35372b57b3bf2f0be5bdbe3",
+        "darwin": "https://github.com/SmileSnail5470/blind-watermark-addition/actions/runs/19819857297/artifacts/4723191502",
+        "darwin_sha256": "f1ea300eff17f5f02dbdfd354c7814cc67d3f8d0dc4f5fa337f46a09725f7ee7",
+        "linux": "https://github.com/SmileSnail5470/blind-watermark-addition/actions/runs/19819857297/artifacts/4723191640",
+        "linux_sha256": "f83ae4b999126d2f89107f69285a839fe90d0a8ee7e744123e0694fe19f7f30d"
+    },
     "python_paths": [
         "${POWERTOOLS_LOCAL_AI_MODEL_DEPS}"
     ],

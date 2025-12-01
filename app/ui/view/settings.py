@@ -1,21 +1,29 @@
+import hashlib
+import logging
 import os
 import platform
+import shutil
+import ssl
 import subprocess
-from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, Property, QSize, QThreadPool, QRunnable, QObject
+import tarfile
+import zipfile
+from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, Property, QSize, QThreadPool, QRunnable, QObject, QThread
 from PySide6.QtWidgets import(
     QHBoxLayout, QWidget, QVBoxLayout, QLabel, QFrame, QLineEdit, QPushButton, QFileDialog, QGroupBox,
     QSizePolicy, QDialog, QProgressBar, QTextEdit
 )
 from PySide6.QtGui import QFont, QColor, QPainter, QPen
+import urllib.request
 
 from app.ui.library.qfluentwidgets import(
     setFont, ScrollArea, TeachingTip, InfoBarIcon, TeachingTipTailPosition, FluentIcon, isDarkTheme,
     BodyLabel, CaptionLabel, ComboBox, Theme
 )
-
 from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.library.qframelesswindow.titlebar import CloseButton
 from app.ui.common.config import cfg, Language
+from app.workers.algorithm_manager import global_algorithm_manager
+from app.utils.logger.decorators import log_exception, log_function_call
 
 
 theme_map = {
@@ -26,6 +34,7 @@ language_map = {
     "简体中文": Language.CHINESE_SIMPLIFIED,
     "英语": Language.ENGLISH
 }
+logger = logging.getLogger("UI")
 
 class WorkerSignals(QObject):
     progress = Signal(str)
@@ -41,16 +50,155 @@ class InitWorker(QRunnable):
         self.task_name = task_name
         self.signals = WorkerSignals(parent=parent)
         self.cancelled = False
+        self.medata = global_algorithm_manager.get_descriptor(self.task_name)
+        self.deps_path = cfg.localAIModelDeps
 
     def cancel(self):
         self.cancelled = True
 
+    def _sha256_of_file(self, path: str):
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for blk in iter(lambda: f.read(1024 * 1024), b""):
+                h.update(blk)
+        return h.hexdigest()
+    
+    def _extract_if_needed(self, file_path: str, output_dir: str):
+        lower = file_path.lower()
+        if lower.endswith(".zip"):
+            with zipfile.ZipFile(file_path, "r") as zf:
+                zf.extractall(output_dir)
+        elif lower.endswith(".tar.gz") or lower.endswith(".tgz"):
+            with tarfile.open(file_path, "r:gz") as tf:
+                tf.extractall(output_dir)
+        return output_dir
+    
+    def _download(self, url, output_path, expected_size=None, expected_sha256="", extract_to=None):
+        max_retries = 3
+        backoff = 0.5
+        chunk_size = 1024 * 512
+        temp_path = output_path + ".part"
+        downloaded = 0
+
+        if os.path.exists(temp_path):
+            downloaded = os.path.getsize(temp_path)
+
+        context = ssl._create_unverified_context()
+        for attempt in range(1, max_retries + 1):
+            try:
+                headers = {}
+                if downloaded > 0:
+                    headers["Range"] = f"bytes={downloaded}-"
+
+                req = urllib.request.Request(url, headers=headers)
+
+                with urllib.request.urlopen(req, context=context) as resp:
+                    with open(temp_path, "ab") as f:
+                        while True:
+                            chunk = resp.read(chunk_size)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                break
+            except Exception as e:
+                if attempt >= max_retries:
+                    raise Exception(f"download failed: {e}")
+                wait = backoff * (2 ** (attempt - 1))
+                QThread.msleep(wait * 1000)
+
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        os.rename(temp_path, output_path)
+
+        if expected_size is not None:
+            actual_size = os.path.getsize(output_path)
+            if actual_size != expected_size:
+                raise Exception(f"download file size check failed: expected {expected_size}, actual {actual_size}")
+
+        if expected_sha256 is not None:
+            actual_sha256 = self._sha256_of_file(output_path)
+            if actual_sha256.lower() != expected_sha256.lower():
+                raise Exception(f"SHA256 check failed: \n Expected: {expected_sha256}\n Actual: {actual_sha256}")
+
+        if extract_to:
+            os.makedirs(extract_to, exist_ok=True)
+            self._extract_if_needed(output_path, extract_to)
+            os.remove(output_path)
+
+    @log_function_call(logger=logging.getLogger("UI"), level=logging.INFO)
+    def _download_model(self):
+        for item in os.listdir(self.medata.base_path):
+            path = os.path.join(self.medata.base_path, item)
+            if item.startswith("manifest"):
+                continue
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
+        logger.info(f"start download {self.task_name} model.")
+        download_url = self.medata.manifest.get("download_url", None)
+        if not download_url:
+            raise Exception(f"{self.task_name} manifest not have download_url config")
+        sysname = platform.system().lower()
+        url = download_url.get(sysname, None)
+        if not url:
+            raise Exception(f"{self.task_name} manifest download_url not have {sysname} url")
+        self._download(
+            url=url,
+            output_path=os.path.join(self.medata.base_path, "blind_watermark.zip"),
+            expected_sha256=download_url[sysname + "_sha256"],
+            extract_to=self.medata.base_path
+        )
+        logger.info(f"download {self.task_name} model success.")
+
+    def _init_model(self):
+        all_capabilities = self.medata.get_capabilities()
+        if not all_capabilities:
+            raise Exception(f"{self.task_name} model medata not have capabilities.")
+        need_download = False
+        for capability in all_capabilities:
+            entry = self.medata.get_python_method_metadata(capability=capability)
+            module_name = entry["module"].split(".")[-1] + ".pyd" if platform.system().lower() == "windows" else ".so"
+            module_path = os.path.join(self.medata.base_path, module_name)
+            if not os.path.exists(module_path):
+                need_download = True
+                break
+            try:
+                self.medata.create_instance(capability=capability)
+            except Exception:
+                need_download = True
+                break
+        if not need_download:
+            return
+        
+        self._download_model()
+
+        for capability in all_capabilities:
+            entry = self.medata.get_python_method_metadata(capability=capability)
+            module_name = entry["module"].split(".")[-1] + ".pyd" if platform.system().lower() == "windows" else ".so"
+            module_path = os.path.join(self.medata.base_path, module_name)
+            if os.path.exists(module_path):
+                continue
+            for item in os.listdir(self.medata.base_path):
+                if module_name not in item:
+                    continue
+                src_path = os.path.join(self.medata.base_path, item)
+                os.rename(src_path, module_path)
+
+    def _init_deps(self):
+        pass
+
+    def _valid_model(self):
+        pass
+
+    @log_exception(logger=logging.getLogger("UI"), reraise=True)
     def _step(self, task_step: str, msg: str):
         if self.cancelled:
             raise RuntimeError("初始化已被用户取消")
         self.signals.progress.emit(msg)
         if task_step == "init-model":
-            pass
+            self._init_model()
         elif task_step == "init-deps":
             pass
         elif task_step == "valid-model":

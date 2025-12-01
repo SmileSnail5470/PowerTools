@@ -22,6 +22,9 @@ class AlgorithmDescriptor:
     def supports(self, capability: str) -> bool:
         capabilities: Iterable[str] = self.manifest.get("capabilities", [])
         return capability in capabilities
+    
+    def get_capabilities(self):
+        return self.manifest.get("capabilities", [])
 
     def get_python_method_metadata(self, capability: str) -> Dict[str, Any]:
         entry_points = self.manifest.get("entry_points", {})
