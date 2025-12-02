@@ -140,7 +140,7 @@ class InitWorker(QRunnable):
         download_urls = self.medata.manifest.get("download_urls", None)
         if not download_urls:
             raise Exception(f"{self.task_name} manifest not have download_url config")
-        sysname = platform.system().lower() + f"_{platform.machine().lower()}" if platform.system().lower() == "darwin" else ""
+        sysname = platform.system().lower() + (f"_{platform.machine().lower()}" if platform.system().lower() == "darwin" else "")
         resources_url = download_urls.get(sysname, None)
         if not resources_url:
             raise Exception(f"{self.task_name} manifest download_url not have {sysname} resources url")
@@ -176,12 +176,12 @@ class InitWorker(QRunnable):
 
         for capability in all_capabilities:
             entry = self.medata.get_python_method_metadata(capability=capability)
-            module_name = entry["module"].split(".")[-1] + ".pyd" if platform.system().lower() == "windows" else ".so"
+            module_name = entry["module"].split(".")[-1] + (".pyd" if platform.system().lower() == "windows" else ".so")
             module_path = os.path.join(self.medata.base_path, module_name)
             if os.path.exists(module_path):
                 continue
             for item in os.listdir(self.medata.base_path):
-                if module_name not in item:
+                if entry["module"].split(".")[-1] not in item:
                     continue
                 src_path = os.path.join(self.medata.base_path, item)
                 os.rename(src_path, module_path)
