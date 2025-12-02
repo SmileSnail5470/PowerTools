@@ -127,7 +127,7 @@ class InitWorker(QRunnable):
             os.remove(output_path)
 
     @log_function_call(logger=logging.getLogger("UI"), level=logging.INFO)
-    def _download_model(self):
+    def _download_module(self):
         for item in os.listdir(self.medata.base_path):
             path = os.path.join(self.medata.base_path, item)
             if item.startswith("manifest"):
@@ -136,21 +136,21 @@ class InitWorker(QRunnable):
                 shutil.rmtree(path)
             else:
                 os.remove(path)
-        logger.info(f"start download {self.task_name} model.")
-        download_url = self.medata.manifest.get("download_url", None)
-        if not download_url:
+        logger.info(f"start download {self.task_name} module.")
+        download_urls = self.medata.manifest.get("download_urls", None)
+        if not download_urls:
             raise Exception(f"{self.task_name} manifest not have download_url config")
-        sysname = platform.system().lower()
-        url = download_url.get(sysname, None)
-        if not url:
-            raise Exception(f"{self.task_name} manifest download_url not have {sysname} url")
+        sysname = platform.system().lower() + f"_{platform.machine().lower()}" if platform.system().lower() == "darwin" else ""
+        resources_url = download_urls.get(sysname, None)
+        if not resources_url:
+            raise Exception(f"{self.task_name} manifest download_url not have {sysname} resources url")
         self._download(
-            url=url,
+            url=resources_url["module"]["url"],
             output_path=os.path.join(self.medata.base_path, "blind_watermark.zip"),
-            expected_sha256=download_url[sysname + "_sha256"],
+            expected_sha256=resources_url["module"]["sha256"],
             extract_to=self.medata.base_path
         )
-        logger.info(f"download {self.task_name} model success.")
+        logger.info(f"download {self.task_name} module success.")
 
     def _init_model(self):
         all_capabilities = self.medata.get_capabilities()
@@ -172,7 +172,7 @@ class InitWorker(QRunnable):
         if not need_download:
             return
         
-        self._download_model()
+        self._download_module()
 
         for capability in all_capabilities:
             entry = self.medata.get_python_method_metadata(capability=capability)
@@ -200,9 +200,9 @@ class InitWorker(QRunnable):
         if task_step == "init-model":
             self._init_model()
         elif task_step == "init-deps":
-            pass
+            self._init_deps()
         elif task_step == "valid-model":
-            pass
+            self._valid_model()
         else:
             raise Exception(f"不支持的任务流程 {task_step}")
 

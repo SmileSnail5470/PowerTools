@@ -60,8 +60,8 @@ def log_exception(
                         'exception_type': exc_type,
                         'exception_message': exc_msg,
                         'traceback': exc_tb,
-                        'args': args if log_args else None,
-                        'kwargs': kwargs if log_args else None,
+                        'function_args': args if log_args else None,
+                        'function_kwargs': kwargs if log_args else None,
                     }
                 )              
                 if reraise:
@@ -139,7 +139,7 @@ def log_performance(
                     extra={
                         'duration': duration,
                         'function_name': func_name,
-                        'exception': str(e),
+                        'exception_info': str(e),
                     }
                 )
                 raise
@@ -243,7 +243,7 @@ class PerformanceTimer:
             if exc_type is not None:
                 self.logger.warning(
                     f"{log_msg} (Exception: {exc_type.__name__})",
-                    extra={'duration': duration, 'exception': exc_type.__name__}
+                    extra={'duration': duration, 'exception_info': exc_type.__name__}
                 )
             else:
                 self.logger.info(log_msg, extra={'duration': duration})

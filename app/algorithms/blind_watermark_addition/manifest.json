@@ -2,13 +2,47 @@
     "name": "blind_watermark_addition",
     "version": "1.0.0",
     "enabled": true,
-    "download_url": {
-        "windows": "https://github.com/SmileSnail5470/blind-watermark-addition/actions/runs/19819857297/artifacts/4723239935",
-        "windows_sha256": "5c2f941bbcb65554225631b798accd5bf9eec7e8e35372b57b3bf2f0be5bdbe3",
-        "darwin": "https://github.com/SmileSnail5470/blind-watermark-addition/actions/runs/19819857297/artifacts/4723191502",
-        "darwin_sha256": "f1ea300eff17f5f02dbdfd354c7814cc67d3f8d0dc4f5fa337f46a09725f7ee7",
-        "linux": "https://github.com/SmileSnail5470/blind-watermark-addition/actions/runs/19819857297/artifacts/4723191640",
-        "linux_sha256": "f83ae4b999126d2f89107f69285a839fe90d0a8ee7e744123e0694fe19f7f30d"
+    "download_urls": {
+        "windows": {
+            "module": {
+                "url": "https://github.com/SmileSnail5470/blind-watermark-addition/actions/runs/19851807710/artifacts/4734695678",
+                "sha256": "7dfb68f9ec91eadcf1340b4778afb732ea213e7d4cdf4fd762ae3c85e615c725"
+            },
+            "deps": {
+                "url": "https://github.com/SmileSnail5470/blind-watermark-addition/actions/runs/19851807710/artifacts/4734698129",
+                "sha256": "b5614f0b0c1c50282fc83f824790f08ceb54903d72da55effc0fba68dddcd81d"
+            }
+        },
+        "darwin_arm64": {
+            "module": {
+                "url": "https://github.com/SmileSnail5470/blind-watermark-addition/actions/runs/19851807710/artifacts/4734660144",
+                "sha256": "099a7a5f6dc5cc34e1d7c41668e94310f27679a73e50d384077ae11c9a0584fa"
+            },
+            "deps": {
+                "url": "https://github.com/SmileSnail5470/blind-watermark-addition/actions/runs/19851807710/artifacts/4734661397",
+                "sha256": "b9a50fb905f8512c5a7dcb5c064b00d69793c706a31aee377ad664968aa662f1"
+            }
+        },
+        "darwin_x86_64": {
+            "module": {
+                "url": "https://github.com/SmileSnail5470/blind-watermark-addition/actions/runs/19851807710/artifacts/4734657025",
+                "sha256": "66e311e301933185e93bbf48e2bd901e874a0d4741f6a2ec8e787217bb5455c6"
+            },
+            "deps": {
+                "url": "https://github.com/SmileSnail5470/blind-watermark-addition/actions/runs/19851807710/artifacts/4734659779",
+                "sha256": "9a9f05794b253d29fe388afb1807018dc8fff6bc458810b9163623a928ea9a02"
+            }
+        },
+        "linux": {
+            "module": {
+                "url": "https://github.com/SmileSnail5470/blind-watermark-addition/actions/runs/19851807710/artifacts/4734682203",
+                "sha256": "51a1802600cec53c1767f322ebe0f98fb58e5019b64c36dcdf47fb6ebd54cc46"
+            },
+            "deps": {
+                "url": "https://github.com/SmileSnail5470/blind-watermark-addition/actions/runs/19851807710/artifacts/4734701384",
+                "sha256": "f0d051bd64cda52a76e654754154195f431cc6ec1e39bd26f6421df553ddb750"
+            }
+        }
     },
     "python_paths": [
         "${POWERTOOLS_LOCAL_AI_MODEL_DEPS}"
