@@ -5,8 +5,12 @@ import platform
 import shutil
 import ssl
 import subprocess
+import sys
 import tarfile
 import zipfile
+from importlib.metadata import version, PackageNotFoundError
+from packaging.requirements import Requirement
+from packaging.version import Version
 from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, Property, QSize, QThreadPool, QRunnable, QObject, QThread
 from PySide6.QtWidgets import(
     QHBoxLayout, QWidget, QVBoxLayout, QLabel, QFrame, QLineEdit, QPushButton, QFileDialog, QGroupBox,
@@ -27,8 +31,8 @@ from app.utils.logger.decorators import log_exception, log_function_call
 
 
 theme_map = {
-    "浅色": Theme.LIGHT,
-    "深色": Theme.DARK
+    "浅色": Theme.LIGHT.value,
+    "深色": Theme.DARK.value
 }
 language_map = {
     "简体中文": Language.CHINESE_SIMPLIFIED,
@@ -51,7 +55,7 @@ class InitWorker(QRunnable):
         self.signals = WorkerSignals(parent=parent)
         self.cancelled = False
         self.medata = global_algorithm_manager.get_descriptor(self.task_name)
-        self.deps_path = cfg.localAIModelDeps
+        self.deps_path = cfg.get(cfg.localAIModelDeps)
 
     def cancel(self):
         self.cancelled = True
@@ -153,27 +157,18 @@ class InitWorker(QRunnable):
         logger.info(f"download {self.task_name} module success.")
 
     def _init_model(self):
-        all_capabilities = self.medata.get_capabilities()
-        if not all_capabilities:
-            raise Exception(f"{self.task_name} model medata not have capabilities.")
         need_download = False
-        for capability in all_capabilities:
-            entry = self.medata.get_python_method_metadata(capability=capability)
-            module_name = entry["module"].split(".")[-1] + ".pyd" if platform.system().lower() == "windows" else ".so"
-            module_path = os.path.join(self.medata.base_path, module_name)
-            if not os.path.exists(module_path):
-                need_download = True
-                break
-            try:
-                self.medata.create_instance(capability=capability)
-            except Exception:
-                need_download = True
-                break
+        try:
+            self._valid_model()
+        except Exception:
+            need_download = True
+
         if not need_download:
             return
         
         self._download_module()
 
+        all_capabilities = self.medata.get_capabilities()
         for capability in all_capabilities:
             entry = self.medata.get_python_method_metadata(capability=capability)
             module_name = entry["module"].split(".")[-1] + (".pyd" if platform.system().lower() == "windows" else ".so")
@@ -186,39 +181,125 @@ class InitWorker(QRunnable):
                 src_path = os.path.join(self.medata.base_path, item)
                 os.rename(src_path, module_path)
 
+    def _need_install_requirements(self, requirements_path: str) -> bool:
+        with open(requirements_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+
+                req = Requirement(line)
+                if req.marker and not req.marker.evaluate():
+                    continue
+
+                try:
+                    installed_ver = version(req.name)
+                except PackageNotFoundError:
+                    return True
+
+                if req.specifier and not req.specifier.contains(Version(installed_ver), prereleases=True):
+                    return True
+        return False
+
     def _init_deps(self):
-        pass
+        download_urls = self.medata.manifest.get("download_urls", None)
+        if not download_urls:
+            return
+        sysname = platform.system().lower() + (f"_{platform.machine().lower()}" if platform.system().lower() == "darwin" else "")
+        resources_url = download_urls.get(sysname, None)
+        if not resources_url:
+            raise Exception(f"{self.task_name} manifest download_url not have {sysname} resources url")
+        requirements_path = os.path.join(self.medata.base_path, "requirements.txt")
+        if "deps" in resources_url and not os.path.exists(requirements_path):
+            raise Exception(f"{self.task_name} module has not requirements.txt file")
+        if "deps" in resources_url:
+            # 处理 pip 包依赖
+            if self.deps_path not in sys.path:
+                sys.path.insert(0, str(self.deps_path))
+            if self._need_install_requirements(requirements_path):
+                cache_path = os.path.join(cfg.cachePath.value, "deps_temp")
+                os.makedirs(cache_path, exist_ok=True)
+                try:
+                    self._download(
+                        url=resources_url["deps"]["url"],
+                        output_path=os.path.join(cache_path, "blind_watermark_deps.zip"),
+                        expected_sha256=resources_url["deps"]["sha256"],
+                        extract_to=cache_path
+                    )
+                    cmd = [
+                        sys.executable,"-m", "pip", "install", "--no-index",
+                        f"--find-links={cache_path}",
+                        "-t", str(self.deps_path),
+                        "-r", str(requirements_path),
+                    ]
+                    create_flags = 0 if platform.system().lower() != "windows" else subprocess.CREATE_NO_WINDOW
+                    subprocess.check_call(cmd, creationflags=create_flags)
+                finally:
+                    shutil.rmtree(cache_path)
+        # 处理其它的资源下载
+        if "additional_resources" not in resources_url:
+            return
+        additional_resources_dir = os.path.join(os.path.dirname(self.deps_path), "resources", self.task_name)
+        os.makedirs(additional_resources_dir, exist_ok=True)
+        for item in resources_url["additional_resources"]:
+            self._download(
+                url=item["url"],
+                output_path=os.path.join(additional_resources_dir, "additional_resources_dir.zip"),
+                expected_sha256=item["sha256"],
+                extract_to=additional_resources_dir
+            )
 
     def _valid_model(self):
-        pass
+        all_capabilities = self.medata.get_capabilities()
+        if not all_capabilities:
+            raise Exception(f"{self.task_name} module medata not have capabilities.")
+        for capability in all_capabilities:
+            entry = self.medata.get_python_method_metadata(capability=capability)
+            module_name = entry["module"].split(".")[-1] + ".pyd" if platform.system().lower() == "windows" else ".so"
+            module_path = os.path.join(self.medata.base_path, module_name)
+            if not os.path.exists(module_path):
+                raise Exception(f"{module_path} not exists.")
+            try:
+                self.medata.create_instance(capability=capability)
+            except Exception as e:
+                raise Exception(f"create {module_path} instance failed: {e}")
 
-    @log_exception(logger=logging.getLogger("UI"), reraise=True)
+    @log_exception(logger=logging.getLogger("UI"), reraise=True, log_args=True)
     def _step(self, task_step: str, msg: str):
         if self.cancelled:
             raise RuntimeError("初始化已被用户取消")
         self.signals.progress.emit(msg)
         if task_step == "init-model":
-            self._init_model()
+            try:
+                self._init_model()
+            except Exception:
+                raise RuntimeError("初始化本地模型失败")
         elif task_step == "init-deps":
-            self._init_deps()
+            try:
+                self._init_deps()
+            except Exception:
+                raise RuntimeError("初始化环境依赖失败")
         elif task_step == "valid-model":
-            self._valid_model()
+            try:
+                self._valid_model()
+            except Exception:
+                raise RuntimeError("验证算法环境失败")
         else:
             raise Exception(f"不支持的任务流程 {task_step}")
 
     def run(self):
         try:
             self._step(task_step="init-model", msg="正在初始化本地模型…")
+            logger.info(f"Init local module {self.task_name} success.")
+
             self._step(task_step="init-deps", msg="正在初始化环境依赖…")
+            logger.info(f"Init {self.task_name} dependences success.")
+
             self._step(task_step="valid-model", msg="正在验证算法环境…")
+            logger.info(f"Vaild {self.task_name} module success.")
 
-            res = False
-
-            if res:
-                self.signals.progress.emit("环境初始化成功")
-                self.signals.finished.emit(True, "")
-            else:
-                raise RuntimeError("模型文件加载失败：缺失 core.bin")
+            self.signals.progress.emit("环境初始化成功")
+            self.signals.finished.emit(True, "")
 
         except Exception as e:
             self.signals.finished.emit(False, str(e))

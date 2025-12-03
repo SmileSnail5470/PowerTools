@@ -49,6 +49,4 @@ class Worker(QRunnable):
             if not self.future.done:
                 self.future.cancel()
         except Exception as e:
-            # 记录异常堆栈
-            traceback.print_exc()
             self.future.set_exception(e)

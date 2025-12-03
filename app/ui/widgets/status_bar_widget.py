@@ -395,7 +395,7 @@ class FailurePopupWidget(QWidget):
         self.animation.start()
         
     def add_failure(self, filename, reason):
-        item = QListWidgetItem(f"⚠️ {filename} - {reason}")
+        item = QListWidgetItem(f"⚠️ {filename}")
         self.failure_list.addItem(item)
         
     def clear_failures(self):

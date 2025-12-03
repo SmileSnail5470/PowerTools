@@ -10,3 +10,4 @@ xcffib==1.11.2; sys_platform=="linux"
 PyYAML==6.0.3
 QtAwesome==1.4.0
 psutil==7.1.3
+packaging==25.0

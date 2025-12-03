@@ -200,7 +200,7 @@ class AlgorithmManager:
                 path_obj = (Path(__file__).parent / path_obj).resolve()
 
             if os.path.exists(path_obj) and path_obj.is_dir():
-                if path_obj not in sys.path:
-                    sys.path.append(path_obj)
+                if str(path_obj) not in sys.path:
+                    sys.path.append(str(path_obj))
 
 global_algorithm_manager = AlgorithmManager(ALGORITHMS_ROOT)

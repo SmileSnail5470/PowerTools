@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import pathlib
@@ -51,22 +52,51 @@ class Config(QConfig):
     autoStartup = ConfigItem("GeneralSettings", "AutoStartup", False, BoolValidator())
     autoUpdate = ConfigItem("GeneralSettings", "AutoUpdate", False, BoolValidator())
     cachePath = ConfigItem("GeneralSettings", "CachePath", os.path.join(pathlib.Path.home(), "PowerToolsCache"), FolderValidator())
-    uiTheme = OptionsConfigItem("GeneralSettings", "UiTheme",  Theme.LIGHT, OptionsValidator([ Theme.LIGHT, Theme.DARK]))
+    uiTheme = OptionsConfigItem("GeneralSettings", "UiTheme",  Theme.LIGHT.value, OptionsValidator([Theme.LIGHT.value, Theme.DARK.value]))
     language = OptionsConfigItem("GeneralSettings", "Language", Language.AUTO, OptionsValidator(Language), LanguageSerializer())
 
     # 软件设置
     ffmpeg_path = ConfigItem("SoftwareSettings", "FFmpegPath", "", FolderValidator())
-    ffmpeg_path.valueChanged.connect(update_ffmpeg_path)
 
     # 本地AI设置
-    os.environ["POWERTOOLS_LOCAL_AI_MODEL_DEPS"] = os.path.join(pathlib.Path.home(), "PowerToolsCache", "deps")
     localAIModelDeps = ConfigItem("LocalAISettings", "LocalAIModelDeps", os.path.join(pathlib.Path.home(), "PowerToolsCache", "deps"), FolderValidator())
-    localAIModelDeps.valueChanged.connect(lambda path: os.environ.update({"POWERTOOLS_LOCAL_AI_MODEL_DEPS": path}))
     localBlindWatermarkEnabled = ConfigItem("LocalAISettings", "LocalBlindWatermarkEnabled", False, BoolValidator())
     localWatermarkRemovalEnabled = ConfigItem("LocalAISettings", "LocalWatermarkRemovalEnabled", False, BoolValidator())
 
     # 高级设置
     logLevel = OptionsConfigItem("AdvancedSettings", "LogLevel", "INFO", OptionsValidator(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]))
+
+    def __init__(self):
+        super().__init__()
+        self.params = self.toDict()
+        self._config_file = os.path.join(pathlib.Path.home(), ".PowerTools", "settings.json")
+        self._load_config()
+        self._init_connect()
+        
+        self.ffmpeg_path.valueChanged.connect(update_ffmpeg_path)
+        os.environ["POWERTOOLS_LOCAL_AI_MODEL_DEPS"] = os.path.join(pathlib.Path.home(), "PowerToolsCache", "deps")
+        self.localAIModelDeps.valueChanged.connect(lambda path: os.environ.update({"POWERTOOLS_LOCAL_AI_MODEL_DEPS": path}))
+
+    def _init_connect(self):
+        for name in dir(self.__class__):
+            item = getattr(self.__class__, name)
+            if isinstance(item, ConfigItem):
+                item.valueChanged.connect(self._save_config)
+
+    def _load_config(self):
+        if not os.path.exists(self._config_file):
+            os.makedirs(os.path.dirname(self._config_file), exist_ok=True)
+            params = self.params
+            with open(self._config_file, "w") as fp:
+                fp.write(json.dumps(params))
+            return
+        self.load(file=self._config_file)
+
+    def _save_config(self, value):
+        self.params.update(self.toDict())
+
+    def get_settings(self):
+        return self.params
 
 
 cfg = Config()
