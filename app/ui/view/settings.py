@@ -32,11 +32,15 @@ from app.utils.logger.decorators import log_exception, log_function_call
 
 theme_map = {
     "浅色": Theme.LIGHT.value,
-    "深色": Theme.DARK.value
+    "深色": Theme.DARK.value,
+    Theme.LIGHT.value: "浅色",
+    Theme.DARK.value: "深色"
 }
 language_map = {
     "简体中文": Language.CHINESE_SIMPLIFIED,
-    "英语": Language.ENGLISH
+    "英语": Language.ENGLISH,
+    Language.CHINESE_SIMPLIFIED.value.name(): "简体中文",
+    Language.ENGLISH.value.name(): "英语"
 }
 logger = logging.getLogger("UI")
 
@@ -920,6 +924,7 @@ class Settings(QWidget):
         settings = CustomGroupBox(title=self.tr("⚙️ 通用设置"))
         
         auto_start_switch = ToggleSwitch()
+        auto_start_switch.setActive(cfg.get(cfg.autoStartup))
         auto_start_switch.toggled.connect(lambda flag: setattr(cfg.autoStartup, "value", flag))
         auto_start_card = CustomCardGroupWidget(title=self.tr("开机自启动"), content=self.tr("系统启动时自动运行程序"), parent=self)
         auto_start_card.addWidget(auto_start_switch, stretch=0)
@@ -927,6 +932,7 @@ class Settings(QWidget):
         settings_cards.append(auto_start_card)
 
         auto_update_switch = ToggleSwitch()
+        auto_update_switch.setActive(cfg.get(cfg.autoUpdate))
         auto_update_switch.toggled.connect(lambda flag: setattr(cfg.autoUpdate, "value", flag))
         auto_update_card = CustomCardGroupWidget(title=self.tr("自动更新"), content=self.tr("自动检查并安装新版本"), parent=self)
         auto_update_card.addWidget(auto_update_switch, stretch=0)
@@ -959,6 +965,7 @@ class Settings(QWidget):
         settings_cards.append(cache_location_card)
 
         theme_combox = ComboBox()
+        theme_combox.setText(theme_map[cfg.get(cfg.uiTheme)])
         theme_combox.currentTextChanged.connect(lambda text: setattr(cfg.uiTheme, "value", theme_map[text]))
         setFont(theme_combox, 14)
         theme_combox.addItems(["浅色"])
@@ -968,6 +975,7 @@ class Settings(QWidget):
         settings_cards.append(theme_card)
 
         language_combox = ComboBox()
+        language_combox.setText(language_map[cfg.language.serialize()])
         language_combox.currentTextChanged.connect(lambda text: setattr(cfg.language, "value", language_map[text]))
         setFont(language_combox, 14)
         language_combox.addItems(["简体中文"])
@@ -986,6 +994,7 @@ class Settings(QWidget):
         ai_settings = CustomGroupBox(title=self.tr("🤖 本地AI设置"))
 
         localAIModelDeps_line_edit = QLineEdit()
+        localAIModelDeps_line_edit.setText(cfg.get(cfg.localAIModelDeps))
         localAIModelDeps_line_edit.textChanged.connect(lambda path: setattr(cfg.localAIModelDeps, "value", path))
         localAIModelDeps_line_edit.setPlaceholderText(self.tr(f"请配置本地AI模型依赖保存路径"))
         setFont(localAIModelDeps_line_edit, 14)

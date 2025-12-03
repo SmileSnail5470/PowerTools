@@ -129,6 +129,7 @@ class MainWindow(FluentWindow):
             self.splashScreen.resize(self.size())
 
     def closeEvent(self, e):
+        cfg.save_config()
         self.themeListener.terminate()
         self.themeListener.deleteLater()
         from app.controllers.task_manager import global_task_manager
