@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 import sys
 from typing import Optional, Dict
 from .config import LogConfig, LOG_LEVELS
@@ -113,6 +114,30 @@ class LogManager:
     
     def get_qt_handler(self) -> Optional[QtLogHandler]:
         return self._qt_handler
+    
+    def update_log_dir(self, new_dir: str):
+        """动态更新日志目录
+        
+        Args:
+            new_dir: 新的日志目录
+        """
+        old_dir = self.config.log_dir
+        if old_dir == new_dir:
+            return
+        
+        self.config.log_dir = new_dir
+        
+        file_handlers = ['main_file', 'error_file', 'performance_file']
+        for name in file_handlers:
+            handler = self._handlers.get(name)
+            if handler:
+                old_path = Path(handler.baseFilename)
+                new_path = Path(new_dir) / old_path.name
+                
+                handler.baseFilename = str(new_path)
+                
+                handler.stream.close()
+                handler.stream = handler._open()
     
     def update_level(self, level: str):
         """更新日志级别

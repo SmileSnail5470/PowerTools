@@ -27,6 +27,7 @@ from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.library.qframelesswindow.titlebar import CloseButton
 from app.ui.common.config import cfg, Language
 from app.workers.algorithm_manager import global_algorithm_manager
+from app.utils.logger import get_log_manager
 from app.utils.logger.decorators import log_exception, log_function_call
 
 
@@ -58,11 +59,23 @@ class InitWorker(QRunnable):
         self.task_name = task_name
         self.signals = WorkerSignals(parent=parent)
         self.cancelled = False
-        self.medata = global_algorithm_manager.get_descriptor(self.task_name)
         self.deps_path = cfg.get(cfg.localAIModelDeps)
 
     def cancel(self):
         self.cancelled = True
+
+    def _clear_sys_path(self):
+        local_settings = cfg.get_local_settings()
+        if not local_settings:
+            local_deps_path = self.deps_path
+        else:
+            local_deps_path = local_settings["LocalAISettings"]["LocalAIModelDeps"]
+        if local_deps_path != self.deps_path:
+            if local_deps_path in sys.path:
+                sys.path.remove(local_deps_path)
+                logger.info(f"Remove old deps path {local_deps_path} from sys.path success")
+                return local_deps_path
+        return ""
 
     def _sha256_of_file(self, path: str):
         h = hashlib.sha256()
@@ -244,14 +257,20 @@ class InitWorker(QRunnable):
         if "additional_resources" not in resources_url:
             return
         additional_resources_dir = os.path.join(os.path.dirname(self.deps_path), "resources", self.task_name)
+        if os.path.exists(additional_resources_dir) and os.listdir(additional_resources_dir):
+            return
         os.makedirs(additional_resources_dir, exist_ok=True)
         for item in resources_url["additional_resources"]:
-            self._download(
-                url=item["url"],
-                output_path=os.path.join(additional_resources_dir, "additional_resources_dir.zip"),
-                expected_sha256=item["sha256"],
-                extract_to=additional_resources_dir
-            )
+            try:
+                self._download(
+                    url=item["url"],
+                    output_path=os.path.join(additional_resources_dir, "additional_resources_dir.zip"),
+                    expected_sha256=item["sha256"],
+                    extract_to=additional_resources_dir
+                )
+            except Exception:
+                shutil.rmtree(additional_resources_dir)
+                raise
 
     def _valid_model(self):
         all_capabilities = self.medata.get_capabilities()
@@ -293,6 +312,14 @@ class InitWorker(QRunnable):
 
     def run(self):
         try:
+            try:
+                global_algorithm_manager.reload()
+                self.medata = global_algorithm_manager.get_descriptor(self.task_name)
+            except Exception:
+                raise RuntimeError(f"获取 {self.task_name} 算法模块信息失败.")
+            
+            old_deps_path = self._clear_sys_path()
+
             self._step(task_step="init-model", msg="正在初始化本地模型…")
             logger.info(f"Init local module {self.task_name} success.")
 
@@ -302,6 +329,15 @@ class InitWorker(QRunnable):
             self._step(task_step="valid-model", msg="正在验证算法环境…")
             logger.info(f"Vaild {self.task_name} module success.")
 
+            # 删除旧路径下的环境依赖
+            if old_deps_path and os.path.exists(old_deps_path):
+                shutil.rmtree(old_deps_path)
+                resource_path = os.path.join(os.path.dirname(old_deps_path), "resources", self.task_name)
+                if os.path.exists(resource_path):
+                    shutil.rmtree(old_deps_path)
+                    logger.info(f"Clear {resource_path} success.")
+                logger.info(f"Clear {old_deps_path} success.")
+
             self.signals.progress.emit("环境初始化成功")
             self.signals.finished.emit(True, "")
 
@@ -310,8 +346,9 @@ class InitWorker(QRunnable):
 
 
 class StatusBadge(QWidget):
-    def __init__(self, text: str, color: str, parent=None):
+    def __init__(self, text: str, color: str, parent=None, name=""):
         super().__init__(parent)
+        self.name = name
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -422,12 +459,23 @@ class InitProgressDialog(QDialog):
 
 
 class SoftwareCard(QFrame):
+    global_config_params_name_map = {}
+
     def __init__(self, name: str, icon: dict, description: str, status: str, parent=None):
         super().__init__(parent)
         self.setObjectName("softwareCard")
         self.name = name
         self.status = status
+        self._register_cfg()
         self._setup_ui(icon, description)
+
+    def _register_cfg(self):
+        """注册和全局参数配置中心绑定关系.
+        
+        后续新增软件配置，这里需要适配
+        """
+        if self.name.lower() == "ffmpeg":
+            self.global_config_params_name_map[self.name.lower()] = cfg.ffmpeg_path
 
     def _setup_ui(self, icon: dict, description: str):
         layout = QVBoxLayout(self)
@@ -468,7 +516,17 @@ class SoftwareCard(QFrame):
 
         path_layout = QHBoxLayout()
         self.path_input = QLineEdit()
-        self.path_input.setPlaceholderText(self.tr(f"请配置 {self.name} 软件路径"))
+        default_path = cfg.get(self.global_config_params_name_map[self.name.lower()])
+        if default_path and default_path != cfg.softwareInvalidPath:
+            self.path_input.setText(default_path)
+            try:
+                text = cfg.get(cfg.additionalParams)["SoftwareSettings"][f"{self.name}_status_info"]["text"]
+                color = cfg.get(cfg.additionalParams)["SoftwareSettings"][f"{self.name}_status_info"]["color"]
+                self.status_label.setLabel(text=text, color=color)
+            except Exception:
+                pass
+        else:
+            self.path_input.setPlaceholderText(self.tr(f"请配置 {self.name} 软件路径"))
         self.path_input.textChanged.connect(self._update_global_config)
         setFont(self.path_input, 14)
         self.path_input.setStyleSheet("""
@@ -586,6 +644,7 @@ class SoftwareCard(QFrame):
                     text = "Failed"
                     color = self._get_status_badge_color()
             self.status_label.setLabel(text=text, color=color)
+            cfg.additionalParams.value.update({"SoftwareSettings": {f"{self.name}_status_info": {"text": text, "color": color}}})
         if error_msg:
             TeachingTip.create(
                 target=self.status_label,
@@ -619,8 +678,13 @@ class SoftwareCard(QFrame):
                 self.path_input.setText(files)
 
     def _update_global_config(self, path: str):
-        if self.name.lower() == "ffmpeg":
-            cfg.ffmpeg_path.value = path
+        self.global_config_params_name_map[self.name.lower()].value = path
+        # 状态提示信息恢复默认
+        text = "未验证"
+        self.status = ""
+        color = self._get_status_badge_color()
+        self.status_label.setLabel(text=text, color=color)
+        cfg.additionalParams.value.update({"SoftwareSettings": {f"{self.name}_status_info": {"text": text, "color": color}}})
 
 class ToggleSwitch(QWidget):
     toggled = Signal(bool)
@@ -942,6 +1006,7 @@ class Settings(QWidget):
         self.cache_line_edit = QLineEdit()
         self.cache_line_edit.setText(cfg.get(cfg.cachePath))
         self.cache_line_edit.textChanged.connect(lambda path: setattr(cfg.cachePath, "value", path))
+        self.cache_line_edit.textChanged.connect(lambda path: get_log_manager().update_log_dir(os.path.join(path, "logs")))
         setFont(self.cache_line_edit, 14)
         self.cache_line_edit.setStyleSheet("""
             QLineEdit {
@@ -990,13 +1055,14 @@ class Settings(QWidget):
         return settings
     
     def _create_local_ai_settings(self):
+        self.ai_toggle_switchs: list[ToggleSwitch] = []
         ai_settings_cards = []
         ai_settings = CustomGroupBox(title=self.tr("🤖 本地AI设置"))
 
         localAIModelDeps_line_edit = QLineEdit()
         localAIModelDeps_line_edit.setText(cfg.get(cfg.localAIModelDeps))
         localAIModelDeps_line_edit.textChanged.connect(lambda path: setattr(cfg.localAIModelDeps, "value", path))
-        localAIModelDeps_line_edit.setPlaceholderText(self.tr(f"请配置本地AI模型依赖保存路径"))
+        localAIModelDeps_line_edit.textChanged.connect(self._update_toggle_switch_off)
         setFont(localAIModelDeps_line_edit, 14)
         localAIModelDeps_line_edit.setStyleSheet("""
             QLineEdit {
@@ -1020,8 +1086,16 @@ class Settings(QWidget):
         ai_settings_cards.append(model_deps_location_card)
         
         blind_watermark_switch = ToggleSwitch()
+        self.ai_toggle_switchs.append(blind_watermark_switch)
+        blind_watermark_switch.setActive(cfg.get(cfg.localBlindWatermarkEnabled))
         blind_watermark_switch.toggled.connect(lambda flag: setattr(cfg.localBlindWatermarkEnabled, "value", flag))
-        blind_watermark_status = StatusBadge(text=self.tr("未启用"), color="#eab308")
+        blind_watermark_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="blind_watermark_addition")
+        try:
+            text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{blind_watermark_status.name}_status_info"]["text"]
+            color = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{blind_watermark_status.name}_status_info"]["color"]
+            blind_watermark_status.setLabel(text=text, color=color)
+        except Exception:
+            pass
         self._bind_ai_toggle(
             switch=blind_watermark_switch,
             badge=blind_watermark_status,
@@ -1034,8 +1108,16 @@ class Settings(QWidget):
         ai_settings_cards.append(blind_watermark_card)
 
         watermark_removal_switch = ToggleSwitch()
+        self.ai_toggle_switchs.append(watermark_removal_switch)
+        watermark_removal_switch.setActive(cfg.get(cfg.localWatermarkRemovalEnabled))
         watermark_removal_switch.toggled.connect(lambda flag: setattr(cfg.localWatermarkRemovalEnabled, "value", flag))
-        watermark_removal_status = StatusBadge(text=self.tr("未启用"), color="#eab308")
+        watermark_removal_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="watermark_removal")
+        try:
+            text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{watermark_removal_status.name}_status_info"]["text"]
+            color = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{watermark_removal_status.name}_status_info"]["color"]
+            watermark_removal_status.setLabel(text=text, color=color)
+        except Exception:
+            pass
         self._bind_ai_toggle(
             switch=watermark_removal_switch,
             badge=watermark_removal_status,
@@ -1103,6 +1185,13 @@ class Settings(QWidget):
             }}
         """
     
+    def _update_toggle_switch_off(self, value):
+        for switch in self.ai_toggle_switchs:
+            old_active = switch.isActive()
+            switch.setActive(False)
+            if old_active is False:
+                switch.toggled.emit(False)
+    
     def _bind_ai_toggle(self, switch: ToggleSwitch, badge: StatusBadge, local_ai_type: str):
         switch.toggled.connect(
             lambda flag, switch=switch, badge=badge, local_ai_type=local_ai_type: 
@@ -1136,10 +1225,12 @@ class Settings(QWidget):
         ):
         if ok:
             badge.setLabel(text=self.tr("已启用"), color="#22c55e")
+            cfg.additionalParams.value.update({"LocalAISettings": {f"{badge.name}_status_info": {"text": self.tr("已启用"), "color": "#22c55e"}}})
             progress_dialog.accept()
         else:
             switch.setActive(False)
             badge.setLabel(text=self.tr("启用失败"), color="#ef4444")
+            cfg.additionalParams.value.update({"LocalAISettings": {f"{badge.name}_status_info": {"text": self.tr("启用失败"), "color": "#ef4444"}}})
             progress_dialog.enableCloseBtn()
             progress_dialog.append_log(f"\n❌ 错误信息：{error}")
             progress_dialog.progress.setRange(0, 1)

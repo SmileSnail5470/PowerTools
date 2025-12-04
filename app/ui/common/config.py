@@ -41,6 +41,9 @@ def update_ffmpeg_path(path: str):
 
 class Config(QConfig):
     """ Config of application """
+    softwareInvalidPath = os.path.join(pathlib.Path.home(), ".PowerTools")
+    additionalParams = ConfigItem("AdditionalSettings", "additionalParams", {})
+
     # main window
     micaEnabled = ConfigItem("MainWindow", "MicaEnabled", isWin11(), BoolValidator())
     dpiScale = OptionsConfigItem("MainWindow", "DpiScale", "Auto", OptionsValidator([1, 1.25, 1.5, 1.75, 2, "Auto"]))
@@ -56,7 +59,7 @@ class Config(QConfig):
     language = OptionsConfigItem("GeneralSettings", "Language", Language.CHINESE_SIMPLIFIED, OptionsValidator(Language), LanguageSerializer())
 
     # 软件设置
-    ffmpeg_path = ConfigItem("SoftwareSettings", "FFmpegPath", "", FolderValidator())
+    ffmpeg_path = ConfigItem("SoftwareSettings", "FFmpegPath", softwareInvalidPath, FolderValidator())
 
     # 本地AI设置
     localAIModelDeps = ConfigItem("LocalAISettings", "LocalAIModelDeps", os.path.join(pathlib.Path.home(), "PowerToolsCache", "deps"), FolderValidator())
@@ -74,7 +77,7 @@ class Config(QConfig):
         self._init_connect()
         
         self.ffmpeg_path.valueChanged.connect(update_ffmpeg_path)
-        os.environ["POWERTOOLS_LOCAL_AI_MODEL_DEPS"] = os.path.join(pathlib.Path.home(), "PowerToolsCache", "deps")
+        os.environ["POWERTOOLS_LOCAL_AI_MODEL_DEPS"] = self.get(self.localAIModelDeps)
         self.localAIModelDeps.valueChanged.connect(lambda path: os.environ.update({"POWERTOOLS_LOCAL_AI_MODEL_DEPS": path}))
 
     def _init_connect(self):
@@ -95,6 +98,13 @@ class Config(QConfig):
         os.makedirs(os.path.dirname(self._config_file), exist_ok=True)
         with open(self._config_file, "w") as fp:
             fp.write(json.dumps(self.params))
+
+    def get_local_settings(self):
+        if not os.path.exists(self._config_file):
+            return {}
+        with open(self._config_file, "r") as fp:
+            data = fp.read()
+        return json.loads(data)
 
 
 cfg = Config()
