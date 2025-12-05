@@ -7,5 +7,11 @@ class GlobalEventBus(QObject):
     watermarkAdd_PreviewFile = Signal(str)
     watermarkAdd_ImageNavigationInit = Signal()
 
+    # 水印移除 UI
+    watermarkRemove_InputFileUpdate = Signal(str)
+    watermarkRemove_TaskFinished = Signal(str, str)
+    watermarkRemove_PreviewFile = Signal(str)
+    watermarkRemove_ImageNavigationInit = Signal()
+
 
 global_event_bus = GlobalEventBus()

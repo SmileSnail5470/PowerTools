@@ -11,19 +11,21 @@ import zipfile
 from importlib.metadata import version, PackageNotFoundError
 from packaging.requirements import Requirement
 from packaging.version import Version
-from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, Property, QSize, QThreadPool, QRunnable, QObject, QThread
+from PySide6.QtCore import Qt, Signal, QThreadPool, QRunnable, QObject, QThread
 from PySide6.QtWidgets import(
-    QHBoxLayout, QWidget, QVBoxLayout, QLabel, QFrame, QLineEdit, QPushButton, QFileDialog, QGroupBox,
+    QHBoxLayout, QWidget, QVBoxLayout, QLabel, QFrame, QLineEdit, QPushButton, QFileDialog,
     QSizePolicy, QDialog, QProgressBar, QTextEdit
 )
-from PySide6.QtGui import QFont, QColor, QPainter, QPen
+from PySide6.QtGui import QFont
 import urllib.request
 
 from app.ui.library.qfluentwidgets import(
-    setFont, ScrollArea, TeachingTip, InfoBarIcon, TeachingTipTailPosition, FluentIcon, isDarkTheme,
-    BodyLabel, CaptionLabel, ComboBox, Theme
+    setFont, ScrollArea, TeachingTip, InfoBarIcon, TeachingTipTailPosition, FluentIcon,
+    ComboBox, Theme
 )
 from app.ui.widgets.gradient_header_widget import GradientHeader
+from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget, CustomGroupBox
+from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 from app.ui.library.qframelesswindow.titlebar import CloseButton
 from app.ui.common.config import cfg, Language
 from app.workers.algorithm_manager import global_algorithm_manager
@@ -685,223 +687,6 @@ class SoftwareCard(QFrame):
         color = self._get_status_badge_color()
         self.status_label.setLabel(text=text, color=color)
         cfg.additionalParams.value.update({"SoftwareSettings": {f"{self.name}_status_info": {"text": text, "color": color}}})
-
-class ToggleSwitch(QWidget):
-    toggled = Signal(bool)
-
-    def __init__(self, parent=None, width=44, height=24):
-        super().__init__(parent)
-        self._active = False
-        self._anim_pos = 0.0  # 初始在左边
-        self._animation = QPropertyAnimation(self, b"animPos", self)
-        self._animation.setDuration(150)
-        self._animation.setEasingCurve(QEasingCurve.InOutQuad)
-
-        self._on_color = QColor("#4f46e5")
-        self._off_color = QColor("#d1d5db")
-        self._knob_color = QColor("#ffffff")
-
-        self.setCursor(Qt.PointingHandCursor)
-        self.setFocusPolicy(Qt.StrongFocus)
-        self.setFixedSize(width, height)
-
-    def getAnimPos(self):
-        return self._anim_pos
-
-    def setAnimPos(self, v):
-        self._anim_pos = v
-        self.update()
-
-    animPos = Property(float, getAnimPos, setAnimPos)
-
-    def isActive(self) -> bool:
-        return self._active
-
-    def setActive(self, active: bool, animated: bool = True):
-        if self._active == bool(active):
-            return
-        self._active = bool(active)
-        start = self._anim_pos
-        end = 1.0 if self._active else 0.0
-        self._animation.stop()
-        if animated:
-            self._animation.setStartValue(start)
-            self._animation.setEndValue(end)
-            self._animation.start()
-        else:
-            self._anim_pos = end
-            self.update()
-        self.toggled.emit(self._active)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.setActive(not self._active, animated=True)
-            self.clearFocus()
-            event.accept()
-        else:
-            super().mousePressEvent(event)
-
-    def keyPressEvent(self, event):
-        if event.key() in (Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter):
-            self.setActive(not self._active, animated=True)
-            event.accept()
-        else:
-            super().keyPressEvent(event)
-
-    def sizeHint(self) -> QSize:
-        return QSize(44, 24)
-
-    def paintEvent(self, event):
-        w = self.width()
-        h = self.height()
-        radius = h / 2.0
-        margin = max(2.0, h * 0.08)  # 边距随高度缩放
-        knob_d = h - 2 * margin
-        x_min = margin
-        x_max = w - margin - knob_d
-        knob_x = x_min + (x_max - x_min) * self._anim_pos
-
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-
-        on_rgba = self._on_color
-        off_rgba = self._off_color
-
-        def lerp(a, b, t): 
-            return a + (b - a) * t
-        
-        t = self._anim_pos
-        bg_color = QColor(
-            int(lerp(off_rgba.red(), on_rgba.red(), t)),
-            int(lerp(off_rgba.green(), on_rgba.green(), t)),
-            int(lerp(off_rgba.blue(), on_rgba.blue(), t)),
-            int(lerp(off_rgba.alpha(), on_rgba.alpha(), t))
-        )
-
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(bg_color)
-        painter.drawRoundedRect(0, 0, w, h, radius, radius)
-
-        if self.hasFocus():
-            pen = QPen(QColor(0, 0, 0, 30))
-            pen.setWidthF(max(1.0, h * 0.06))
-            painter.setPen(pen)
-            painter.setBrush(Qt.NoBrush)
-            painter.drawRoundedRect(0.5, 0.5, w - 1, h - 1, radius, radius)
-            painter.setPen(Qt.NoPen)
-
-        painter.setBrush(self._knob_color)
-        painter.drawEllipse(int(knob_x), int(margin), int(knob_d), int(knob_d))
-
-    def toggle(self):
-        self.setActive(not self._active)
-
-class CustomGroupBox(QWidget):
-    def __init__(self, title: str, parent=None):
-        super().__init__(parent=parent)
-
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-
-        self.group = QGroupBox(self.tr(title))
-        setFont(self.group, 18, QFont.Bold)
-
-        self.group.setStyleSheet("""
-            QGroupBox { 
-                background: white; 
-                border: none; 
-                border-radius: 16px; 
-                padding-top: 16px;
-                color:#1a1a1a;
-            }
-            QGroupBox::title {
-                subcontrol-origin: padding;
-                padding: 0 10px;
-                left: 16px;
-            }
-        """)
-
-        self.main_layout = QVBoxLayout(self.group)
-        self.main_layout.setContentsMargins(24, 24, 24, 24)
-        self.main_layout.setSpacing(12)
-
-        outer.addWidget(self.group)
-
-    def addCard(self, card: QWidget, stretch: int = 0):
-        self.main_layout.addWidget(card, stretch)
-
-class CardSeparator(QWidget):
-
-    def __init__(self, parent=None):
-        super().__init__(parent=parent)
-        self.setFixedHeight(3)
-
-    def paintEvent(self, e):
-        painter = QPainter(self)
-        painter.setRenderHints(QPainter.Antialiasing)
-
-        if isDarkTheme():
-            painter.setPen(QColor(255, 255, 255, 46))
-        else:
-            painter.setPen(QColor(0, 0, 0, 12))
-
-        painter.drawLine(2, 1, self.width() - 2, 1)
-
-class CustomCardGroupWidget(QWidget):
-    def __init__(self, title: str, content: str, parent=None):
-        super().__init__(parent=parent)
-        self.vBoxLayout = QVBoxLayout(self)
-        self.hBoxLayout = QHBoxLayout()
-
-        self.titleLabel = BodyLabel(title)
-        self.contentLabel = CaptionLabel(content)
-        self.textLayout = QVBoxLayout()
-
-        self.separator = CardSeparator()
-
-        self.__initWidget()
-
-    def __initWidget(self):
-        self.separator.hide()
-        self.contentLabel.setTextColor(QColor(96, 96, 96), QColor(206, 206, 206))
-
-        self.vBoxLayout.setSpacing(0)
-        self.vBoxLayout.setContentsMargins(0, 0, 0, 0)
-        self.vBoxLayout.addLayout(self.hBoxLayout)
-        self.vBoxLayout.addWidget(self.separator)
-
-        self.textLayout.addWidget(self.titleLabel)
-        self.textLayout.addWidget(self.contentLabel)
-        self.hBoxLayout.addLayout(self.textLayout)
-        self.hBoxLayout.addStretch(1)
-
-        self.hBoxLayout.setSpacing(15)
-        self.hBoxLayout.setContentsMargins(0, 10, 24, 10)
-        self.textLayout.setContentsMargins(0, 0, 0, 0)
-        self.textLayout.setSpacing(0)
-        self.hBoxLayout.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        self.textLayout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-    def title(self):
-        return self.titleLabel.text()
-
-    def setTitle(self, text: str):
-        self.titleLabel.setText(text)
-
-    def content(self):
-        return self.contentLabel.text()
-
-    def setContent(self, text: str):
-        self.contentLabel.setText(text)
-
-    def setSeparatorVisible(self, isVisible: bool):
-        self.separator.setVisible(isVisible)
-
-    def isSeparatorVisible(self):
-        return self.separator.isVisible()
-
-    def addWidget(self, widget: QWidget, stretch=0):
-        self.hBoxLayout.addWidget(widget, stretch=stretch)
 
 class Settings(QWidget):
     thread_pool = QThreadPool.globalInstance()

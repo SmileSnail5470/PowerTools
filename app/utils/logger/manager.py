@@ -1,5 +1,7 @@
 import logging
+import os
 from pathlib import Path
+import shutil
 import sys
 from typing import Optional, Dict
 from .config import LogConfig, LOG_LEVELS
@@ -138,6 +140,9 @@ class LogManager:
                 
                 handler.stream.close()
                 handler.stream = handler._open()
+                
+        if os.path.exists(old_dir):
+            shutil.rmtree(old_dir)
     
     def update_level(self, level: str):
         """更新日志级别
