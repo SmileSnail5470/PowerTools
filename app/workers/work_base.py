@@ -38,10 +38,15 @@ class BaseWorker():
     def file_type(self, input_file):
         return get_file_type(input_file=input_file)
 
-    def _load_python_callable(self, instance: Any, config: dict) -> Callable:
+    def _load_method_callable(self, instance: Any, config: dict) -> Callable:
         method_name = config.get("method")
         callable_obj = getattr(instance, method_name)
         return callable_obj
+    
+    def _load_prepare_callable(self, instance: Any, config: dict) -> Callable:
+        prepare_name = config.get("prepare_method")
+        prepare_obj = getattr(instance, prepare_name)
+        return prepare_obj
 
     def _cast_args(self, arg_schema: Dict[str, str], args: Dict[str, Any]) -> Dict[str, Any]:
         casted = {}
@@ -54,8 +59,13 @@ class BaseWorker():
         return casted
 
     @log_performance(logger=logging.getLogger('performance'), threshold=0.1, log_args=False, log_result=False)
-    def call_algorithm(self, instance: Any, method_metadata: dict, input_args: dict):
-        callable_method = self._load_python_callable(instance, method_metadata)
+    def call_algorithm(self, instance: Any, method_metadata: dict, input_args: dict, prepare_args={}):
+        if prepare_args:
+            prepare_method = self._load_prepare_callable(instance, method_metadata)
+            prepare_schema = method_metadata.get("prepare_method_args", {})
+            prepare_casted_args = self._cast_args(prepare_schema, prepare_args)
+            prepare_method(**prepare_casted_args)
+        callable_method = self._load_method_callable(instance, method_metadata)
         schema = method_metadata.get("method_args", {})
         casted_args = self._cast_args(schema, input_args)
 

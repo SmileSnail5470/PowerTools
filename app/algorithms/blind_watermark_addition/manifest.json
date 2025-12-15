@@ -59,6 +59,11 @@
             "module": "app.algorithms.blind_watermark_addition.watermark_addition_image",
             "attr": "WatermarkAdditionImage",
             "init_kwargs": {},
+            "prepare_method": "prepare",
+            "prepare_method_args": {
+                "model_card_path": "str",
+                "ckpt_path": "str"
+            },
             "method": "watermark_addition",
             "method_args": {
                 "input_image_path": "str", 
@@ -71,6 +76,11 @@
             "module": "app.algorithms.blind_watermark_addition.watermark_addition_image",
             "attr": "WatermarkAdditionImage",
             "init_kwargs": {},
+            "prepare_method": "prepare",
+            "prepare_method_args": {
+                "model_card_path": "str",
+                "ckpt_path": "str"
+            },
             "method": "watermark_extraction",
             "method_args": {
                 "input_image_path": "str"
@@ -81,6 +91,12 @@
             "module": "app.algorithms.blind_watermark_addition.watermark_addition_video",
             "attr": "WatermarkAdditionVideo",
             "init_kwargs": {},
+            "prepare_method": "prepare",
+            "prepare_method_args": {
+                "model_card_path": "str",
+                "ckpt_path": "str",
+                "ffmpeg_path": "str"
+            },
             "method": "watermark_addition",
             "method_args": {
                 "input_path": "str", 
@@ -94,6 +110,12 @@
             "module": "app.algorithms.blind_watermark_addition.watermark_addition_video",
             "attr": "WatermarkAdditionVideo",
             "init_kwargs": {},
+            "prepare_method": "prepare",
+            "prepare_method_args": {
+                "model_card_path": "str",
+                "ckpt_path": "str",
+                "ffmpeg_path": "str"
+            },
             "method": "watermark_extraction",
             "method_args": {
                 "input_path": "str",
