@@ -3,7 +3,6 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QGridLayout, QScrollArea
 )
-import time
 from app.ui.library.qfluentwidgets import setFont, MessageBoxBase, TeachingTip, InfoBarIcon, TeachingTipTailPosition, SubtitleLabel
 
 

@@ -1,8 +1,9 @@
+import logging
 import sys
 import os
 from datetime import datetime
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QToolBar, 
+    QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QToolBar, 
     QFileDialog, QMessageBox, QSplitter, QFrame
 )
 from PySide6.QtCore import Qt, QPoint
@@ -10,77 +11,43 @@ from PySide6.QtGui import QPainter, QMouseEvent
 from PIL import Image, ImageDraw, ImageQt
 import numpy as np
 
+from app.ui.library.qfluentwidgets import Action, MessageBoxBase, TeachingTip, InfoBarIcon, TeachingTipTailPosition, SubtitleLabel, CommandBar, FluentIcon
+
+from app.utils.logger.decorators import log_exception
+
 class CanvasWidget(QWidget):
     def __init__(self):
         super().__init__()
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(600, 500)
         self.setMouseTracking(True)
         
-        # 画布状态
         self.original_image = None
         self.mask_image = None
         self.display_image = None
         
-        # 绘制状态
         self.is_drawing = False
         self.current_tool = "brush"  # brush or eraser
         self.brush_size = 20
         self.last_point = QPoint()
         
-        # 撤销/重做历史
         self.history = []
         self.history_index = -1
         self.max_history = 50
         
-        # 加载默认图片
-        self.load_default_image()
-        
-    def load_default_image(self):
-        """创建一个默认的测试图片"""
-        # 创建一个渐变背景的测试图片
-        img = Image.new('RGB', (800, 600), color='white')
-        draw = ImageDraw.Draw(img)
-        
-        # 绘制一些测试内容
-        for i in range(0, 800, 50):
-            draw.line([(i, 0), (i, 600)], fill=(200, 200, 200), width=1)
-        for i in range(0, 600, 50):
-            draw.line([(0, i), (800, i)], fill=(200, 200, 200), width=1)
-            
-        # 添加一些文字作为水印示例
-        try:
-            # 尝试使用默认字体
-            draw.text((300, 250), "Sample Watermark", fill=(100, 100, 100))
-            draw.text((320, 300), "© 2024 Example", fill=(150, 150, 150))
-        except:
-            # 如果没有字体，跳过文字绘制
-            pass
-            
-        self.set_original_image(img)
-        
     def set_original_image(self, pil_image):
-        """设置原始图片"""
         self.original_image = pil_image.copy()
         self.mask_image = Image.new('RGBA', pil_image.size, (0, 0, 0, 0))
         self.update_display()
         self.clear_history()
-        
+  
     def load_image(self, file_path):
-        """加载图片文件"""
-        try:
-            img = Image.open(file_path).convert('RGB')
-            self.set_original_image(img)
-            return True
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"无法加载图片: {str(e)}")
-            return False
+        img = Image.open(file_path).convert('RGB')
+        self.set_original_image(img)
             
     def update_display(self):
-        """更新显示图片"""
         if self.original_image is None:
             return
             
-        # 合成原图和mask
         display = self.original_image.convert('RGBA')
         
         if self.mask_image:
@@ -93,7 +60,6 @@ class CanvasWidget(QWidget):
         self.update()
         
     def paintEvent(self, event):
-        """绘制事件"""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         
@@ -108,14 +74,12 @@ class CanvasWidget(QWidget):
             painter.drawPixmap(x, y, self.display_image)
             
     def mousePressEvent(self, event: QMouseEvent):
-        """鼠标按下事件"""
         if event.button() == Qt.LeftButton:
             self.is_drawing = True
             self.last_point = self.get_image_point(event.position())
             self.save_to_history()
             
     def mouseMoveEvent(self, event: QMouseEvent):
-        """鼠标移动事件"""
         if self.is_drawing and self.last_point:
             current_point = self.get_image_point(event.position())
             if current_point:
@@ -123,13 +87,14 @@ class CanvasWidget(QWidget):
                 self.last_point = current_point
                 
     def mouseReleaseEvent(self, event: QMouseEvent):
-        """鼠标释放事件"""
         if event.button() == Qt.LeftButton:
             self.is_drawing = False
             self.last_point = QPoint()
             
     def get_image_point(self, widget_point):
-        """将控件坐标转换为图片坐标"""
+        """将控件坐标转换为图片坐标
+        
+        """
         if not self.display_image:
             return None
             
@@ -147,7 +112,6 @@ class CanvasWidget(QWidget):
         return None
         
     def draw_line(self, start_point, end_point):
-        """在mask上绘制线条"""
         if not self.mask_image:
             return
             
@@ -180,7 +144,6 @@ class CanvasWidget(QWidget):
         self.update_display()
         
     def save_to_history(self):
-        """保存到历史记录"""
         if self.mask_image:
             # 删除当前索引之后的历史记录
             self.history = self.history[:self.history_index + 1]
@@ -195,138 +158,62 @@ class CanvasWidget(QWidget):
                 self.history_index += 1
                 
     def undo(self):
-        """撤销"""
         if self.history_index > 0:
             self.history_index -= 1
             self.mask_image = self.history[self.history_index].copy()
             self.update_display()
             
     def redo(self):
-        """重做"""
         if self.history_index < len(self.history) - 1:
             self.history_index += 1
             self.mask_image = self.history[self.history_index].copy()
             self.update_display()
             
     def clear_history(self):
-        """清空历史记录"""
         self.history = []
         self.history_index = -1
         if self.mask_image:
             self.save_to_history()
             
     def set_tool(self, tool):
-        """设置当前工具"""
         self.current_tool = tool
         
     def set_brush_size(self, size):
-        """设置画笔大小"""
         self.brush_size = size
         
     def save_mask(self, file_path):
-        """保存mask"""
         if self.mask_image:
-            try:
-                # 创建纯黑白mask
-                mask_data = np.array(self.mask_image)
-                alpha = mask_data[:, :, 3]
-                
-                # 保存为PNG（保持透明度）
-                mask_to_save = Image.fromarray(alpha).convert("L")
-                mask_to_save.save(file_path)
-                return True
-            except Exception as e:
-                QMessageBox.critical(self, "错误", f"保存失败: {str(e)}")
-                return False
-        return False
+            # 创建纯黑白mask
+            mask_data = np.array(self.mask_image)
+            alpha = mask_data[:, :, 3]
+            
+            # 保存为PNG（保持透明度）
+            mask_to_save = Image.fromarray(alpha).convert("L")
+            mask_to_save.save(file_path)
 
-class WatermarkMaskTool(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("水印Mask标注工具")
-        self.setGeometry(100, 100, 1200, 800)
-        
-        # 设置深色主题样式
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #1a1a2e;
-            }
-            QWidget {
-                background-color: #16213e;
-                color: #ffffff;
-            }
-            QPushButton {
-                background-color: #3a3a4a;
-                border: 1px solid #5a5a6a;
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #4a4a5a;
-            }
-            QPushButton:pressed {
-                background-color: #2a2a3a;
-            }
-            QPushButton:checked {
-                background-color: #667eea;
-            }
-            QSlider::groove:horizontal {
-                border: 1px solid #5a5a6a;
-                height: 8px;
-                background: #2a2a3a;
-                border-radius: 4px;
-            }
-            QSlider::handle:horizontal {
-                background: #667eea;
-                border: 2px solid #1a1a2e;
-                width: 18px;
-                height: 18px;
-                margin: -5px 0;
-                border-radius: 9px;
-            }
-            QLabel {
-                color: #ffffff;
-                font-size: 14px;
-            }
-            QToolBar {
-                background-color: #1a1a2e;
-                border: 1px solid #3a3a4a;
-                spacing: 6px;
-                padding: 4px;
-            }
-            QFrame {
-                background-color: #1a1a2e;
-                border: 1px solid #3a3a4a;
-                border-radius: 8px;
-            }
-        """)
-        
+class WatermarkMaskTool(MessageBoxBase):
+    def __init__(self, parent=None):
+        super().__init__(parent=parent)
+        self.titleLabel = SubtitleLabel(self.tr("水印 Mask 标注"))
+        self.viewLayout.addWidget(self.titleLabel)
+        self.setModal(True)
+        self.hideYesButton()
+        self.hideCancelButton()
         self.init_ui()
         
     def init_ui(self):
-        """初始化用户界面"""
-        # 中央部件
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        
-        # 主布局
-        main_layout = QVBoxLayout(central_widget)
+        main_layout = QVBoxLayout()
         main_layout.setContentsMargins(10, 10, 10, 10)
         
-        # 工具栏
-        toolbar = self.create_toolbar()
-        main_layout.addWidget(toolbar)
+        commandBar = self.create_command_bar()
+        main_layout.addWidget(commandBar)
         
-        # 分割器
         splitter = QSplitter(Qt.Horizontal)
         
-        # 左侧：画布
         self.canvas = CanvasWidget()
         self.canvas.setStyleSheet("background-color: #2a2a3a; border-radius: 8px;")
         splitter.addWidget(self.canvas)
         
-        # 右侧：控制面板
         control_panel = self.create_control_panel()
         splitter.addWidget(control_panel)
         
@@ -334,50 +221,25 @@ class WatermarkMaskTool(QMainWindow):
         splitter.setStretchFactor(1, 1)
         
         main_layout.addWidget(splitter)
+
+        self.viewLayout.addLayout(main_layout)
         
-        # 状态栏
-        self.statusBar().showMessage("就绪")
-        
-    def create_toolbar(self):
-        """创建工具栏"""
-        toolbar = QToolBar()
-        toolbar.setMovable(False)
-        
-        # 文件操作
-        open_btn = QPushButton("打开图片")
-        open_btn.clicked.connect(self.open_image)
-        toolbar.addWidget(open_btn)
-        
-        save_btn = QPushButton("保存Mask")
-        save_btn.clicked.connect(self.save_mask)
-        toolbar.addWidget(save_btn)
-        
-        toolbar.addSeparator()
-        
-        # 工具选择
-        self.brush_btn = QPushButton("🖌️ 画笔")
+    def create_command_bar(self):
+        commandBar = CommandBar()
+        self.brush_btn = Action(FluentIcon.EDIT, self.tr('画笔'), triggered=lambda: self.select_tool("brush"))
         self.brush_btn.setCheckable(True)
         self.brush_btn.setChecked(True)
-        self.brush_btn.clicked.connect(lambda: self.select_tool("brush"))
-        toolbar.addWidget(self.brush_btn)
-        
-        self.eraser_btn = QPushButton("🧹 橡皮擦")
+        self.eraser_btn = Action(FluentIcon.ERASE_TOOL, self.tr('橡皮擦'), triggered=lambda: self.select_tool("eraser"))
         self.eraser_btn.setCheckable(True)
-        self.eraser_btn.clicked.connect(lambda: self.select_tool("eraser"))
-        toolbar.addWidget(self.eraser_btn)
-        
-        toolbar.addSeparator()
-        
-        # 撤销/重做
-        undo_btn = QPushButton("↶ 撤销")
-        undo_btn.clicked.connect(self.undo)
-        toolbar.addWidget(undo_btn)
-        
-        redo_btn = QPushButton("↷ 重做")
-        redo_btn.clicked.connect(self.redo)
-        toolbar.addWidget(redo_btn)
-        
-        return toolbar
+
+        commandBar.addAction(self.brush_btn)
+        commandBar.addAction(self.eraser_btn)
+        commandBar.addAction(Action(FluentIcon.CANCEL, self.tr('撤销'), triggered=self.undo))
+        commandBar.addAction(Action(FluentIcon.ROTATE, self.tr('重做'), triggered=self.redo))
+        commandBar.addSeparator()
+        commandBar.addAction(Action(FluentIcon.SAVE, self.tr('保存Mask'), triggered=self.save_mask))
+
+        return commandBar
         
     def create_control_panel(self):
         """创建控制面板"""
@@ -446,17 +308,14 @@ class WatermarkMaskTool(QMainWindow):
         return panel
         
     def select_tool(self, tool):
-        """选择工具"""
         if tool == "brush":
             self.brush_btn.setChecked(True)
             self.eraser_btn.setChecked(False)
             self.canvas.set_tool("brush")
-            self.statusBar().showMessage("画笔工具")
         else:
             self.brush_btn.setChecked(False)
             self.eraser_btn.setChecked(True)
             self.canvas.set_tool("eraser")
-            self.statusBar().showMessage("橡皮擦工具")
             
     def on_brush_size_changed(self, value):
         """画笔大小改变"""
@@ -485,14 +344,12 @@ class WatermarkMaskTool(QMainWindow):
                 QMessageBox.information(self, "成功", "Mask保存成功！")
                 
     def undo(self):
-        """撤销"""
         self.canvas.undo()
-        self.statusBar().showMessage("已撤销")
+        self.accept()
         
     def redo(self):
-        """重做"""
         self.canvas.redo()
-        self.statusBar().showMessage("已重做")
+        self.reject()
         
     def clear_mask(self):
         """清空mask"""
@@ -507,15 +364,3 @@ class WatermarkMaskTool(QMainWindow):
                 self.canvas.clear_history()
                 self.canvas.update_display()
                 self.statusBar().showMessage("已清空mask")
-
-def main():
-    app = QApplication(sys.argv)
-    app.setStyle('Fusion')
-    
-    window = WatermarkMaskTool()
-    window.show()
-    
-    sys.exit(app.exec())
-
-if __name__ == "__main__":
-    main()

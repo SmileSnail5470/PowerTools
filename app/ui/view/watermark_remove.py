@@ -16,6 +16,7 @@ from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget
 from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
+from app.ui.widgets.watermark_manual_select_widget import WatermarkMaskTool
 
 from app.ui.common.event_bus import global_event_bus
 from app.ui.common.task_params import bind_widget_to_param, TaskParams
@@ -383,7 +384,9 @@ class HeaderWidget(QWidget):
         self.process_btn.clicked.connect(self.remove_watermark_process)
 
     def remove_watermark_process(self):
-        pass
+        watermarkMaskTool = WatermarkMaskTool(parent=self.window())
+        if not watermarkMaskTool.exec():
+            return
 
 
 class WatermarkRemove(QWidget):
