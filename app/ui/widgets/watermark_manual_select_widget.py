@@ -1,19 +1,52 @@
 import logging
-import sys
 import os
 from datetime import datetime
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QToolBar, 
-    QFileDialog, QMessageBox, QSplitter, QFrame
+    QWidget, QVBoxLayout, QPushButton, QSlider, QLabel,
+    QFileDialog, QMessageBox, QSplitter, QFrame, QHBoxLayout
 )
 from PySide6.QtCore import Qt, QPoint
-from PySide6.QtGui import QPainter, QMouseEvent
+from PySide6.QtGui import QPainter, QMouseEvent, QColor
 from PIL import Image, ImageDraw, ImageQt
 import numpy as np
 
-from app.ui.library.qfluentwidgets import Action, MessageBoxBase, TeachingTip, InfoBarIcon, TeachingTipTailPosition, SubtitleLabel, CommandBar, FluentIcon
+from app.ui.library.qfluentwidgets import Action, MaskDialogBase, TeachingTip, InfoBarIcon, TeachingTipTailPosition, SubtitleLabel, CommandBar, FluentIcon, FluentStyleSheet
+from app.ui.library.qframelesswindow.titlebar import CloseButton
 
 from app.utils.logger.decorators import log_exception
+
+
+class MyMessageBoxBase(MaskDialogBase):
+    """ Message box base """
+
+    def __init__(self, parent=None):
+        super().__init__(parent=parent)
+        self.vBoxLayout = QVBoxLayout(self.widget)
+        self.viewLayout = QVBoxLayout()
+
+        self.__initWidget()
+
+    def __initWidget(self):
+        self.__setQss()
+        self.__initLayout()
+
+        self.setShadowEffect(60, (0, 10), QColor(0, 0, 0, 50))
+        self.setMaskColor(QColor(0, 0, 0, 76))
+
+    def __initLayout(self):
+        self._hBoxLayout.removeWidget(self.widget)
+        self._hBoxLayout.addWidget(self.widget, 1, Qt.AlignCenter)
+
+        self.vBoxLayout.setSpacing(0)
+        self.vBoxLayout.setContentsMargins(0, 0, 0, 0)
+        self.vBoxLayout.addLayout(self.viewLayout, 1)
+
+        self.viewLayout.setSpacing(12)
+        self.viewLayout.setContentsMargins(0, 0, 0, 0)
+
+    def __setQss(self):
+        FluentStyleSheet.DIALOG.apply(self)
+
 
 class CanvasWidget(QWidget):
     def __init__(self):
@@ -125,22 +158,17 @@ class CanvasWidget(QWidget):
             color = (0, 0, 0, 0)
             
         # 绘制粗线条
-        draw.line([start_point.x(), start_point.y(), 
-                  end_point.x(), end_point.y()], 
-                 fill=color, width=self.brush_size)
+        draw.line([start_point.x(), start_point.y(), end_point.x(), end_point.y()], fill=color, width=self.brush_size)
         
         # 绘制端点圆圈以保持连续性
-        draw.ellipse([start_point.x() - self.brush_size//2, 
-                     start_point.y() - self.brush_size//2,
-                     start_point.x() + self.brush_size//2, 
-                     start_point.y() + self.brush_size//2], 
-                    fill=color)
-        draw.ellipse([end_point.x() - self.brush_size//2, 
-                     end_point.y() - self.brush_size//2,
-                     end_point.x() + self.brush_size//2, 
-                     end_point.y() + self.brush_size//2], 
-                    fill=color)
-        
+        draw.ellipse(
+            [start_point.x() - self.brush_size//2, start_point.y() - self.brush_size//2, start_point.x() + self.brush_size//2, start_point.y() + self.brush_size//2], 
+            fill=color
+        )
+        draw.ellipse(
+            [end_point.x() - self.brush_size//2, end_point.y() - self.brush_size//2, end_point.x() + self.brush_size//2, end_point.y() + self.brush_size//2], 
+            fill=color
+        )
         self.update_display()
         
     def save_to_history(self):
@@ -191,15 +219,29 @@ class CanvasWidget(QWidget):
             mask_to_save = Image.fromarray(alpha).convert("L")
             mask_to_save.save(file_path)
 
-class WatermarkMaskTool(MessageBoxBase):
+
+class WatermarkMaskTool(MyMessageBoxBase):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
-        self.titleLabel = SubtitleLabel(self.tr("水印 Mask 标注"))
-        self.viewLayout.addWidget(self.titleLabel)
+        self._init_title_bar()
         self.setModal(True)
-        self.hideYesButton()
-        self.hideCancelButton()
         self.init_ui()
+
+    def _init_title_bar(self):
+        layout = QHBoxLayout()
+        layout.setContentsMargins(8, 0, 0, 0)
+        layout.setSpacing(8)
+
+        closeBtn = CloseButton()
+        closeBtn.clicked.connect(self.reject)
+        self.titleLabel = SubtitleLabel(self.tr("水印 Mask 标注"))
+
+        layout.addWidget(self.titleLabel, 0, Qt.AlignVCenter)
+        layout.addStretch(1)
+        layout.addWidget(closeBtn, 0, Qt.AlignRight)
+        layout.addStretch()
+
+        self.viewLayout.addLayout(layout)
         
     def init_ui(self):
         main_layout = QVBoxLayout()
@@ -226,6 +268,8 @@ class WatermarkMaskTool(MessageBoxBase):
         
     def create_command_bar(self):
         commandBar = CommandBar()
+        commandBar.setSpaing(8)
+        commandBar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.brush_btn = Action(FluentIcon.EDIT, self.tr('画笔'), triggered=lambda: self.select_tool("brush"))
         self.brush_btn.setCheckable(True)
         self.brush_btn.setChecked(True)
@@ -244,7 +288,7 @@ class WatermarkMaskTool(MessageBoxBase):
     def create_control_panel(self):
         """创建控制面板"""
         panel = QFrame()
-        panel.setMaximumWidth(300)
+        panel.setMaximumWidth(500)
         layout = QVBoxLayout(panel)
         
         # 画笔大小控制
