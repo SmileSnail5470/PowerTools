@@ -384,7 +384,8 @@ class HeaderWidget(QWidget):
         self.process_btn.clicked.connect(self.remove_watermark_process)
 
     def remove_watermark_process(self):
-        watermarkMaskTool = WatermarkMaskTool(parent=self.window())
+        image_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assess", "test1.jpg")
+        watermarkMaskTool = WatermarkMaskTool(image_path=image_path, parent=self.window())
         if not watermarkMaskTool.exec():
             return
 

@@ -12,6 +12,7 @@ class GlobalEventBus(QObject):
     watermarkRemove_TaskFinished = Signal(str, str)
     watermarkRemove_PreviewFile = Signal(str)
     watermarkRemove_ImageNavigationInit = Signal()
+    watermarkRemove_ManualMaskUpdate = Signal(str)
 
     # OCR UI
     OCR_InputFileUpdate = Signal(str)

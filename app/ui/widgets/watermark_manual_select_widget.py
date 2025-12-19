@@ -1,19 +1,24 @@
-import logging
 import os
 from datetime import datetime
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QPushButton, QSlider, QLabel,
-    QFileDialog, QMessageBox, QSplitter, QFrame, QHBoxLayout
+    QWidget, QVBoxLayout, QLabel, QFrame, QHBoxLayout, QScrollArea
 )
 from PySide6.QtCore import Qt, QPoint
-from PySide6.QtGui import QPainter, QMouseEvent, QColor
+from PySide6.QtGui import QPainter, QMouseEvent, QColor, QFont
 from PIL import Image, ImageDraw, ImageQt
 import numpy as np
 
-from app.ui.library.qfluentwidgets import Action, MaskDialogBase, TeachingTip, InfoBarIcon, TeachingTipTailPosition, SubtitleLabel, CommandBar, FluentIcon, FluentStyleSheet
+from app.ui.library.qfluentwidgets import(
+    Action, MaskDialogBase, TeachingTip, InfoBarIcon, TeachingTipTailPosition, SubtitleLabel, CommandBar, 
+    FluentIcon, FluentStyleSheet, setFont, Slider
+)
 from app.ui.library.qframelesswindow.titlebar import CloseButton
 
-from app.utils.logger.decorators import log_exception
+from app.ui.widgets.gradient_header_widget import GradientHeader
+from app.ui.widgets.image_preview_widget import ScrollBar
+
+from app.ui.common.event_bus import global_event_bus
+from app.ui.common.config import cfg
 
 
 class MyMessageBoxBase(MaskDialogBase):
@@ -41,7 +46,7 @@ class MyMessageBoxBase(MaskDialogBase):
         self.vBoxLayout.setContentsMargins(0, 0, 0, 0)
         self.vBoxLayout.addLayout(self.viewLayout, 1)
 
-        self.viewLayout.setSpacing(12)
+        self.viewLayout.setSpacing(0)
         self.viewLayout.setContentsMargins(0, 0, 0, 0)
 
     def __setQss(self):
@@ -51,7 +56,6 @@ class MyMessageBoxBase(MaskDialogBase):
 class CanvasWidget(QWidget):
     def __init__(self):
         super().__init__()
-        self.setMinimumSize(600, 500)
         self.setMouseTracking(True)
         
         self.original_image = None
@@ -70,6 +74,7 @@ class CanvasWidget(QWidget):
     def set_original_image(self, pil_image):
         self.original_image = pil_image.copy()
         self.mask_image = Image.new('RGBA', pil_image.size, (0, 0, 0, 0))
+        self.setFixedSize(pil_image.width, pil_image.height)
         self.update_display()
         self.clear_history()
   
@@ -97,7 +102,6 @@ class CanvasWidget(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
         
         if self.display_image:
-            # 居中显示图片
             widget_size = self.size()
             image_size = self.display_image.size()
             
@@ -221,27 +225,43 @@ class CanvasWidget(QWidget):
 
 
 class WatermarkMaskTool(MyMessageBoxBase):
-    def __init__(self, parent=None):
+    def __init__(self, image_path, parent=None):
         super().__init__(parent=parent)
         self._init_title_bar()
         self.setModal(True)
         self.init_ui()
+        self.load_image(file_path=image_path)
+        self.image_path = image_path
 
     def _init_title_bar(self):
-        layout = QHBoxLayout()
-        layout.setContentsMargins(8, 0, 0, 0)
+        title_bar = GradientHeader(
+            parent=self,
+            start=QColor(0, 120, 212),
+            stop=QColor(0, 90, 158),
+            fixed_height=48
+        )
+        layout = QHBoxLayout(title_bar)
+        layout.setContentsMargins(24, 0, 0, 0)
         layout.setSpacing(8)
 
+        buttonLayout = QHBoxLayout()
+        buttonLayout.setSpacing(0)
+        buttonLayout.setContentsMargins(0, 0, 0, 0)
+        buttonLayout.setAlignment(Qt.AlignTop)
+
         closeBtn = CloseButton()
+        closeBtn.setNormalColor(Qt.white)
         closeBtn.clicked.connect(self.reject)
         self.titleLabel = SubtitleLabel(self.tr("水印 Mask 标注"))
+        setFont(self.titleLabel, 18)
+        self.titleLabel.setStyleSheet("color: white;")
+        buttonLayout.addWidget(closeBtn)
 
-        layout.addWidget(self.titleLabel, 0, Qt.AlignVCenter)
+        layout.addWidget(self.titleLabel)
         layout.addStretch(1)
-        layout.addWidget(closeBtn, 0, Qt.AlignRight)
-        layout.addStretch()
+        layout.addLayout(buttonLayout)
 
-        self.viewLayout.addLayout(layout)
+        self.viewLayout.addWidget(title_bar)
         
     def init_ui(self):
         main_layout = QVBoxLayout()
@@ -249,20 +269,30 @@ class WatermarkMaskTool(MyMessageBoxBase):
         
         commandBar = self.create_command_bar()
         main_layout.addWidget(commandBar)
+        main_layout.addSpacing(10)
+
+        showLayout = QHBoxLayout()
+        showLayout.setSpacing(0)
+        showLayout.setContentsMargins(0, 0, 0, 0)
         
-        splitter = QSplitter(Qt.Horizontal)
-        
+        scroll = QScrollArea()
+        scroll.setMinimumSize(800, 600)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        scroll.setHorizontalScrollBar(ScrollBar(Qt.Horizontal, scroll))
+        scroll.horizontalScrollBar().setFade(True)
+        scroll.setVerticalScrollBar(ScrollBar(Qt.Vertical, scroll))
+        scroll.verticalScrollBar().setFade(True)
         self.canvas = CanvasWidget()
-        self.canvas.setStyleSheet("background-color: #2a2a3a; border-radius: 8px;")
-        splitter.addWidget(self.canvas)
+        scroll.setWidget(self.canvas)
+        showLayout.addWidget(scroll)
         
         control_panel = self.create_control_panel()
-        splitter.addWidget(control_panel)
+        showLayout.addWidget(control_panel)
         
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 1)
-        
-        main_layout.addWidget(splitter)
+        main_layout.addLayout(showLayout)
 
         self.viewLayout.addLayout(main_layout)
         
@@ -281,43 +311,48 @@ class WatermarkMaskTool(MyMessageBoxBase):
         commandBar.addAction(Action(FluentIcon.CANCEL, self.tr('撤销'), triggered=self.undo))
         commandBar.addAction(Action(FluentIcon.ROTATE, self.tr('重做'), triggered=self.redo))
         commandBar.addSeparator()
+        commandBar.addAction(Action(FluentIcon.CLEAR_SELECTION, self.tr('清空Mask'), triggered=self.clear_mask))
         commandBar.addAction(Action(FluentIcon.SAVE, self.tr('保存Mask'), triggered=self.save_mask))
 
         return commandBar
         
     def create_control_panel(self):
-        """创建控制面板"""
         panel = QFrame()
-        panel.setMaximumWidth(500)
+        panel.setMinimumWidth(200)
         layout = QVBoxLayout(panel)
-        
-        # 画笔大小控制
+        layout.setSpacing(20)
+        layout.setContentsMargins(24, 0, 24, 0)
+        layout.setAlignment(Qt.AlignTop)
+
         size_group = QFrame()
         size_layout = QVBoxLayout(size_group)
+        size_layout.setSpacing(8)
+        size_layout.setContentsMargins(0, 0, 0, 0)
         
-        size_label = QLabel("画笔大小")
-        size_label.setStyleSheet("font-weight: bold; font-size: 16px;")
+        size_label = QLabel(self.tr("画笔大小"))
+        setFont(size_label, 16, QFont.DemiBold)
         size_layout.addWidget(size_label)
         
         self.size_value_label = QLabel("20px")
-        self.size_value_label.setAlignment(Qt.AlignCenter)
+        self.size_value_label.setAlignment(Qt.AlignRight)
         size_layout.addWidget(self.size_value_label)
         
-        self.size_slider = QSlider(Qt.Horizontal)
-        self.size_slider.setMinimum(1)
-        self.size_slider.setMaximum(100)
+        self.size_slider = Slider(Qt.Horizontal)
+        self.size_slider.setThemeColor(light=QColor(0, 120, 212), dark=QColor(0, 120, 212))
+        self.size_slider.setRange(1, 100)
         self.size_slider.setValue(20)
         self.size_slider.valueChanged.connect(self.on_brush_size_changed)
         size_layout.addWidget(self.size_slider)
         
         layout.addWidget(size_group)
         
-        # 操作提示
         info_group = QFrame()
         info_layout = QVBoxLayout(info_group)
+        info_layout.setSpacing(8)
+        info_layout.setContentsMargins(0, 0, 0, 0)
         
-        info_title = QLabel("操作说明")
-        info_title.setStyleSheet("font-weight: bold; font-size: 16px;")
+        info_title = QLabel(self.tr("操作说明"))
+        setFont(info_title, 16, QFont.DemiBold)
         info_layout.addWidget(info_title)
         
         info_text = QLabel(
@@ -328,26 +363,11 @@ class WatermarkMaskTool(MyMessageBoxBase):
             "• 保存为PNG格式"
         )
         info_text.setWordWrap(True)
-        info_text.setStyleSheet("color: #aaaaaa; font-size: 12px;")
+        info_text.setStyleSheet("color: #aaaaaa;")
+        setFont(info_text, 14)
         info_layout.addWidget(info_text)
         
         layout.addWidget(info_group)
-        
-        # 快捷操作
-        quick_group = QFrame()
-        quick_layout = QVBoxLayout(quick_group)
-        
-        quick_title = QLabel("快捷操作")
-        quick_title.setStyleSheet("font-weight: bold; font-size: 16px;")
-        quick_layout.addWidget(quick_title)
-        
-        clear_btn = QPushButton("清空Mask")
-        clear_btn.clicked.connect(self.clear_mask)
-        quick_layout.addWidget(clear_btn)
-        
-        layout.addWidget(quick_group)
-        
-        layout.addStretch()
         
         return panel
         
@@ -362,49 +382,38 @@ class WatermarkMaskTool(MyMessageBoxBase):
             self.canvas.set_tool("eraser")
             
     def on_brush_size_changed(self, value):
-        """画笔大小改变"""
         self.size_value_label.setText(f"{value}px")
         self.canvas.set_brush_size(value)
-        
-    def open_image(self):
-        """打开图片"""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "选择图片", "", 
-            "图片文件 (*.png *.jpg *.jpeg *.bmp *.tiff)"
-        )
-        if file_path:
-            if self.canvas.load_image(file_path):
-                self.statusBar().showMessage(f"已加载: {os.path.basename(file_path)}")
+
+    def load_image(self, file_path):
+        self.canvas.load_image(file_path)
                 
     def save_mask(self):
-        """保存mask"""
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "保存Mask", f"mask_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-            "PNG文件 (*.png)"
+        base_path = cfg.get(cfg.cachePath)
+        mask_name = f"manual_mask_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        file_path = os.path.join(base_path, "watermark_removal", mask_name)
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        self.canvas.save_mask(file_path)
+        TeachingTip.create(
+            target=self,
+            icon=InfoBarIcon.SUCCESS,
+            title=self.tr("通知"),
+            content=self.tr("Mask 保存成功！"),
+            isClosable=True,
+            tailPosition=TeachingTipTailPosition.BOTTOM,
+            duration=2000,
+            parent=self
         )
-        if file_path:
-            if self.canvas.save_mask(file_path):
-                self.statusBar().showMessage(f"已保存: {os.path.basename(file_path)}")
-                QMessageBox.information(self, "成功", "Mask保存成功！")
+        global_event_bus.watermarkRemove_ManualMaskUpdate.emit(file_path)
                 
     def undo(self):
         self.canvas.undo()
-        self.accept()
         
     def redo(self):
         self.canvas.redo()
-        self.reject()
         
     def clear_mask(self):
-        """清空mask"""
-        reply = QMessageBox.question(
-            self, "确认", "确定要清空当前的mask吗？",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
-            if self.canvas.original_image:
-                self.canvas.mask_image = Image.new('RGBA', 
-                    self.canvas.original_image.size, (0, 0, 0, 0))
-                self.canvas.clear_history()
-                self.canvas.update_display()
-                self.statusBar().showMessage("已清空mask")
+        if self.canvas.original_image:
+            self.canvas.mask_image = Image.new('RGBA', self.canvas.original_image.size, (0, 0, 0, 0))
+            self.canvas.clear_history()
+            self.canvas.update_display()
