@@ -1,12 +1,11 @@
 import os
 from datetime import datetime
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QFrame, QHBoxLayout, QScrollArea
+    QGraphicsScene, QVBoxLayout, QLabel, QFrame, QHBoxLayout, QGraphicsItem, QGraphicsView,
+    QGraphicsPixmapItem
 )
-from PySide6.QtCore import Qt, QPoint
-from PySide6.QtGui import QPainter, QMouseEvent, QColor, QFont
-from PIL import Image, ImageDraw, ImageQt
-import numpy as np
+from PySide6.QtCore import Qt, QSize, QPointF, QRectF
+from PySide6.QtGui import QPainter, QMouseEvent, QColor, QFont, QImage, QPen, QPixmap
 
 from app.ui.library.qfluentwidgets import(
     Action, MaskDialogBase, TeachingTip, InfoBarIcon, TeachingTipTailPosition, SubtitleLabel, CommandBar, 
@@ -53,175 +52,214 @@ class MyMessageBoxBase(MaskDialogBase):
         FluentStyleSheet.DIALOG.apply(self)
 
 
-class CanvasWidget(QWidget):
-    def __init__(self):
+class MaskItem(QGraphicsItem):
+    def __init__(self, size: QSize):
         super().__init__()
-        self.setMouseTracking(True)
-        
-        self.original_image = None
-        self.mask_image = None
-        self.display_image = None
-        
-        self.is_drawing = False
-        self.current_tool = "brush"  # brush or eraser
+
+        self.image = QImage(size, QImage.Format_Alpha8)
+        self.image.fill(0)
+
         self.brush_size = 20
-        self.last_point = QPoint()
-        
-        self.history = []
+        self.current_tool = "brush"  # brush / eraser
+        self.last_point: QPointF | None = None
+
+        self.history: list[QImage] = []
         self.history_index = -1
         self.max_history = 50
-        
-    def set_original_image(self, pil_image):
-        self.original_image = pil_image.copy()
-        self.mask_image = Image.new('RGBA', pil_image.size, (0, 0, 0, 0))
-        self.setFixedSize(pil_image.width, pil_image.height)
-        self.update_display()
-        self.clear_history()
-  
-    def load_image(self, file_path):
-        img = Image.open(file_path).convert('RGB')
-        self.set_original_image(img)
-            
-    def update_display(self):
-        if self.original_image is None:
-            return
-            
-        display = self.original_image.convert('RGBA')
-        
-        if self.mask_image:
-            # 将mask以半透明红色显示
-            mask_overlay = Image.new('RGBA', display.size, (255, 0, 0, 100))
-            mask_overlay.putalpha(self.mask_image.getchannel('A'))
-            display = Image.alpha_composite(display, mask_overlay)
-            
-        self.display_image = ImageQt.toqpixmap(display)
-        self.update()
-        
-    def paintEvent(self, event):
-        painter = QPainter(self)
+        self.save_to_history()
+
+        self.setCacheMode(QGraphicsItem.DeviceCoordinateCache)
+
+    def boundingRect(self) -> QRectF:
+        return QRectF(0, 0, self.image.width(), self.image.height())
+
+    def paint(self, painter: QPainter, option, widget=None):
+        painter.save()
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.setOpacity(0.35)
+
+        colored = QImage(self.image.size(), QImage.Format_ARGB32)
+        colored.fill(Qt.transparent)
+
+        cp = QPainter(colored)
+        cp.setCompositionMode(QPainter.CompositionMode_Source)
+        cp.fillRect(colored.rect(), QColor(255, 0, 0, 255))  # 红色
+        cp.setCompositionMode(QPainter.CompositionMode_DestinationIn)
+        cp.drawImage(0, 0, self.image)
+        cp.end()
+
+        painter.drawImage(0, 0, colored)
+        painter.restore()
+
+    def draw_line(self, p1: QPointF, p2: QPointF):
+        painter = QPainter(self.image)
         painter.setRenderHint(QPainter.Antialiasing)
-        
-        if self.display_image:
-            widget_size = self.size()
-            image_size = self.display_image.size()
-            
-            x = (widget_size.width() - image_size.width()) // 2
-            y = (widget_size.height() - image_size.height()) // 2
-            
-            painter.drawPixmap(x, y, self.display_image)
-            
-    def mousePressEvent(self, event: QMouseEvent):
-        if event.button() == Qt.LeftButton:
-            self.is_drawing = True
-            self.last_point = self.get_image_point(event.position())
-            self.save_to_history()
-            
-    def mouseMoveEvent(self, event: QMouseEvent):
-        if self.is_drawing and self.last_point:
-            current_point = self.get_image_point(event.position())
-            if current_point:
-                self.draw_line(self.last_point, current_point)
-                self.last_point = current_point
-                
-    def mouseReleaseEvent(self, event: QMouseEvent):
-        if event.button() == Qt.LeftButton:
-            self.is_drawing = False
-            self.last_point = QPoint()
-            
-    def get_image_point(self, widget_point):
-        """将控件坐标转换为图片坐标
-        
-        """
-        if not self.display_image:
-            return None
-            
-        widget_size = self.size()
-        image_size = self.display_image.size()
-        
-        x = (widget_size.width() - image_size.width()) // 2
-        y = (widget_size.height() - image_size.height()) // 2
-        
-        image_x = widget_point.x() - x
-        image_y = widget_point.y() - y
-        
-        if 0 <= image_x < image_size.width() and 0 <= image_y < image_size.height():
-            return QPoint(image_x, image_y)
-        return None
-        
-    def draw_line(self, start_point, end_point):
-        if not self.mask_image:
-            return
-            
-        draw = ImageDraw.Draw(self.mask_image)
-        
+
+        pen = QPen()
+        pen.setWidth(self.brush_size)
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+
         if self.current_tool == "brush":
-            # 画笔：绘制红色
-            color = (255, 0, 0, 255)
+            pen.setColor(QColor(255, 255, 255))
+            painter.setCompositionMode(QPainter.CompositionMode_Source)
         else:
-            # 橡皮擦：擦除（透明）
-            color = (0, 0, 0, 0)
-            
-        # 绘制粗线条
-        draw.line([start_point.x(), start_point.y(), end_point.x(), end_point.y()], fill=color, width=self.brush_size)
-        
-        # 绘制端点圆圈以保持连续性
-        draw.ellipse(
-            [start_point.x() - self.brush_size//2, start_point.y() - self.brush_size//2, start_point.x() + self.brush_size//2, start_point.y() + self.brush_size//2], 
-            fill=color
+            pen.setColor(QColor(0, 0, 0))
+            painter.setCompositionMode(QPainter.CompositionMode_Source)
+
+        painter.setPen(pen)
+        painter.drawLine(p1, p2)
+        painter.end()
+
+        r = QRectF(p1, p2).normalized().adjusted(
+            -self.brush_size,
+            -self.brush_size,
+            self.brush_size,
+            self.brush_size
         )
-        draw.ellipse(
-            [end_point.x() - self.brush_size//2, end_point.y() - self.brush_size//2, end_point.x() + self.brush_size//2, end_point.y() + self.brush_size//2], 
-            fill=color
-        )
-        self.update_display()
-        
+        self.update(r)
+
     def save_to_history(self):
-        if self.mask_image:
-            # 删除当前索引之后的历史记录
-            self.history = self.history[:self.history_index + 1]
-            
-            # 添加新的历史记录
-            self.history.append(self.mask_image.copy())
-            
-            # 限制历史记录数量
-            if len(self.history) > self.max_history:
-                self.history.pop(0)
-            else:
-                self.history_index += 1
-                
+        self.history = self.history[: self.history_index + 1]
+        self.history.append(self.image.copy())
+
+        if len(self.history) > self.max_history:
+            self.history.pop(0)
+        else:
+            self.history_index += 1
+
     def undo(self):
         if self.history_index > 0:
             self.history_index -= 1
-            self.mask_image = self.history[self.history_index].copy()
-            self.update_display()
-            
+            self.image = self.history[self.history_index].copy()
+            self.update()
+
     def redo(self):
         if self.history_index < len(self.history) - 1:
             self.history_index += 1
-            self.mask_image = self.history[self.history_index].copy()
-            self.update_display()
-            
-    def clear_history(self):
-        self.history = []
+            self.image = self.history[self.history_index].copy()
+            self.update()
+
+    def save_mask(self, path: str):
+        if self.image.isNull():
+            return
+        w, h = self.image.width(), self.image.height()
+        gray = QImage(w, h, QImage.Format_Grayscale8)
+        gray.fill(0)
+        for y in range(h):
+            src = self.image.constScanLine(y)
+            dst = gray.scanLine(y)
+            dst[:w] = src[:w]
+        gray.save(path)
+
+    def clear(self):
+        self.image.fill(Qt.transparent)
+        self.history.clear()
         self.history_index = -1
-        if self.mask_image:
-            self.save_to_history()
+        self.save_to_history()
+        self.update()
+
+
+class CanvasView(QGraphicsView):
+    def __init__(self):
+        super().__init__()
+        self.setRenderHint(QPainter.Antialiasing)
+        self.setViewportUpdateMode(QGraphicsView.BoundingRectViewportUpdate)
+
+        self.setDragMode(QGraphicsView.ScrollHandDrag)
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
+
+        self.setVerticalScrollBar(ScrollBar(Qt.Vertical, self))
+        self.setHorizontalScrollBar(ScrollBar(Qt.Horizontal, self))
+
+        self.scene = QGraphicsScene(self)
+        self.setScene(self.scene)
+
+        self.setCursor(Qt.ArrowCursor)
+
+        self.image_item: QGraphicsPixmapItem | None = None
+        self.mask_item: MaskItem | None = None
+  
+    def load_image(self, file_path):
+        self.scene.clear()
+
+        image = QImage(file_path)
+        if image.isNull():
+            return
+
+        self.image_item = QGraphicsPixmapItem(QPixmap.fromImage(image))
+        self.scene.addItem(self.image_item)
+
+        self.mask_item = MaskItem(image.size())
+        self.scene.addItem(self.mask_item)
+
+        self.scene.setSceneRect(self.image_item.boundingRect())
+        self.resetTransform()
+
+    def wheelEvent(self, event):
+        if event.modifiers() & Qt.ControlModifier:
+            factor = 1.15 if event.angleDelta().y() > 0 else 1 / 1.15
+            self.scale(factor, factor)
+        else:
+            super().wheelEvent(event)
             
-    def set_tool(self, tool):
-        self.current_tool = tool
-        
-    def set_brush_size(self, size):
-        self.brush_size = size
-        
-    def save_mask(self, file_path):
-        if self.mask_image:
-            # 创建纯黑白mask
-            mask_data = np.array(self.mask_image)
-            alpha = mask_data[:, :, 3]
+    def mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton and self.mask_item:
+            self.setDragMode(QGraphicsView.NoDrag)
+            self.viewport().setCursor(Qt.ArrowCursor)
+            p = self.mapToScene(event.pos())
+            self.mask_item.last_point = p
+            self.mask_item.save_to_history()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        if self.mask_item and self.mask_item.last_point:
+            p = self.mapToScene(event.pos())
+            self.mask_item.draw_line(self.mask_item.last_point, p)
+            self.mask_item.last_point = p
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton:
+            if self.mask_item:
+                self.mask_item.last_point = None
+            self.setDragMode(QGraphicsView.ScrollHandDrag)
+            self.viewport().setCursor(Qt.OpenHandCursor)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def clear_mask(self):
+        if self.mask_item:
+            self.mask_item.clear()
+                
+    def undo(self):
+        if self.mask_item:
+            self.mask_item.undo()
+
+    def redo(self):
+        if self.mask_item:
+            self.mask_item.redo()
             
-            # 保存为PNG（保持透明度）
-            mask_to_save = Image.fromarray(alpha).convert("L")
-            mask_to_save.save(file_path)
+    def set_tool(self, tool: str):
+        if self.mask_item:
+            self.mask_item.current_tool = tool
+
+    def set_brush_size(self, size: int):
+        if self.mask_item:
+            self.mask_item.brush_size = size
+        
+    def save_mask(self, path: str):
+        if self.mask_item:
+            self.mask_item.save_mask(path)
+
+    def sizeHint(self):
+        return QSize(1000, 600)
 
 
 class WatermarkMaskTool(MyMessageBoxBase):
@@ -229,6 +267,7 @@ class WatermarkMaskTool(MyMessageBoxBase):
         super().__init__(parent=parent)
         self._init_title_bar()
         self.setModal(True)
+        self.setDraggable(True)
         self.init_ui()
         self.load_image(file_path=image_path)
         self.image_path = image_path
@@ -275,19 +314,8 @@ class WatermarkMaskTool(MyMessageBoxBase):
         showLayout.setSpacing(0)
         showLayout.setContentsMargins(0, 0, 0, 0)
         
-        scroll = QScrollArea()
-        scroll.setMinimumSize(800, 600)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
-        scroll.setHorizontalScrollBar(ScrollBar(Qt.Horizontal, scroll))
-        scroll.horizontalScrollBar().setFade(True)
-        scroll.setVerticalScrollBar(ScrollBar(Qt.Vertical, scroll))
-        scroll.verticalScrollBar().setFade(True)
-        self.canvas = CanvasWidget()
-        scroll.setWidget(self.canvas)
-        showLayout.addWidget(scroll)
+        self.canvas = CanvasView()
+        showLayout.addWidget(self.canvas)
         
         control_panel = self.create_control_panel()
         showLayout.addWidget(control_panel)
@@ -380,6 +408,7 @@ class WatermarkMaskTool(MyMessageBoxBase):
             self.brush_btn.setChecked(False)
             self.eraser_btn.setChecked(True)
             self.canvas.set_tool("eraser")
+        self.update()
             
     def on_brush_size_changed(self, value):
         self.size_value_label.setText(f"{value}px")
@@ -413,7 +442,4 @@ class WatermarkMaskTool(MyMessageBoxBase):
         self.canvas.redo()
         
     def clear_mask(self):
-        if self.canvas.original_image:
-            self.canvas.mask_image = Image.new('RGBA', self.canvas.original_image.size, (0, 0, 0, 0))
-            self.canvas.clear_history()
-            self.canvas.update_display()
+        self.canvas.clear_mask()

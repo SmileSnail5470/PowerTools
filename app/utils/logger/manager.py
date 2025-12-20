@@ -128,6 +128,7 @@ class LogManager:
             return
         
         self.config.log_dir = new_dir
+        os.makedirs(new_dir, exist_ok=True)
         
         file_handlers = ['main_file', 'error_file', 'performance_file']
         for name in file_handlers:
