@@ -1,12 +1,7 @@
 __pycache__/
 .DS_Store
 app/resources/ffmpeg/*
-app/resources/deps/*
 app/ui/library/qfluentwidgets/_rc/resource.py
 app/ui/library/qframelesswindow/_rc/resource.py
 app/ui/resources/resource.py
-app/algorithms/*/*.so
-app/algorithms/*/*.pyd
-app/algorithms/**/*.yaml
-app/algorithms/*/requirements.txt
 dist/*

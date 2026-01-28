@@ -1,3 +1,4 @@
+import logging
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageOps
 import os
 from typing import Tuple, Union, Optional, List, Dict
@@ -7,6 +8,7 @@ from pathlib import Path
 import threading
 import tempfile
 import app.utils.ffmpeg as ffmpeg
+from app.utils.logger.decorators import log_performance
 
 Position = Union[str, Tuple[int, int]]
 
@@ -172,6 +174,7 @@ class VisibleWatermarkAddition:
                 lines.append(cur)
             return lines
 
+    @log_performance(logger=logging.getLogger('WatermarkAdd'), threshold=0.1, log_args=True, log_result=False)
     def image_add_text_watermark(
         self,
         input_image_path: str,
@@ -278,6 +281,7 @@ class VisibleWatermarkAddition:
             else:
                 out.save(output_image_path)
 
+    @log_performance(logger=logging.getLogger('WatermarkAdd'), threshold=0.1, log_args=True, log_result=False)
     def image_add_image_watermark(
         self,
         input_image_path: str,
@@ -345,6 +349,7 @@ class VisibleWatermarkAddition:
             else:
                 out.save(output_image_path)
 
+    @log_performance(logger=logging.getLogger('WatermarkAdd'), threshold=0.1, log_args=True, log_result=False)
     def video_add_text_watermark(
         self,
         input_video_path: str,
@@ -426,6 +431,7 @@ class VisibleWatermarkAddition:
 
         ffmpeg.run(stream, overwrite_output=True, **run_kwargs)
 
+    @log_performance(logger=logging.getLogger('WatermarkAdd'), threshold=0.1, log_args=True, log_result=False)
     def video_add_image_watermark(
         self,
         input_video_path: str,

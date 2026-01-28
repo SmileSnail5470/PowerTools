@@ -1,13 +1,15 @@
 import os
 import logging
 from app.workers.work_base import BaseWorker
-from app.workers.algorithm_manager import global_algorithm_manager
 from app.utils.logger.decorators import log_exception
+
+from app.algorithms.visible_watermark_addition.watermark_addition import VisibleWatermarkAddition
 
 
 class WatermarkAddWork(BaseWorker):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.visible_watermark_addition_instance = VisibleWatermarkAddition()
 
     def _hex_to_rgba(self, hex_color: str, alpha: int = 255):
         hex_color = hex_color.lstrip('#')
@@ -35,7 +37,6 @@ class WatermarkAddWork(BaseWorker):
         is_visible_watermark = True if kwargs["watermark_type"] == "visible" else False
         if is_visible_watermark and kwargs["watermark_content"] == "ImageSettings":
             if file_type == "image":
-                watermark_add_instance, metadata = global_algorithm_manager.create_instance(name="visible_watermark", capability="image.watermark_img.visible")
                 params = {
                     "input_image_path": input_path,
                     "watermark_image_path": kwargs["watermark_image"],
@@ -48,9 +49,8 @@ class WatermarkAddWork(BaseWorker):
                     "relative_to": "watermark",
                     "jpeg_quality": 95,
                 }
-                self.call_algorithm(instance=watermark_add_instance, method_metadata=metadata, input_args=params)
+                self.visible_watermark_addition_instance.image_add_image_watermark(**params)
             else:
-                watermark_add_instance, metadata = global_algorithm_manager.create_instance(name="visible_watermark", capability="video.watermark_img.visible")
                 params = {
                     "input_video_path": input_path,
                     "watermark_image_path": kwargs["watermark_image"],
@@ -64,10 +64,9 @@ class WatermarkAddWork(BaseWorker):
                     "crf": 18,
                     "hardware_accel": True
                 }
-                self.call_algorithm(instance=watermark_add_instance, method_metadata=metadata, input_args=params)
+                self.visible_watermark_addition_instance.video_add_image_watermark(**params)
         elif is_visible_watermark and kwargs["watermark_content"] == "TextSettings":
             if file_type == "image":
-                watermark_add_instance, metadata = global_algorithm_manager.create_instance(name="visible_watermark", capability="image.watermark_text.visible")
                 params = {
                     "input_image_path": input_path,
                     "output_image_path": output_file,
@@ -82,13 +81,12 @@ class WatermarkAddWork(BaseWorker):
                     "max_width_ratio": 0.8,
                     "outline": True,
                     "outline_width": 2,
-                    "shadow": True,
+                    "shadow": False,
                     "shadow_offset": (2,2),
                     "jpeg_quality": 95
                 }
-                self.call_algorithm(instance=watermark_add_instance, method_metadata=metadata, input_args=params)
+                self.visible_watermark_addition_instance.image_add_text_watermark(**params)
             else:
-                watermark_add_instance, metadata = global_algorithm_manager.create_instance(name="visible_watermark", capability="video.watermark_text.visible")
                 params = {
                     "input_video_path": input_path,
                     "output_video_path": output_file,
@@ -100,17 +98,16 @@ class WatermarkAddWork(BaseWorker):
                     "position": kwargs["watermark_location"],
                     "margin": 10,
                     "rotation": kwargs["watermark_rotation"],
-                    "shadow": True,
+                    "shadow": False,
                     "shadow_offset": (1, 1),
                     "hardware_accel": True,
                     "codec": "libx264",
                     "crf": 18
                 }
-                self.call_algorithm(instance=watermark_add_instance, method_metadata=metadata, input_args=params)
+                self.visible_watermark_addition_instance.video_add_text_watermark(**params)
 
         elif not is_visible_watermark:
             if file_type == "image":
-                watermark_add_instance, metadata = global_algorithm_manager.create_instance(name="blind_watermark_addition", capability="image.watermark.blind.addition")
                 params = {
                     "input_image_path": input_path,
                     "output_file": output_file,
@@ -118,7 +115,6 @@ class WatermarkAddWork(BaseWorker):
                 }
                 self.call_algorithm(instance=watermark_add_instance, method_metadata=metadata, input_args=params)
             else:
-                watermark_add_instance, metadata = global_algorithm_manager.create_instance(name="blind_watermark_addition", capability="video.watermark.blind.addition")
                 params = {
                     "input_path": input_path,
                     "output_file": output_file,

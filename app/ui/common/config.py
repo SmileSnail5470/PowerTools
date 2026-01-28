@@ -62,7 +62,8 @@ class Config(QConfig):
     ffmpeg_path = ConfigItem("SoftwareSettings", "FFmpegPath", softwareInvalidPath, FolderValidator())
 
     # 本地AI设置
-    localAIModelDeps = ConfigItem("LocalAISettings", "LocalAIModelDeps", os.path.join(pathlib.Path.home(), "PowerToolsCache", "deps"), FolderValidator())
+    default_deps_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resources", "deps")
+    localAIModelDeps = ConfigItem("LocalAISettings", "LocalAIModelDeps", default_deps_path, FolderValidator())
     localBlindWatermarkEnabled = ConfigItem("LocalAISettings", "LocalBlindWatermarkEnabled", False, BoolValidator())
     localWatermarkRemovalEnabled = ConfigItem("LocalAISettings", "LocalWatermarkRemovalEnabled", False, BoolValidator())
 
