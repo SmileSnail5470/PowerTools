@@ -2,7 +2,7 @@ import os
 import subprocess
 import numpy as np
 import onnxruntime as ort
-from ecc_utils import HammingECC
+from app.algorithms.blind_watermark_addition.ecc_utils import HammingECC
 try:
     import app.utils.ffmpeg as ffmpeg
 except ImportError:

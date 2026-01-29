@@ -1,15 +1,28 @@
 import os
 import logging
+from app.ui.common.config import cfg
 from app.workers.work_base import BaseWorker
 from app.utils.logger.decorators import log_exception
 
 from app.algorithms.visible_watermark_addition.watermark_addition import VisibleWatermarkAddition
+from app.algorithms.blind_watermark_addition.blind_watermark_addition_image import ImageBlindWatermarkEmbed
+from app.algorithms.blind_watermark_addition.blind_watermark_addition_video import VideoBlindWatermarkEmbed
 
 
 class WatermarkAddWork(BaseWorker):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        deps_path = cfg.get(cfg.localAIModelDeps)
         self.visible_watermark_addition_instance = VisibleWatermarkAddition()
+        self.blind_watermark_addition_image_instance = ImageBlindWatermarkEmbed()
+        self.blind_watermark_addition_image_instance.prepare(
+            onnx_path=os.path.join(deps_path, "blind_watermark_addition", "pixelseal_image_embed.onnx")
+        )
+        self.blind_watermark_addition_video_instance = VideoBlindWatermarkEmbed()
+        self.blind_watermark_addition_video_instance.prepare(
+            onnx_path=os.path.join(deps_path, "blind_watermark_addition", "pixelseal_video_embed.onnx"),
+            ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN")
+        )
 
     def _hex_to_rgba(self, hex_color: str, alpha: int = 255):
         hex_color = hex_color.lstrip('#')
@@ -113,7 +126,7 @@ class WatermarkAddWork(BaseWorker):
                     "output_file": output_file,
                     "message": kwargs["watermark_text"]
                 }
-                self.call_algorithm(instance=watermark_add_instance, method_metadata=metadata, input_args=params)
+                self.blind_watermark_addition_image_instance.watermark_addition(**params)
             else:
                 params = {
                     "input_path": input_path,
@@ -121,5 +134,5 @@ class WatermarkAddWork(BaseWorker):
                     "message": kwargs["watermark_text"],
                     "chunk_size": 8
                 }
-                self.call_algorithm(instance=watermark_add_instance, method_metadata=metadata, input_args=params)
+                self.blind_watermark_addition_video_instance.watermark_addition(**params)
         return output_file

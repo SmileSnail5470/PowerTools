@@ -2,7 +2,7 @@ import os
 import numpy as np
 import onnxruntime as ort
 from PIL import Image
-from ecc_utils import HammingECC
+from app.algorithms.blind_watermark_addition.ecc_utils import HammingECC
 
 
 class ImageBlindWatermarkEmbed():

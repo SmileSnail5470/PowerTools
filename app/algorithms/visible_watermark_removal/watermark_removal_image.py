@@ -1,14 +1,14 @@
 import cv2
 import numpy as np
-from modules.sr_segment import SLBRSegment
-from modules.pt_segment import PatchWiperSegment
-from modules.pt_inpaint import PatchWiperInpaint
-from modules.cf_inpaint import CoordFillInpaint
-from modules.grig_inpaint import GRIGInpaint
-from modules.emdf_inpaint import EMDFInpaint
-from modules.lama_inpaint import LamaInpaint
-from modules.text_detection import detect_text_watermarks
-from modules.yolo_detecttion import YOLODetection
+from app.algorithms.visible_watermark_removal.modules.sr_segment import SLBRSegment
+from app.algorithms.visible_watermark_removal.modules.pt_segment import PatchWiperSegment
+from app.algorithms.visible_watermark_removal.modules.pt_inpaint import PatchWiperInpaint
+from app.algorithms.visible_watermark_removal.modules.cf_inpaint import CoordFillInpaint
+from app.algorithms.visible_watermark_removal.modules.grig_inpaint import GRIGInpaint
+from app.algorithms.visible_watermark_removal.modules.emdf_inpaint import EMDFInpaint
+from app.algorithms.visible_watermark_removal.modules.lama_inpaint import LamaInpaint
+from app.algorithms.visible_watermark_removal.modules.text_detection import detect_text_watermarks
+from app.algorithms.visible_watermark_removal.modules.yolo_detecttion import YOLODetection
 
 
 class WatermarkSegment():

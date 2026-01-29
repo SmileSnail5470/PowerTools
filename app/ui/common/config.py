@@ -77,6 +77,7 @@ class Config(QConfig):
         self._load_config()
         self._init_connect()
         
+        os.environ["POWERTOOLS_FFMPEG_BIN"] = self.get(self.ffmpeg_path)
         self.ffmpeg_path.valueChanged.connect(update_ffmpeg_path)
         os.environ["POWERTOOLS_LOCAL_AI_MODEL_DEPS"] = self.get(self.localAIModelDeps)
         self.localAIModelDeps.valueChanged.connect(lambda path: os.environ.update({"POWERTOOLS_LOCAL_AI_MODEL_DEPS": path}))

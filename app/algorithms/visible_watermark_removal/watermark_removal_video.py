@@ -7,7 +7,7 @@ import tempfile
 import os
 from PIL import Image
 from pathlib import Path
-from watermark_removal_image import ImageWatermarkRemove, WatermarkSegment
+from app.algorithms.visible_watermark_removal.watermark_removal_image import ImageWatermarkRemove, WatermarkSegment
 
 
 class VideoWatermarkRemover:
