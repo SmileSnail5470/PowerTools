@@ -12,17 +12,10 @@ from app.algorithms.blind_watermark_addition.blind_watermark_addition_video impo
 class WatermarkAddWork(BaseWorker):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        deps_path = cfg.get(cfg.localAIModelDeps)
+        self.deps_path = cfg.get(cfg.localAIModelDeps)
         self.visible_watermark_addition_instance = VisibleWatermarkAddition()
         self.blind_watermark_addition_image_instance = ImageBlindWatermarkEmbed()
-        self.blind_watermark_addition_image_instance.prepare(
-            onnx_path=os.path.join(deps_path, "blind_watermark_addition", "pixelseal_image_embed.onnx")
-        )
         self.blind_watermark_addition_video_instance = VideoBlindWatermarkEmbed()
-        self.blind_watermark_addition_video_instance.prepare(
-            onnx_path=os.path.join(deps_path, "blind_watermark_addition", "pixelseal_video_embed.onnx"),
-            ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN")
-        )
 
     def _hex_to_rgba(self, hex_color: str, alpha: int = 255):
         hex_color = hex_color.lstrip('#')
@@ -126,6 +119,9 @@ class WatermarkAddWork(BaseWorker):
                     "output_file": output_file,
                     "message": kwargs["watermark_text"]
                 }
+                self.blind_watermark_addition_image_instance.prepare(
+                    onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "pixelseal_image_embed.onnx")
+                )
                 self.blind_watermark_addition_image_instance.watermark_addition(**params)
             else:
                 params = {
@@ -134,5 +130,9 @@ class WatermarkAddWork(BaseWorker):
                     "message": kwargs["watermark_text"],
                     "chunk_size": 8
                 }
+                self.blind_watermark_addition_video_instance.prepare(
+                    onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "pixelseal_video_embed.onnx"),
+                    ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN")
+                )
                 self.blind_watermark_addition_video_instance.watermark_addition(**params)
         return output_file

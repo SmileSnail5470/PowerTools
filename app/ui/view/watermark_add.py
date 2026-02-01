@@ -1,5 +1,5 @@
 import os
-from PySide6.QtCore import Qt, Signal, QCoreApplication
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QStackedWidget, QHBoxLayout, QLabel, QLineEdit, QFileDialog, QStackedLayout
 )
@@ -21,6 +21,8 @@ from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
 from app.ui.widgets.blind_watermark_text_widget import BlindWatermarkInputPanel
 from app.ui.widgets.gradient_header_widget import GradientHeader
+from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget
+from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 
 from app.ui.common.task_params import bind_widget_to_param, TaskParams
 from app.ui.common.event_bus import global_event_bus
@@ -185,6 +187,76 @@ class WatermarkTypeSelectorCard(HeaderCardWidget):
         else:
             self.visible_btn.setStyleSheet(self.base_style)
             self.blind_btn.setStyleSheet(self.active_style)
+
+
+class BlindWatermarkOperateCard(HeaderCardWidget):
+    blind_watermark_task_type = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setTitle(self.tr("🔍 任务类型"))
+        self.setBorderRadius(8)
+
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(10)
+
+        self.viewLayout.setContentsMargins(10, 10, 10, 10)
+        self.viewLayout.addLayout(main_layout)
+
+        self.toggle_switch_btns: list[ToggleSwitch] = []
+
+        watermark_add_btn= ToggleSwitch(on_color="#4FACFE")
+        watermark_add_btn.setActive(True)
+        self.toggle_switch_btns.append(watermark_add_btn)
+        watermark_add_btn.toggled.connect(lambda state, bt=watermark_add_btn: self._on_state_changed(changed_btn=bt, state=state, task_type="add_blind_watermark"))
+        watermark_add_card = CustomCardGroupWidget(
+            title=self.tr("盲水印添加"), 
+            content=self.tr("在视频或图片中添加不可见水印"), 
+            parent=self,
+            text_layout_contents_margins=(12, 0, 0, 0),
+            label_v_space=2
+        )
+        watermark_add_card.setSeparatorVisible(True)
+        watermark_add_card.addWidget(watermark_add_btn)
+        main_layout.addWidget(watermark_add_card)
+
+        watermark_extract_btn = ToggleSwitch(on_color="#4FACFE")
+        self.toggle_switch_btns.append(watermark_extract_btn)
+        watermark_extract_btn.toggled.connect(lambda state, bt=watermark_extract_btn: self._on_state_changed(changed_btn=bt, state=state, task_type="extract_blind_watermark"))
+        watermark_extract_card = CustomCardGroupWidget(
+            title=self.tr("盲水印提取"), 
+            content=self.tr("提取在视频或图片中添加的盲水印"), 
+            parent=self,
+            text_layout_contents_margins=(12, 0, 0, 0),
+            label_v_space=2
+        )
+        watermark_extract_card.setSeparatorVisible(True)
+        watermark_extract_card.addWidget(watermark_extract_btn)
+        main_layout.addWidget(watermark_extract_card)
+        bind_widget_to_param(self, "blind_watermark_task_type", watermark_add_params, "blind_watermark_task_type", transform=None)
+        self.blind_watermark_task_type.emit("add_blind_watermark")
+        self.hide()
+
+    def _on_state_changed(self, changed_btn, state, task_type):
+        if not state:
+            if len(self.toggle_switch_btns) == 2:
+                for btn in self.toggle_switch_btns:
+                    if not btn.isActive() and btn is not changed_btn:
+                        self.blind_watermark_task_type.emit(task_type)
+                        btn.setActive(True)
+            return
+        for btn in self.toggle_switch_btns:
+            if btn is changed_btn:
+                self.blind_watermark_task_type.emit(task_type)
+                continue
+            btn.setActive(False)
+
+    def set_watermark_type(self, type_name: str):
+        if type_name == "blind":
+            self.show()
+        else:
+            self.hide()
 
 
 class WatermarkContentCard(HeaderCardWidget):
@@ -543,6 +615,9 @@ class ControlPanelWidget(ScrollArea):
         watermarkTypeSelectorCard = WatermarkTypeSelectorCard(self)
         main_layout.addWidget(watermarkTypeSelectorCard)
 
+        blindWatermarkOperateCard = BlindWatermarkOperateCard()
+        main_layout.addWidget(blindWatermarkOperateCard)
+
         watermarkContentCard = WatermarkContentCard(self)
         main_layout.addWidget(watermarkContentCard)
 
@@ -558,12 +633,39 @@ class ControlPanelWidget(ScrollArea):
         self.enableTransparentBackground()
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
+        visible_or_hide_widgets = [watermarkContentCard, outputSettingsCard]
+        self.blind_watermark_task_type = "add_blind_watermark"
+
         watermarkTypeSelectorCard.watermark_type.connect(
             lambda t: watermarkContentCard.set_watermark_type(t)
         )
         watermarkTypeSelectorCard.watermark_type.connect(
             lambda t: watermarkSettingsCard.set_visible(t)
         )
+        watermarkTypeSelectorCard.watermark_type.connect(
+            lambda t: blindWatermarkOperateCard.set_watermark_type(t)
+        )
+        watermarkTypeSelectorCard.watermark_type.connect(
+            lambda t: self.set_widgets_visible(visible_or_hide_widgets, watermark_type=t)
+        )
+        blindWatermarkOperateCard.blind_watermark_task_type.connect(
+            lambda t: self.set_widgets_visible(visible_or_hide_widgets, blind_watermark_task_type=t)
+        )
+
+    def set_widgets_visible(self, widgets: list[HeaderCardWidget], watermark_type=None, blind_watermark_task_type=None):
+        for widget in widgets:
+            if blind_watermark_task_type and blind_watermark_task_type == "extract_blind_watermark":
+                widget.hide()
+            elif blind_watermark_task_type and blind_watermark_task_type == "add_blind_watermark":
+                widget.show()
+            elif watermark_type and watermark_type == "visible":
+                widget.show()
+            elif watermark_type and watermark_type == "blind" and self.blind_watermark_task_type == "extract_blind_watermark":
+                widget.hide()
+            else:
+                widget.show()
+        if blind_watermark_task_type:
+            self.blind_watermark_task_type = blind_watermark_task_type
 
 
 class HeaderWidget(QWidget):
@@ -584,8 +686,8 @@ class HeaderWidget(QWidget):
         header_layout.addWidget(title_label)  
         header_layout.addStretch(1)
 
-        self.extract_btn = PushButton(text="🔍 提取水印")
-        self.extract_btn.setStyleSheet("""
+        self.process_btn = PushButton(text=self.tr("▶️ 开始处理"))
+        self.process_btn.setStyleSheet("""
             PushButton {
                 background-color: rgba(255, 255, 255, 0.2);
                 color: white;
@@ -599,25 +701,6 @@ class HeaderWidget(QWidget):
             }
             QPushButton:pressed {
                 background-color: rgba(255, 255, 255, 0.15);
-            }                     
-        """)
-        header_layout.addWidget(self.extract_btn)
-
-        self.process_btn = PushButton(text=self.tr("▶️ 开始处理"))
-        self.process_btn.setStyleSheet("""
-            PushButton {
-                background-color: white;
-                color: #667eea;
-                padding: 8px 16px;
-                border-radius: 8px;
-                font-size: 14px;
-                font-weight: 500;
-            }
-            PushButton:hover {
-                background-color: #f8f9fa;
-            }
-            PushButton:pressed {
-                background-color: #5a67d8;
             }
         """)
         header_layout.addWidget(self.process_btn)
@@ -628,7 +711,6 @@ class HeaderWidget(QWidget):
         main_layout.addWidget(header)
 
         self.process_btn.clicked.connect(self.add_watermark_process)
-        self.extract_btn.clicked.connect(self.extract_process)
 
     def add_watermark_process(self):
         init_params = watermark_add_params.to_dict()
@@ -734,9 +816,6 @@ class HeaderWidget(QWidget):
                 return error_msg, task_params
             task_params["watermark_text"] = params["watermark_text"]
         return error_msg, task_params
-
-    def extract_process(self):
-        pass
 
 
 class PreviewWidget(QWidget):
