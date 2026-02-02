@@ -50,6 +50,7 @@ class HammingECC(RepeatECC):
         return c
     
     def __hamming_decode_block(self, c):
+        error_bits = 0
         assert len(c) == 15
         s0 = c[0]^c[2]^c[4]^c[6]^c[8]^c[10]^c[12]^c[14]
         s1 = c[1]^c[2]^c[5]^c[6]^c[9]^c[10]^c[13]^c[14]
@@ -57,11 +58,12 @@ class HammingECC(RepeatECC):
         s3 = c[7]^c[8]^c[9]^c[10]^c[11]^c[12]^c[13]^c[14]
         syndrome = (s3<<3)|(s2<<2)|(s1<<1)|s0
         if syndrome != 0:
+            error_bits += 1
             print(f"Error detected at position {syndrome}")
         if syndrome != 0 and 1 <= syndrome <= 15:
             c[syndrome-1] = not c[syndrome-1]
         data_idx = [2,4,5,6,8,9,10,11,12,13,14]
-        return bitarray([c[i] for i in data_idx])
+        return bitarray([c[i] for i in data_idx]), error_bits
     
     def __hamming_encode(self, bits):
         encoded = bitarray()
@@ -74,12 +76,15 @@ class HammingECC(RepeatECC):
 
     def __hamming_decode(self, bits):
         decoded = bitarray()
+        total_error_bits = 0
         for i in range(0, len(bits), 15):
             block = bits[i:i+15]
             if len(block)<15:
                 block.extend('0'*(15-len(block)))
-            decoded.extend(self.__hamming_decode_block(block))
-        return decoded
+            decode, error_bits = self.__hamming_decode_block(block)
+            decoded.extend(decode)
+            total_error_bits += error_bits
+        return decoded, total_error_bits
     
     def __string_to_nbit_bits(self, s):
         """将字符串用 n-bit 编码."""
@@ -137,6 +142,8 @@ class HammingECC(RepeatECC):
     def tensor_to_string(self, tensor: np.ndarray):
         tensor = (self.decode(tensor) > 0).astype(np.uint8)
         bits = bitarray([bool(b) for b in tensor.flatten().tolist()])
-        decoded_bits = self.__hamming_decode(bits)
+        decoded_bits, total_error_bits = self.__hamming_decode(bits)
+        if total_error_bits > 1:
+            return "", None
         msg_str, msg_str_len = self.__bits_to_string(decoded_bits)
         return msg_str, np.array([[int(b) for b in decoded_bits[:msg_str_len*self.encode_bits_per_char]]], dtype=np.uint8)

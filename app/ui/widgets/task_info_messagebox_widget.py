@@ -9,6 +9,7 @@ from app.ui.library.qfluentwidgets import setFont, MessageBoxBase, TeachingTip, 
 param_name_map = {
     "input_path": "文件路径",
     "watermark_type": "水印类型",
+    "blind_watermark_task_type": "盲水印任务类型",
     "watermark_text": "水印文本",
     "font": "字体",
     "font_size": "字体大小",
@@ -95,8 +96,46 @@ class TaskInfoMessageBox(MessageBoxBase):
             body_layout.addWidget(input_section)
             body_layout.addWidget(scroll_area)
             body_layout.addWidget(output_section)
-        else:
-            pass
+        if self.task_type == "watermark-extract":
+            value_map = {
+                "visible": "可见水印",
+                "blind": "盲水印",
+                "extract_blind_watermark": "提取",
+                "add_blind_watermark": "添加"
+            }
+            input_section = self.create_section(self.tr("📁 输入文件路径"))
+            input_path = self.create_path_label(self.task_params["input_path"])
+            input_section.layout().addWidget(input_path)
+            
+            scroll_area = QScrollArea()
+            scroll_area.setWidgetResizable(True)
+            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            scroll_area.setStyleSheet("""
+                QScrollArea {
+                    background-color: #f5f5f5;
+                    border: none;
+                    border-radius: 12px;
+                }
+            """)
+            params_section = self.create_section(self.tr("⚙️ 水印参数"))
+            params_grid = QGridLayout()
+            params_grid.setSpacing(10)
+            
+            row, col = 0, 0
+            for key, value in self.task_params.items():
+                if key in ["input_path"]:
+                    continue
+                param_widget = self.create_param_widget(param_name_map[key], value if value not in value_map else value_map[value])
+                params_grid.addWidget(param_widget, row, col)
+                col += 1
+                if col >= 1:
+                    col = 0
+                    row += 1
+            params_section.layout().addLayout(params_grid)
+            scroll_area.setWidget(params_section)
+
+            body_layout.addWidget(input_section)
+            body_layout.addWidget(scroll_area)
         
         # 底部区域
         footer = QFrame()

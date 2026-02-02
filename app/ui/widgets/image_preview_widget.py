@@ -280,7 +280,7 @@ class SyncImageViewer(QWidget):
         pix2 = QPixmap(img2) if img2 else None
 
         self.view1 = SyncGraphicsView(pix1, sub_title=self.tr("原图预览区域（处理完成后自动显示预览）"))
-        self.view2 = SyncGraphicsView(pix2, sub_title=self.tr("添加水印后预览区域（处理完成后自动显示预览）"))
+        self.view2 = SyncGraphicsView(pix2, sub_title=self.tr("添加/提取水印后预览区域（处理完成后自动显示预览）"))
 
         layout.addWidget(self.view1)
         layout.addWidget(self.view2)
@@ -306,6 +306,10 @@ class SyncImageViewer(QWidget):
     def set_images(self, img1: str, img2: str):
         self.view1.set_pixmap(QPixmap(img1))
         self.view2.set_pixmap(QPixmap(img2))
+
+    def init_scene(self):
+        self.view1._init_placeholder()
+        self.view2._init_placeholder()
 
 
 class RoundedProgressBar(QProgressBar):

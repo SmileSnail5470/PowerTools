@@ -30,6 +30,7 @@ from app.ui.common.task_status import TaskStatusModel
 from app.ui.common.utils import get_file_type
 from app.controllers.task_manager import global_task_manager
 from app.workers.watermark_add_work import WatermarkAddWork
+from app.workers.watermark_extract_work import WatermarkExtractWork
 
 
 watermark_add_params = TaskParams()
@@ -627,6 +628,8 @@ class ControlPanelWidget(ScrollArea):
         outputSettingsCard = OutputSettingsCard(self)
         main_layout.addWidget(outputSettingsCard)
 
+        main_layout.addStretch(1)
+
         self.setWidget(view)
         self.setViewportMargins(0, 0, 0, 0)
         self.setWidgetResizable(True)
@@ -715,10 +718,11 @@ class HeaderWidget(QWidget):
     def add_watermark_process(self):
         init_params = watermark_add_params.to_dict()
         error_msg, task_params = self._params_check(params=init_params)
+        is_blind_watermark_extract_task = True if "blind_watermark_task_type" in task_params and task_params["blind_watermark_task_type"] == "extract_blind_watermark" else False
         if error_msg:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
-        w = TaskInfoMessageBox(task_params, "watermark-add", self.window())
+        w = TaskInfoMessageBox(task_params, "watermark-add" if not is_blind_watermark_extract_task else "watermark-extract", self.window())
         if not w.exec():
             return
         
@@ -729,11 +733,11 @@ class HeaderWidget(QWidget):
         if os.path.isdir(input_path):
             for one_file in os.listdir(input_path):
                 task_params["input_path"] = os.path.join(input_path, one_file)
-                task_instance = WatermarkAddWork(**task_params)
+                task_instance = WatermarkAddWork(**task_params) if not is_blind_watermark_extract_task else WatermarkExtractWork(**task_params)
                 func, args, kwargs = task_instance.to_worker()
                 total_tasks.append((func, args, kwargs))
         else:
-            task_instance = WatermarkAddWork(**task_params)
+            task_instance = WatermarkAddWork(**task_params) if not is_blind_watermark_extract_task else WatermarkExtractWork(**task_params)
             func, args, kwargs = task_instance.to_worker()
             total_tasks.append((func, args, kwargs))
 
@@ -757,7 +761,7 @@ class HeaderWidget(QWidget):
             target=self.process_btn,
             icon=InfoBarIcon.SUCCESS,
             title=self.tr("通知"),
-            content=self.tr("水印添加任务提交成功"),
+            content=self.tr("任务提交成功"),
             isClosable=True,
             tailPosition=TeachingTipTailPosition.BOTTOM,
             duration=2000,
@@ -779,17 +783,22 @@ class HeaderWidget(QWidget):
             return error_msg, task_params
         else:
             task_params["input_path"] = params["input_path"]
+        if "watermark_type" not in params:
+            error_msg = self.tr("请选择水印类型")
+            return error_msg, task_params
+        else:
+            task_params["watermark_type"] = params["watermark_type"]
+        
+        if "blind_watermark_task_type" in params and params["blind_watermark_task_type"] == "extract_blind_watermark":
+            task_params["blind_watermark_task_type"] = params["blind_watermark_task_type"]
+            return error_msg, task_params
+
         if "output_path" not in params or not params["output_path"]:
             error_msg = self.tr("请设置文件保存位置")
             return error_msg, task_params
         else:
             task_params["output_path"] = params["output_path"]
             task_params["output_format"] = params["output_format"]
-        if "watermark_type" not in params:
-            error_msg = self.tr("请选择水印类型")
-            return error_msg, task_params
-        else:
-            task_params["watermark_type"] = params["watermark_type"]
 
         if params["watermark_type"] == "visible":
             task_params["watermark_content"] = params["watermark_content"]
@@ -867,6 +876,8 @@ class PreviewWidget(QWidget):
 
     def update_init_preview(self, file_path):
         self.image_navigation_widget.clear_images()
+        self.image_viewer.init_scene()
+        self.video_viewer.init_scene()
         self.files_preview_info = {}
         self.media_type = "image"
         if not file_path:

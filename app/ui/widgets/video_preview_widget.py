@@ -170,6 +170,9 @@ class SyncVideoViewer(QWidget):
         self._show_first_frame()
         self.sync_timer.start(self.sync_interval)
 
+    def init_scene(self):
+        self._cleanup_players()
+
     def _show_first_frame(self):
         self.player_main.pause()
         self.player_sub.pause()
