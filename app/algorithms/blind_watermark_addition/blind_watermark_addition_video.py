@@ -1,12 +1,8 @@
 import os
-import subprocess
 import numpy as np
 import onnxruntime as ort
 from app.algorithms.blind_watermark_addition.ecc_utils import HammingECC
-try:
-    import app.utils.ffmpeg as ffmpeg
-except ImportError:
-    import ffmpeg
+import app.utils.ffmpeg as ffmpeg
 
 
 class VideoBlindWatermarkEmbed():
@@ -68,7 +64,8 @@ class VideoBlindWatermarkEmbed():
                 s="{}x{}".format(width, height),
                 r=fps,
             )
-            .run_async(pipe_stdout=True, pipe_stderr=subprocess.PIPE)
+            .global_args("-hide_banner", "-loglevel", "error")
+            .run_async(pipe_stdout=True)
         )
         # Open the output video with optimal thread usage.
         process2 = (
@@ -80,8 +77,9 @@ class VideoBlindWatermarkEmbed():
                 r=fps,
             )
             .output(output_path, vcodec="libx264", pix_fmt="yuv420p", r=fps)
+            .global_args("-hide_banner", "-loglevel", "error")
             .overwrite_output()
-            .run_async(pipe_stdin=True, pipe_stderr=subprocess.PIPE)
+            .run_async(pipe_stdin=True)
         )
 
         ecc = HammingECC()
@@ -116,6 +114,8 @@ class VideoBlindWatermarkEmbed():
 
         # Copy just the audio from the original video
         temp_output = output_path + ".tmp"
+        if os.path.exists(temp_output):
+            os.remove(temp_output)
         os.rename(output_path, temp_output)
 
         audiostream = ffmpeg.input(input_path)
@@ -128,8 +128,9 @@ class VideoBlindWatermarkEmbed():
                 vcodec="copy",
                 acodec="copy",
             )
+            .global_args("-hide_banner", "-loglevel", "error")
             .overwrite_output()
-            .run_async(pipe_stderr=subprocess.PIPE)
+            .run_async()
         )
         process3.wait()
         os.remove(temp_output)
@@ -179,7 +180,8 @@ class VideoBlindWatermarkDetect():
         process1 = (
             ffmpeg.input(input_path)
             .output("pipe:", format="rawvideo", pix_fmt="rgb24")
-            .run_async(pipe_stdout=True, pipe_stderr=subprocess.PIPE)
+            .global_args("-hide_banner", "-loglevel", "error")
+            .run_async(pipe_stdout=True)
         )
 
         # Process the video
