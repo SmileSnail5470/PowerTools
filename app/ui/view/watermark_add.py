@@ -23,6 +23,7 @@ from app.ui.widgets.blind_watermark_text_widget import BlindWatermarkInputPanel
 from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget
 from app.ui.widgets.toggle_switch_widget import ToggleSwitch
+from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget, StyleCard, CardSeparator
 
 from app.ui.common.task_params import bind_widget_to_param, TaskParams
 from app.ui.common.event_bus import global_event_bus
@@ -252,6 +253,59 @@ class BlindWatermarkOperateCard(HeaderCardWidget):
                 self.blind_watermark_task_type.emit(task_type)
                 continue
             btn.setActive(False)
+
+    def set_watermark_type(self, type_name: str):
+        if type_name == "blind":
+            self.show()
+        else:
+            self.hide()
+
+
+class BlindWatermarkModelCard(HeaderCardWidget):
+    blind_watermark_model_name = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setTitle(self.tr("🎨 模型类型"))
+        self.setBorderRadius(8)
+
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        self.viewLayout.setContentsMargins(10, 10, 10, 10)
+        self.viewLayout.addLayout(main_layout)
+
+        self.cards: list[(StyleCard, str)] = []
+        stable_card = StyleCard("#fa709a", self.tr("稳定可靠"), self.tr("添加盲水印后，建议提取验证，验证失败尝试更换算法"))
+        self.cards.append((stable_card, "videoseal"))
+        main_layout.addWidget(stable_card)
+        main_layout.addWidget(CardSeparator(self))
+
+        high_quality_card = StyleCard("#84fab0", self.tr("追求质量"), self.tr("添加盲水印后，建议提取验证，验证失败尝试更换算法"))
+        self.cards.append((high_quality_card, "pixelseal"))
+        main_layout.addWidget(high_quality_card)
+        main_layout.addWidget(CardSeparator(self))
+
+        stable_card.set_selected(True)
+        for i, card in enumerate(self.cards):
+            card_instance, _ = card
+            card_instance.mousePressEvent = lambda event, c=card, idx=i: self.on_card_clicked(c, idx)
+
+        main_layout.addStretch()
+        bind_widget_to_param(self, "blind_watermark_model_name", watermark_add_params, "blind_watermark_model_name", transform=None)
+        self.blind_watermark_model_name.emit("videoseal")
+        self.hide()
+
+    def on_card_clicked(self, card: tuple, index):
+        # 取消所有卡片的选中状态
+        for c, _ in self.cards:
+            c.set_selected(False)
+        
+        # 设置当前卡片为选中状态
+        card_instance, model_name = card
+        card_instance.set_selected(True)
+        self.blind_watermark_model_name.emit(model_name)
 
     def set_watermark_type(self, type_name: str):
         if type_name == "blind":
@@ -619,6 +673,9 @@ class ControlPanelWidget(ScrollArea):
         blindWatermarkOperateCard = BlindWatermarkOperateCard()
         main_layout.addWidget(blindWatermarkOperateCard)
 
+        blindWatermarkModelCard = BlindWatermarkModelCard()
+        main_layout.addWidget(blindWatermarkModelCard)
+
         watermarkContentCard = WatermarkContentCard(self)
         main_layout.addWidget(watermarkContentCard)
 
@@ -647,6 +704,9 @@ class ControlPanelWidget(ScrollArea):
         )
         watermarkTypeSelectorCard.watermark_type.connect(
             lambda t: blindWatermarkOperateCard.set_watermark_type(t)
+        )
+        watermarkTypeSelectorCard.watermark_type.connect(
+            lambda t: blindWatermarkModelCard.set_watermark_type(t)
         )
         watermarkTypeSelectorCard.watermark_type.connect(
             lambda t: self.set_widgets_visible(visible_or_hide_widgets, watermark_type=t)
@@ -791,6 +851,10 @@ class HeaderWidget(QWidget):
         
         if "blind_watermark_task_type" in params and params["blind_watermark_task_type"] == "extract_blind_watermark":
             task_params["blind_watermark_task_type"] = params["blind_watermark_task_type"]
+            if "blind_watermark_model_name" not in params:
+                error_msg = self.tr("请选择盲水印算法")
+                return error_msg, task_params
+            task_params["blind_watermark_model_name"] = params["blind_watermark_model_name"]
             return error_msg, task_params
 
         if "output_path" not in params or not params["output_path"]:
@@ -823,7 +887,11 @@ class HeaderWidget(QWidget):
             if not params["watermark_text"]:
                 error_msg = self.tr("请设置水印文本")
                 return error_msg, task_params
+            if "blind_watermark_model_name" not in params:
+                error_msg = self.tr("请选择盲水印算法")
+                return error_msg, task_params
             task_params["watermark_text"] = params["watermark_text"]
+            task_params["blind_watermark_model_name"] = params["blind_watermark_model_name"]
         return error_msg, task_params
 
 

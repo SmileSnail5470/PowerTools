@@ -27,7 +27,7 @@ class WatermarkExtractWork(BaseWorker):
         img = Image.new("RGB", (w, h), bg_color)
         draw = ImageDraw.Draw(img)
 
-        font_size = max(64, min(w, h) // 10)
+        font_size = max(48, min(w, h) // 10)
         try:
             font = ImageFont.truetype("arial.ttf", font_size)
         except Exception:
@@ -79,7 +79,7 @@ class WatermarkExtractWork(BaseWorker):
             .drawtext(
                 text=text,
                 fontcolor='white',
-                fontsize=max(64, min(width, height) // 8),
+                fontsize=max(48, min(width, height) // 8),
                 x='(w-text_w)/2',
                 y='(h-text_h)/2'
             )
@@ -109,7 +109,7 @@ class WatermarkExtractWork(BaseWorker):
                 "input_image_path": input_path
             }
             self.blind_watermark_extract_image_instance.prepare(
-                onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "pixelseal_image_detect.onnx")
+                onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_image_detect.onnx".format(kwargs["blind_watermark_model_name"]))
             )
             text = self.blind_watermark_extract_image_instance.watermark_extraction(**params)["preds"]
             output_file = self._text_to_image(input_path=input_path, text=text)
@@ -119,7 +119,7 @@ class WatermarkExtractWork(BaseWorker):
                 "chunk_size": 8
             }
             self.blind_watermark_extract_video_instance.prepare(
-                onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "pixelseal_video_detect.onnx"),
+                onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_video_detect.onnx".format(kwargs["blind_watermark_model_name"])),
                 ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN")
             )
             text = self.blind_watermark_extract_video_instance.watermark_extraction(**params)["preds"]

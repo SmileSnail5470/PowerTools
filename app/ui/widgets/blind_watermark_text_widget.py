@@ -75,7 +75,7 @@ class DeleteButton(QPushButton):
 class BlindWatermarkInputPanel(QWidget):
     textUpdate = Signal(str)
 
-    def __init__(self, allowed_chars=None, max_length = 33, parent=None):
+    def __init__(self, allowed_chars=None, max_length = 15, parent=None):
         super().__init__(parent)
 
         if allowed_chars is None:
@@ -155,7 +155,7 @@ class BlindWatermarkInputPanel(QWidget):
 
     def append_char(self, ch):
         current = self.input.text()
-        if len(current) > self.max_length:
+        if len(current) >= self.max_length:
             TeachingTip.create(
                 target=self.input,
                 icon=InfoBarIcon.WARNING,

@@ -120,7 +120,7 @@ class WatermarkAddWork(BaseWorker):
                     "message": kwargs["watermark_text"]
                 }
                 self.blind_watermark_addition_image_instance.prepare(
-                    onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "pixelseal_image_embed.onnx")
+                    onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_image_embed.onnx".format(kwargs["blind_watermark_model_name"]))
                 )
                 self.blind_watermark_addition_image_instance.watermark_addition(**params)
             else:
@@ -131,7 +131,7 @@ class WatermarkAddWork(BaseWorker):
                     "chunk_size": 8
                 }
                 self.blind_watermark_addition_video_instance.prepare(
-                    onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "pixelseal_video_embed.onnx"),
+                    onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_video_embed.onnx".format(kwargs["blind_watermark_model_name"])),
                     ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN")
                 )
                 self.blind_watermark_addition_video_instance.watermark_addition(**params)

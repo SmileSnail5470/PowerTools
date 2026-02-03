@@ -52,7 +52,7 @@ class VideoBlindWatermarkEmbed():
         width = int(video_info["width"])
         height = int(video_info["height"])
         fps = float(video_info["r_frame_rate"].split("/")[0]) / float(video_info["r_frame_rate"].split("/")[1])
-        num_frames = int(probe["streams"][0]["nb_frames"])
+        has_audio = any(stream['codec_type'] == 'audio' for stream in probe['streams'])
 
         # Open the input video
         process1 = (
@@ -118,20 +118,32 @@ class VideoBlindWatermarkEmbed():
             os.remove(temp_output)
         os.rename(output_path, temp_output)
 
-        audiostream = ffmpeg.input(input_path)
         videostream = ffmpeg.input(temp_output)
-        process3 = (
-            ffmpeg.output(
-                videostream.video,
-                audiostream.audio,
-                output_path,
-                vcodec="copy",
-                acodec="copy",
+        if has_audio:
+            audiostream = ffmpeg.input(input_path)
+            process3 = (
+                ffmpeg.output(
+                    videostream,
+                    audiostream,
+                    output_path,
+                    vcodec="copy",
+                    acodec="copy",
+                )
+                .global_args("-hide_banner", "-loglevel", "error")
+                .overwrite_output()
+                .run_async()
             )
-            .global_args("-hide_banner", "-loglevel", "error")
-            .overwrite_output()
-            .run_async()
-        )
+        else:
+            process3 = (
+                ffmpeg.output(
+                    videostream,
+                    output_path,
+                    vcodec="copy",
+                )
+                .global_args("-hide_banner", "-loglevel", "error")
+                .overwrite_output()
+                .run_async()
+            )
         process3.wait()
         os.remove(temp_output)
 

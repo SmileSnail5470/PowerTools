@@ -10,6 +10,7 @@ param_name_map = {
     "input_path": "文件路径",
     "watermark_type": "水印类型",
     "blind_watermark_task_type": "盲水印任务类型",
+    "blind_watermark_model_name": "盲水印算法",
     "watermark_text": "水印文本",
     "font": "字体",
     "font_size": "字体大小",
@@ -49,7 +50,9 @@ class TaskInfoMessageBox(MessageBoxBase):
                 "visible": "可见水印",
                 "blind": "盲水印",
                 "ImageSettings": "图片水印",
-                "TextSettings": "文本水印"
+                "TextSettings": "文本水印",
+                "videoseal": "稳定可靠",
+                "pixelseal": "追求质量"
             }
             input_section = self.create_section(self.tr("📁 输入文件路径"))
             input_path = self.create_path_label(self.task_params["input_path"])
@@ -101,7 +104,9 @@ class TaskInfoMessageBox(MessageBoxBase):
                 "visible": "可见水印",
                 "blind": "盲水印",
                 "extract_blind_watermark": "提取",
-                "add_blind_watermark": "添加"
+                "add_blind_watermark": "添加",
+                "videoseal": "稳定可靠",
+                "pixelseal": "追求质量"
             }
             input_section = self.create_section(self.tr("📁 输入文件路径"))
             input_path = self.create_path_label(self.task_params["input_path"])
