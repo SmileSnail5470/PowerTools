@@ -15,8 +15,8 @@ from app.ui.library.qframelesswindow.titlebar import CloseButton
 
 from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.image_preview_widget import ScrollBar
+from app.ui.widgets.frame_control_widget import FrameControlWidget
 
-from app.ui.common.event_bus import global_event_bus
 from app.ui.common.config import cfg
 
 
@@ -59,7 +59,7 @@ class MaskItem(QGraphicsItem):
         self.image = QImage(size, QImage.Format_Alpha8)
         self.image.fill(0)
 
-        self.brush_size = 20
+        self.brush_size = 32
         self.current_tool = "brush"  # brush / eraser
         self.last_point: QPointF | None = None
 
@@ -263,14 +263,14 @@ class CanvasView(QGraphicsView):
 
 
 class WatermarkMaskTool(MyMessageBoxBase):
-    def __init__(self, image_path, parent=None):
+    def __init__(self, file_path, parent=None):
         super().__init__(parent=parent)
         self._init_title_bar()
         self.setModal(True)
         self.setDraggable(True)
         self.init_ui()
-        self.load_image(file_path=image_path)
-        self.image_path = image_path
+        self.load_image(file_path=file_path)
+        self.mask_path = ""
 
     def _init_title_bar(self):
         title_bar = GradientHeader(
@@ -361,14 +361,14 @@ class WatermarkMaskTool(MyMessageBoxBase):
         setFont(size_label, 16, QFont.DemiBold)
         size_layout.addWidget(size_label)
         
-        self.size_value_label = QLabel("20px")
+        self.size_value_label = QLabel("32px")
         self.size_value_label.setAlignment(Qt.AlignRight)
         size_layout.addWidget(self.size_value_label)
         
         self.size_slider = Slider(Qt.Horizontal)
         self.size_slider.setThemeColor(light=QColor(0, 120, 212), dark=QColor(0, 120, 212))
         self.size_slider.setRange(1, 100)
-        self.size_slider.setValue(20)
+        self.size_slider.setValue(32)
         self.size_slider.valueChanged.connect(self.on_brush_size_changed)
         size_layout.addWidget(self.size_slider)
         
@@ -385,17 +385,33 @@ class WatermarkMaskTool(MyMessageBoxBase):
         
         info_text = QLabel(
             "• 左键拖动绘制\n"
-            "• 画笔：绘制红色mask\n"
-            "• 橡皮擦：擦除mask\n"
+            "• 画笔：绘制红色 Mask\n"
+            "• 橡皮擦：擦除 Mask\n"
             "• 支持撤销/重做操作\n"
-            "• 保存为PNG格式"
+            "• 保存为PNG格式\n"
+            "• 点击按钮切换上一帧或下一帧\n"
+            "• 可在每一帧单独绘制 Mask"
         )
         info_text.setWordWrap(True)
         info_text.setStyleSheet("color: #aaaaaa;")
-        setFont(info_text, 14)
+        setFont(info_text, 12)
         info_layout.addWidget(info_text)
         
         layout.addWidget(info_group)
+
+        video_group = QFrame()
+        video_layout = QVBoxLayout(video_group)
+        video_layout.setSpacing(8)
+        video_layout.setContentsMargins(0, 0, 0, 0)
+        
+        video_title = QLabel(self.tr("视频模式"))
+        setFont(video_title, 16, QFont.DemiBold)
+        video_layout.addWidget(video_title)
+
+        frame_control_widget = FrameControlWidget()
+        video_layout.addWidget(frame_control_widget)
+
+        layout.addWidget(video_group)
         
         return panel
         
@@ -433,7 +449,10 @@ class WatermarkMaskTool(MyMessageBoxBase):
             duration=2000,
             parent=self
         )
-        global_event_bus.watermarkRemove_ManualMaskUpdate.emit(file_path)
+        self.mask_path = file_path
+
+    def get_mask_path(self):
+        return self.mask_path
                 
     def undo(self):
         self.canvas.undo()

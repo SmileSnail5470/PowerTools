@@ -546,8 +546,6 @@ class HeaderWidget(QWidget):
 
         self.process_btn.clicked.connect(self.remove_watermark_process)
 
-        # global_event_bus.watermarkRemove_ManualMaskUpdate.connect()
-
     def remove_watermark_process(self):
         init_params = watermark_remove_params.to_dict()
         error_msg, task_params = self._params_check(params=init_params)
@@ -557,7 +555,6 @@ class HeaderWidget(QWidget):
         w = TaskInfoMessageBox(task_params, "watermark-remove", self.window())
         if not w.exec():
             return
-        
         total_tasks = []
         input_path = task_params["input_path"]
         watermark_remove_task_status_model.reset()
@@ -565,15 +562,19 @@ class HeaderWidget(QWidget):
         if os.path.isdir(input_path):
             for one_file in os.listdir(input_path):
                 task_params["input_path"] = os.path.join(input_path, one_file)
-                task_instance = WatermarkAddWork(**task_params)
+                if task_params["watermark_detect_type"] != "ai_detect":
+                    watermarkMaskTool = WatermarkMaskTool(file_path=task_params["input_path"], parent=self.window())
+                    watermarkMaskTool.exec()
+                    task_params["mask_path"] = watermarkMaskTool.get_mask_path()
+                task_instance = WatermarkRemoveWork(**task_params)
                 func, args, kwargs = task_instance.to_worker()
                 total_tasks.append((func, args, kwargs))
         else:
             if task_params["watermark_detect_type"] != "ai_detect":
-                watermarkMaskTool = WatermarkMaskTool(image_path=task_params["input_path"], parent=self.window())
-                if not watermarkMaskTool.exec():
-                    return
-            task_instance = WatermarkAddWork(**task_params)
+                watermarkMaskTool = WatermarkMaskTool(file_path=task_params["input_path"], parent=self.window())
+                watermarkMaskTool.exec()
+                task_params["mask_path"] = watermarkMaskTool.get_mask_path()
+            task_instance = WatermarkRemoveWork(**task_params)
             func, args, kwargs = task_instance.to_worker()
             total_tasks.append((func, args, kwargs))
 
