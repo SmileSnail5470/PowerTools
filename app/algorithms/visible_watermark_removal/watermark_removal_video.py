@@ -1,7 +1,4 @@
-try:
-    import app.utils.ffmpeg as ffmpeg  # type: ignore
-except ImportError:
-    import ffmpeg
+import app.utils.ffmpeg as ffmpeg
 import shutil
 import tempfile
 import os

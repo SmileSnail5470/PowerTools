@@ -117,6 +117,14 @@ class CustomGroupBox(QWidget):
 
 
 class StyleCard(QFrame):
+    ICON_MAP = {
+        "#4facfe": "✏️",   # PatchWiper：细节增强 / 手工修补感
+        "#f093fb": "🧠",   # EMDF：智能修补 / 自适应
+        "#a18cd1": "⚖️",   # GRIG：平衡修复
+        "#84fab0": "🍃",   # LaMa：自然、保守、平滑
+        "#fbc2eb": "🪣",   # CoordFill：快速填充
+    }
+
     def __init__(self, icon_color, title, subtitle, parent=None):
         super().__init__(parent)
         self.setStyleSheet("""
@@ -137,12 +145,8 @@ class StyleCard(QFrame):
         
         self.icon_label = QLabel(self)
         self.icon_label.setFixedSize(40, 40)
-        if icon_color == "#84fab0":
-            self.icon_label.setText("🍃")
-        elif icon_color == "#fa709a":
-            self.icon_label.setText("✏️")
-        else:
-            self.icon_label.setText("🪣")
+        icon = self.ICON_MAP.get(icon_color, "🧩")
+        self.icon_label.setText(icon)
             
         self.icon_label.setAlignment(Qt.AlignCenter)
         self.icon_label.setStyleSheet(f"""
@@ -173,6 +177,13 @@ class StyleCard(QFrame):
         main_layout.addLayout(text_layout)
         
         self.is_selected = False
+        self.name = ""
+
+    def set_name(self, name):
+        self.name = name
+
+    def get_name(self):
+        return self.name
         
     def set_selected(self, selected):
         self.is_selected = selected
