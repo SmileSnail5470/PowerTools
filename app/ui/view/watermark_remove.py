@@ -563,7 +563,8 @@ class HeaderWidget(QWidget):
             for one_file in os.listdir(input_path):
                 task_params["input_path"] = os.path.join(input_path, one_file)
                 if task_params["watermark_detect_type"] != "ai_detect":
-                    watermarkMaskTool = WatermarkMaskTool(file_path=task_params["input_path"], parent=self.window())
+                    is_video = get_file_type(task_params["input_path"]) == "video"
+                    watermarkMaskTool = WatermarkMaskTool(file_path=task_params["input_path"], is_video=is_video, parent=self.window())
                     watermarkMaskTool.exec()
                     task_params["mask_path"] = watermarkMaskTool.get_mask_path()
                 task_instance = WatermarkRemoveWork(**task_params)
@@ -571,7 +572,8 @@ class HeaderWidget(QWidget):
                 total_tasks.append((func, args, kwargs))
         else:
             if task_params["watermark_detect_type"] != "ai_detect":
-                watermarkMaskTool = WatermarkMaskTool(file_path=task_params["input_path"], parent=self.window())
+                is_video = get_file_type(task_params["input_path"]) == "video"
+                watermarkMaskTool = WatermarkMaskTool(file_path=task_params["input_path"], is_video=is_video, parent=self.window())
                 watermarkMaskTool.exec()
                 task_params["mask_path"] = watermarkMaskTool.get_mask_path()
             task_instance = WatermarkRemoveWork(**task_params)

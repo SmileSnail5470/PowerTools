@@ -1,5 +1,6 @@
 import os
-from datetime import datetime
+import platform
+import tempfile
 from PySide6.QtWidgets import (
     QGraphicsScene, QVBoxLayout, QLabel, QFrame, QHBoxLayout, QGraphicsItem, QGraphicsView,
     QGraphicsPixmapItem
@@ -18,6 +19,7 @@ from app.ui.widgets.image_preview_widget import ScrollBar
 from app.ui.widgets.frame_control_widget import FrameControlWidget
 
 from app.ui.common.config import cfg
+import app.utils.ffmpeg as ffmpeg
 
 
 class MyMessageBoxBase(MaskDialogBase):
@@ -263,14 +265,48 @@ class CanvasView(QGraphicsView):
 
 
 class WatermarkMaskTool(MyMessageBoxBase):
-    def __init__(self, file_path, parent=None):
+    def __init__(self, file_path, is_video=False, parent=None):
         super().__init__(parent=parent)
+        self.file_path = file_path
+        self.is_video = is_video
+        self.mask_path = os.path.join(cfg.get(cfg.cachePath), "watermark_removal", os.path.basename(file_path).split(".")[0])
+        self.mask_file = ""
+        self.temp_dir = None
+        os.makedirs(self.mask_path, exist_ok=True)
         self._init_title_bar()
         self.setModal(True)
         self.setDraggable(True)
         self.init_ui()
-        self.load_image(file_path=file_path)
-        self.mask_path = ""
+        self.load_image()
+
+    def load_image(self):
+        if not self.is_video:
+            self._load_image(file_path=self.file_path)
+        else:
+            temp_dir = tempfile.TemporaryDirectory()
+            frames_dir = os.path.join(temp_dir.name, "frames")
+            os.makedirs(frames_dir, exist_ok=True)
+            # 提取所有帧
+            (
+                ffmpeg
+                .input(self.file_path)
+                .output(os.path.join(frames_dir, "%06d.png"), start_number=0)
+                .overwrite_output()
+                .global_args("-hide_banner", "-loglevel", "error")
+                .run(cmd=os.path.join(os.getenv("POWERTOOLS_FFMPEG_BIN"), "ffmpeg.exe" if platform.system().lower() == "windows" else "ffmpeg"))
+            )
+            frame_files = sorted([os.path.join(frames_dir, f) for f in os.listdir(frames_dir) if f.split(".")[-1] == 'png'])
+            total_frames = len(frame_files)
+            self.frame_control_widget.set_total_frames(total=total_frames)
+            self.frame_control_widget.frameChanged.connect(lambda index: self._load_image(frame_files[index-1]))
+            if total_frames > 0:
+                self.frame_control_widget.frameChanged.emit(1)
+            self.temp_dir = temp_dir
+
+    def clear(self):
+        if self.temp_dir:
+            self.temp_dir.cleanup()
+        self.reject()
 
     def _init_title_bar(self):
         title_bar = GradientHeader(
@@ -290,7 +326,7 @@ class WatermarkMaskTool(MyMessageBoxBase):
 
         closeBtn = CloseButton()
         closeBtn.setNormalColor(Qt.white)
-        closeBtn.clicked.connect(self.reject)
+        closeBtn.clicked.connect(self.clear)
         self.titleLabel = SubtitleLabel(self.tr("水印 Mask 标注"))
         setFont(self.titleLabel, 18)
         self.titleLabel.setStyleSheet("color: white;")
@@ -408,8 +444,8 @@ class WatermarkMaskTool(MyMessageBoxBase):
         setFont(video_title, 16, QFont.DemiBold)
         video_layout.addWidget(video_title)
 
-        frame_control_widget = FrameControlWidget()
-        video_layout.addWidget(frame_control_widget)
+        self.frame_control_widget = FrameControlWidget()
+        video_layout.addWidget(self.frame_control_widget)
 
         layout.addWidget(video_group)
         
@@ -430,15 +466,14 @@ class WatermarkMaskTool(MyMessageBoxBase):
         self.size_value_label.setText(f"{value}px")
         self.canvas.set_brush_size(value)
 
-    def load_image(self, file_path):
+    def _load_image(self, file_path):
+        mask_name = os.path.basename(file_path).split(".")[0] + ".png"
+        self.mask_file = os.path.join(self.mask_path, mask_name)
         self.canvas.load_image(file_path)
+        self.canvas.save_mask(self.mask_file)  # Mask 占位符
                 
     def save_mask(self):
-        base_path = cfg.get(cfg.cachePath)
-        mask_name = f"manual_mask_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-        file_path = os.path.join(base_path, "watermark_removal", mask_name)
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        self.canvas.save_mask(file_path)
+        self.canvas.save_mask(self.mask_file)
         TeachingTip.create(
             target=self,
             icon=InfoBarIcon.SUCCESS,
@@ -449,10 +484,12 @@ class WatermarkMaskTool(MyMessageBoxBase):
             duration=2000,
             parent=self
         )
-        self.mask_path = file_path
 
     def get_mask_path(self):
-        return self.mask_path
+        if self.is_video:
+            return self.mask_path
+        else:
+            return self.mask_file
                 
     def undo(self):
         self.canvas.undo()
