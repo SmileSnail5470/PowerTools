@@ -569,12 +569,13 @@ class ThumbnailButton(AnimatedButton):
 
 
 class ImageNavigationWidget(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, task_type="watermark_add"):
         super().__init__(parent)
         self.setObjectName("ImageNavigationWidget")
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.total_images = []
         self.current_index = 0
+        self.task_type = task_type
         self.setup_ui()
         self.update_display()
 
@@ -673,7 +674,10 @@ class ImageNavigationWidget(QWidget):
             if thumb:
                 thumb.set_active(i == self.current_index)
                 if i == self.current_index:
-                    global_event_bus.watermarkAdd_PreviewFile.emit(thumb.image_path)
+                    if self.task_type == "watermark_add":
+                        global_event_bus.watermarkAdd_PreviewFile.emit(thumb.image_path)
+                    elif self.task_type == "watermark_remove":
+                        global_event_bus.watermarkRemove_PreviewFile.emit(thumb.image_path)
         self.prev_btn.setEnabled(len(self.total_images) > 1)
         self.next_btn.setEnabled(len(self.total_images) > 1)
 

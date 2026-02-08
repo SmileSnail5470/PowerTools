@@ -1,5 +1,6 @@
 import os
 import platform
+import shutil
 import tempfile
 from PySide6.QtWidgets import (
     QGraphicsScene, QVBoxLayout, QLabel, QFrame, QHBoxLayout, QGraphicsItem, QGraphicsView,
@@ -306,6 +307,12 @@ class WatermarkMaskTool(MyMessageBoxBase):
     def clear(self):
         if self.temp_dir:
             self.temp_dir.cleanup()
+        if self.frame_control_widget.current_frame() < self.frame_control_widget.total_frames():
+            last_mask_file = os.path.join(self.mask_path, sorted(os.listdir(self.mask_path))[-1])
+            for i in range(self.frame_control_widget.total_frames() - self.frame_control_widget.current_frame()):
+                dst_file_name = "{:06d}".format(int(os.path.basename(last_mask_file).split(".")[0]) + i + 1)
+                dst_file = os.path.join(os.path.dirname(last_mask_file), "{0}.png".format(dst_file_name))
+                shutil.copy2(last_mask_file, dst=dst_file)
         self.reject()
 
     def _init_title_bar(self):
@@ -424,9 +431,9 @@ class WatermarkMaskTool(MyMessageBoxBase):
             "• 画笔：绘制红色 Mask\n"
             "• 橡皮擦：擦除 Mask\n"
             "• 支持撤销/重做操作\n"
-            "• 保存为PNG格式\n"
             "• 点击按钮切换上一帧或下一帧\n"
-            "• 可在每一帧单独绘制 Mask"
+            "• 可在每一帧单独绘制 Mask\n"
+            "• 将最后绘制的帧 Mask 用于后续所有帧 Mask"
         )
         info_text.setWordWrap(True)
         info_text.setStyleSheet("color: #aaaaaa;")

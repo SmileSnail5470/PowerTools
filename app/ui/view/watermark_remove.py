@@ -24,9 +24,12 @@ from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
 from app.ui.widgets.watermark_manual_select_widget import WatermarkMaskTool
 
 from app.ui.common.event_bus import global_event_bus
+from app.controllers.task_manager import global_task_manager
 from app.ui.common.task_params import bind_widget_to_param, TaskParams
 from app.ui.common.task_status import TaskStatusModel
 from app.ui.common.utils import get_file_type
+
+from app.workers.watermark_remove import WatermarkRemoveWork
 
 
 watermark_remove_params = TaskParams()
@@ -447,7 +450,7 @@ class PreviewWidget(QWidget):
         bottom_layout.setContentsMargins(0, 0, 0, 0)
         bottom_layout.setSpacing(4)
 
-        self.image_navigation_widget = ImageNavigationWidget(parent=self)
+        self.image_navigation_widget = ImageNavigationWidget(parent=self, task_type="watermark_remove")
         bottom_layout.addWidget(self.image_navigation_widget, 3)
 
         # 底部状态栏
@@ -466,6 +469,8 @@ class PreviewWidget(QWidget):
 
     def update_init_preview(self, file_path):
         self.image_navigation_widget.clear_images()
+        self.image_viewer.init_scene()
+        self.video_viewer.init_scene()
         self.files_preview_info = {}
         self.media_type = "image"
         if not file_path:
@@ -558,7 +563,7 @@ class HeaderWidget(QWidget):
         total_tasks = []
         input_path = task_params["input_path"]
         watermark_remove_task_status_model.reset()
-        global_event_bus.watermarkAdd_ImageNavigationInit.emit()
+        global_event_bus.watermarkRemove_ImageNavigationInit.emit()
         if os.path.isdir(input_path):
             for one_file in os.listdir(input_path):
                 task_params["input_path"] = os.path.join(input_path, one_file)
@@ -584,7 +589,7 @@ class HeaderWidget(QWidget):
 
         for func, args, kwargs in total_tasks:
             input_path = kwargs["input_path"]
-            future = watermark_remove_task_status_model.submit(func, *args, **kwargs)
+            future = global_task_manager.submit(func, *args, **kwargs)
             
             future.finished.connect(
                 lambda result, path=input_path: self._task_finished(path, result)
