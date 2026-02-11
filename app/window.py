@@ -1,5 +1,5 @@
-from PySide6.QtCore import QSize, QTimer, Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import QSize, QTimer, QUrl
+from PySide6.QtGui import QIcon, QDesktopServices
 from PySide6.QtWidgets import QApplication
 
 from app.ui.library.qfluentwidgets import (NavigationItemPosition, FluentWindow, SplashScreen, SystemThemeListener, isDarkTheme)
@@ -120,8 +120,8 @@ class MainWindow(FluentWindow):
         QApplication.processEvents()  # 立即处理所有挂起的事件，而不是等待事件循环自然处理（鼠标点击、窗口重绘、定时器事件都被放入事件队列）
 
     def onSupport(self):
-        # TODO
-        pass
+        url = QUrl("https://github.com/SmileSnail5470/PowerTools/issues")
+        QDesktopServices.openUrl(url)
 
     def resizeEvent(self, e):
         super().resizeEvent(e)

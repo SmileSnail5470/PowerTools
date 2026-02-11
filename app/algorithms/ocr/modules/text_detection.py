@@ -727,30 +727,3 @@ class TextDetector(object):
         else:
             dt_boxes, elapse = self.predict(img)
         return dt_boxes, elapse
-
-
-def detect_text_watermarks(input_path: str, **kwargs):
-    text_detector = TextDetector()
-    text_detector.prepare(**kwargs)
-    img = cv2.imread(input_path)
-    dt_boxes, _ = text_detector(img)
-
-    h, w = img.shape[:2]
-    mask = np.zeros((h, w), dtype=np.uint8)
-    for poly in dt_boxes.tolist():
-        if poly is None or len(poly) < 3:
-            continue
-        pts = np.array(poly, dtype=np.int32)
-        pts[:, 0] = np.clip(pts[:, 0], 0, w - 1)
-        pts[:, 1] = np.clip(pts[:, 1], 0, h - 1)
-        cv2.fillPoly(mask, [pts], 255)
-    return mask
-
-
-if __name__ == "__main__":
-    image_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assess", "image.jpg")
-    onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "pp_ocr_det.onnx")
-    
-    mask = detect_text_watermarks(input_path=image_file, onnx_path=onnx_path)
-    from PIL import Image
-    Image.fromarray(mask).save("text_watermark_mask.png")
