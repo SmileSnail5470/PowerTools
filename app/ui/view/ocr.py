@@ -1,5 +1,6 @@
+import os
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QVBoxLayout, QWidget, QHBoxLayout, QLabel, QStackedWidget
+from PySide6.QtWidgets import QVBoxLayout, QWidget, QHBoxLayout, QLabel, QStackedWidget, QStackedLayout
 from PySide6.QtGui import QFont, QColor
 
 from app.ui.library.qfluentwidgets import PushButton, setFont, HeaderCardWidget, SegmentedWidget, ScrollArea
@@ -7,6 +8,9 @@ from app.ui.library.qfluentwidgets import PushButton, setFont, HeaderCardWidget,
 from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.file_selector_widget import FileSelectorWidget
 from app.ui.widgets.directory_selector_widget import DirectorySelectorWidget
+from app.ui.widgets.image_preview_widget import ImageNavigationWidget
+from app.ui.widgets.status_bar_widget import StatusInfoWidget
+from app.ui.widgets.ocr_preview_widget import OCRViewerWidget
 
 from app.ui.common.event_bus import global_event_bus
 from app.ui.common.task_params import bind_widget_to_param, TaskParams
@@ -70,11 +74,92 @@ class ControlPanelWidget(ScrollArea):
         fileSelectorCard = FileSelectorCard(self)
         main_layout.addWidget(fileSelectorCard)
 
+        main_layout.addStretch(1)
+
         self.setWidget(view)
         self.setViewportMargins(0, 0, 0, 0)
         self.setWidgetResizable(True)
         self.enableTransparentBackground()
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+
+class PreviewWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("PreviewWidget")
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(5)
+
+        self.stack = QStackedLayout()
+        self.stack.setContentsMargins(0, 0, 0, 0)
+
+        self.placeholder_widget = QLabel("请选择图片文件进行 OCR 识别", parent=self)
+        self.placeholder_widget.setStyleSheet("color: #888888;")  # 设置为浅灰色
+        setFont(self.placeholder_widget, 20)
+        self.placeholder_widget.setAlignment(Qt.AlignCenter)
+
+        self.ocr_viewer = OCRViewerWidget(parent=self)
+
+        self.stack.addWidget(self.placeholder_widget)
+        self.stack.addWidget(self.ocr_viewer)
+ 
+
+        main_layout.addLayout(self.stack, 1)
+
+        bottom_layout = QHBoxLayout()
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_layout.setSpacing(4)
+
+        self.image_navigation_widget = ImageNavigationWidget(parent=self, task_type="ocr")
+        bottom_layout.addWidget(self.image_navigation_widget, 3)
+
+        # 底部状态栏
+        status_info_widget = StatusInfoWidget(ocr_task_status_model, self)
+        bottom_layout.addWidget(status_info_widget, 2)
+
+        main_layout.addLayout(bottom_layout)
+
+        self.files_preview_info = {}
+        self.media_type = "image"
+
+        global_event_bus.OCR_InputFileUpdate.connect(self.update_init_preview)
+        global_event_bus.OCR_TaskFinished.connect(self.update_preview)
+        global_event_bus.OCR_PreviewFile.connect(self._on_preview_file)
+        global_event_bus.OCR_ImageNavigationInit.connect(lambda: self.image_navigation_widget.clear_images())
+
+    def update_init_preview(self, file_path):
+        self.image_navigation_widget.clear_images()
+        self.ocr_viewer.init_scene()
+        self.files_preview_info = {}
+        self.media_type = "image"
+        if not file_path:
+            self.stack.setCurrentIndex(0)
+            return
+        if os.path.isdir(file_path):
+            tmp_file_path = os.path.join(file_path, os.listdir(file_path)[0])
+        else:
+            tmp_file_path = file_path
+        file_type = get_file_type(tmp_file_path)
+        ext = tmp_file_path.lower().split(".")[-1]
+        if file_type == "image":
+            self.stack.setCurrentIndex(1)
+            self.media_type = "image"
+        else:
+            self.placeholder_widget.setText(f"不支持的文件类型: {ext}")
+            self.stack.setCurrentIndex(0)
+
+    def update_preview(self, input_path, ocr_result):
+        self.files_preview_info[input_path] = ocr_result
+        self.image_navigation_widget.load_images([input_path], self.media_type)
+
+    def _on_preview_file(self, path):
+        out = self.files_preview_info.get(path)
+        widget = self.stack.currentWidget()
+
+        if self.media_type=="image" and out and widget and hasattr(widget, "set_data"):
+            widget.set_data(image_path=path, raw_data=out)
 
 
 class HeaderWidget(QWidget):
@@ -125,6 +210,7 @@ class HeaderWidget(QWidget):
     def ocr_process(self):
         pass
 
+
 class OCR(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -146,7 +232,7 @@ class OCR(QWidget):
         view_layout.addWidget(control_panel_widget, 3)
 
         # 右侧预览
-        right_content = QLabel("预览")
+        right_content = PreviewWidget(self)
         view_layout.addWidget(right_content, 7)
 
         main_Layout.addLayout(view_layout)

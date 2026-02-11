@@ -1,13 +1,11 @@
 import sys
 import numpy as np
 import math
-from PySide6.QtWidgets import (QApplication, QFrame, QWidget, QHBoxLayout, 
-                             QVBoxLayout, QLabel, QScrollArea, 
-                             QGraphicsView, QGraphicsScene, 
-                             QGraphicsItem)
+from PySide6.QtWidgets import QApplication, QFrame, QWidget, QHBoxLayout,  QVBoxLayout, QLabel,  QGraphicsView, QGraphicsScene,  QGraphicsItem
 from PySide6.QtCore import Qt, QRectF, Signal, QPointF
-from PySide6.QtGui import (QPixmap, QColor, QPainter, QPainterPath, QPen, 
-                           QFont, QPolygonF)
+from PySide6.QtGui import QPixmap, QColor, QPainter, QPainterPath, QPen, QFont, QPolygonF
+
+from app.ui.library.qfluentwidgets import ScrollArea, setFont
 
 
 class OCRAngledHighlightItem(QGraphicsItem):
@@ -15,25 +13,37 @@ class OCRAngledHighlightItem(QGraphicsItem):
         super().__init__()
         self.polygon = QPolygonF()
         self.is_danger = False
+        self._rect = QRectF(0, 0, 0, 0)
         self.setZValue(10)
 
+    def set_full_rect(self, rect):
+        self.prepareGeometryChange()
+        self._rect = QRectF(rect)
+        self.update()
+
+    def update_highlight(self, poly, is_danger):
+        self.prepareGeometryChange()
+        self.polygon = poly
+        self.is_danger = is_danger
+        self.update()
+
     def boundingRect(self):
-        return self.scene().sceneRect() if self.scene() else QRectF(0, 0, 2000, 2000)
+        return self._rect
 
     def paint(self, painter, option, widget):
-        if self.polygon.isEmpty():
+        if self.polygon.isEmpty() or self._rect.isEmpty():
             return
 
-        # 1. 全屏半透明遮罩减去多边形区域
         painter.save()
         full_path = QPainterPath()
-        full_path.addRect(self.boundingRect())
+        full_path.addRect(self._rect)
         
         poly_path = QPainterPath()
         poly_path.addPolygon(self.polygon)
         
+        # 镂空效果
         mask_path = full_path.subtracted(poly_path)
-        painter.fillPath(mask_path, QColor(0, 0, 0, 100))
+        painter.fillPath(mask_path, QColor(0, 0, 0, 120)) 
         painter.restore()
 
         # 2. 绘制倾斜边框
@@ -105,6 +115,7 @@ class OCRViewerWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setup_ui()
+        self.show_placeholders()
 
     def setup_ui(self):
         layout = QHBoxLayout(self)
@@ -121,6 +132,7 @@ class OCRViewerWidget(QWidget):
                 border-right: 1px solid #e1dfdd;
             }
         """)
+        self.view.setDragMode(QGraphicsView.ScrollHandDrag) # 允许拖拽查看
         self.view.setRenderHint(QPainter.Antialiasing)
 
         self.highlighter = OCRAngledHighlightItem()
@@ -128,8 +140,8 @@ class OCRViewerWidget(QWidget):
         layout.addWidget(self.view, 3)
 
         # 右侧：列表展示
-        scroll = QScrollArea()
-        scroll.setFixedWidth(320)
+        scroll = ScrollArea()
+        scroll.setMinimumWidth(220)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setStyleSheet("background-color: #ffffff;")
@@ -142,21 +154,37 @@ class OCRViewerWidget(QWidget):
         scroll.setWidget(list_container)
         layout.addWidget(scroll)
 
-    def set_data(self, image_path, raw_data):
-        """外部调用入口：设置图片和OCR结果"""
-        pixmap = QPixmap(image_path)
-        if pixmap.isNull():
-            return
+    def show_placeholders(self):
+        text_item = self.scene.addText("原图显示区", QFont("Microsoft YaHei", 12))
+        text_item.setDefaultTextColor(QColor("#888888"))
+        text_item.setPos(-40, -10) 
+
+        self.placeholder_label = QLabel("等待 OCR 识别结果...")
+        self.placeholder_label.setAlignment(Qt.AlignCenter)
+        self.placeholder_label.setStyleSheet("color: #888888; font-size: 13px; margin-top: 300px;")
+        self.list_layout.insertWidget(0, self.placeholder_label)
+        self.list_layout.addStretch()
+
+    def init_scene(self, show_placeholders=True):
         while self.list_layout.count() > 0:
             item = self.list_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
         self.scene.clear()
+        if show_placeholders:
+            self.show_placeholders()
+
+    def set_data(self, image_path, raw_data):
+        pixmap = QPixmap(image_path)
+        if pixmap.isNull():
+            return
+        self.init_scene(show_placeholders=False)
         self.scene.addPixmap(pixmap)
         self.scene.setSceneRect(pixmap.rect())
         
         self.highlighter = OCRAngledHighlightItem()
+        self.highlighter.set_full_rect(pixmap.rect())
         self.scene.addItem(self.highlighter)
 
         coords_list, results = raw_data
@@ -168,17 +196,15 @@ class OCRViewerWidget(QWidget):
             self.list_layout.addWidget(list_item)
         
         self.list_layout.addStretch()
+        self.view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
 
     def on_hover(self, poly, is_danger):
-        self.highlighter.polygon = poly
-        self.highlighter.is_danger = is_danger
-        self.highlighter.update()
+        self.highlighter.update_highlight(poly, is_danger)
         # 自动滚动到多边形中心
         self.view.ensureVisible(poly.boundingRect(), 150, 150)
 
     def on_unhover(self):
-        self.highlighter.polygon = QPolygonF()
-        self.highlighter.update()
+        self.highlighter.update_highlight(QPolygonF(), False)
 
 if __name__ == "__main__":
     import os

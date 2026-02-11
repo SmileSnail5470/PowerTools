@@ -77,7 +77,7 @@ class MainWindow(FluentWindow):
             routeKey='use-powertools',
             icon=Icon.Price,
             text=self.tr("欢迎使用 PowerTools"),
-            onClick=self.onSupport,
+            onClick=self.welcome,
             selectable=False,
             tooltip=self.tr("Price"),
             position=NavigationItemPosition.BOTTOM
@@ -122,6 +122,9 @@ class MainWindow(FluentWindow):
     def onSupport(self):
         url = QUrl("https://github.com/SmileSnail5470/PowerTools/issues")
         QDesktopServices.openUrl(url)
+
+    def welcome(self):
+        pass
 
     def resizeEvent(self, e):
         super().resizeEvent(e)

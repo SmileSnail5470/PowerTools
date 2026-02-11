@@ -16,7 +16,7 @@ class GlobalEventBus(QObject):
 
     # OCR UI
     OCR_InputFileUpdate = Signal(str)
-    OCR_TaskFinished = Signal(str, str)
+    OCR_TaskFinished = Signal(str, tuple)
     OCR_PreviewFile = Signal(str)
     OCR_ImageNavigationInit = Signal()
 
