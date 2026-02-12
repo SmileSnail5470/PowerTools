@@ -1,5 +1,5 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFrame, QLabel
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFrame, QLabel, QSizePolicy
 from PySide6.QtGui import QPainter, QColor, QFont
 from app.ui.library.qfluentwidgets import isDarkTheme, BodyLabel, CaptionLabel, setFont
 
@@ -38,9 +38,12 @@ class CustomCardGroupWidget(QWidget):
         self.__initWidget()
 
     def __initWidget(self):
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
+        self.contentLabel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         self.separator.hide()
         self.contentLabel.setTextColor(QColor(96, 96, 96), QColor(206, 206, 206))
 
+        self.vBoxLayout.setSizeConstraint(QVBoxLayout.SetMinimumSize)
         self.vBoxLayout.setSpacing(0)
         self.vBoxLayout.setContentsMargins(0, 0, 0, 0)
         self.vBoxLayout.addLayout(self.hBoxLayout)
@@ -70,6 +73,9 @@ class CustomCardGroupWidget(QWidget):
 
     def setContent(self, text: str):
         self.contentLabel.setText(text)
+
+    def setContentWordWrap(self, flag: bool):
+        self.contentLabel.setWordWrap(flag)
 
     def setSeparatorVisible(self, isVisible: bool):
         self.separator.setVisible(isVisible)

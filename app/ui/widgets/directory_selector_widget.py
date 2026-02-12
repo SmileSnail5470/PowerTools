@@ -175,9 +175,9 @@ class DirectoryInfoWidget(SimpleCardWidget):
         
         base_dir = os.path.basename(dir_path)
         if os.name == "nt":
-            base_dir = "...\\{0}".format(base_dir)
+            base_dir = "...\\{0}".format(base_dir if len(base_dir) <= 16 else "..."+base_dir[-16:])
         else:
-            base_dir = ".../{0}".format(base_dir)
+            base_dir = ".../{0}".format(base_dir if len(base_dir) <= 16 else "..."+base_dir[-16:])
         self.titleLabel = BodyLabel(base_dir, self)
         setFont(self.titleLabel, 12, QFont.DemiBold)
         self.titleLabel.setToolTip(dir_path)

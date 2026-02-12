@@ -1,11 +1,14 @@
 import sys
 import numpy as np
 import math
-from PySide6.QtWidgets import QApplication, QFrame, QWidget, QHBoxLayout,  QVBoxLayout, QLabel,  QGraphicsView, QGraphicsScene,  QGraphicsItem
-from PySide6.QtCore import Qt, QRectF, Signal, QPointF
+from PySide6.QtWidgets import (
+    QApplication, QFrame, QWidget, QHBoxLayout,  QVBoxLayout, QLabel,  QGraphicsView, QGraphicsScene, 
+    QGraphicsItem, QTextEdit, QSizePolicy, QFileDialog, QMessageBox
+)
+from PySide6.QtCore import Qt, QRectF, Signal, QPointF, QTimer, QSize
 from PySide6.QtGui import QPixmap, QColor, QPainter, QPainterPath, QPen, QFont, QPolygonF
 
-from app.ui.library.qfluentwidgets import ScrollArea, setFont
+from app.ui.library.qfluentwidgets import ScrollArea, setFont, getFont, FluentIcon, ToolButton
 
 
 class OCRAngledHighlightItem(QGraphicsItem):
@@ -63,8 +66,8 @@ class OCRAngledHighlightItem(QGraphicsItem):
         tag_rect = QRectF(0, -22, 80, 20)
         painter.fillRect(tag_rect, color)
         painter.setPen(Qt.white)
-        painter.setFont(QFont("Segoe UI", 8, QFont.Bold))
-        painter.drawText(tag_rect, Qt.AlignCenter, "OCR RESULT")
+        setFont(painter, 8, QFont.Bold)
+        painter.drawText(tag_rect, Qt.AlignCenter, "OCR result")
         painter.restore()
 
 
@@ -78,17 +81,29 @@ class OCRListItem(QWidget):
         self.is_danger = conf < 0.8
         self.setAttribute(Qt.WA_StyledBackground, True)
         
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 12, 15, 12)
-        txt = QLabel(text)
-        txt.setWordWrap(True)
-        txt.setStyleSheet("font-size: 13px; font-weight: 500; color: #323130; background: transparent;")
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(15, 12, 15, 12)
+        txt = QTextEdit(text)
+        txt.setReadOnly(True)
+        txt.setFrameShape(QFrame.NoFrame)
+        txt.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        txt.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        txt.document().setDocumentMargin(0)
+        setFont(txt, 13, QFont.Medium)
+        txt.setStyleSheet("color: #323130; background: transparent; border: none;")
+        txt.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        txt.document().adjustSize()
+
+        doc_height = txt.document().size().height()
+        margins = txt.contentsMargins()
+        txt.setFixedHeight(int(doc_height + margins.top() + margins.bottom()))
         
         sub = QLabel(f"置信度: {conf:.2f}")
-        sub.setStyleSheet(f"font-size: 11px; color: {'#d13438' if self.is_danger else '#605e5c'}; background: transparent;")
+        setFont(sub, 11)
+        sub.setStyleSheet(f"color: {'#d13438' if self.is_danger else '#605e5c'}; background: transparent;")
         
-        layout.addWidget(txt)
-        layout.addWidget(sub)
+        main_layout.addWidget(txt)
+        main_layout.addWidget(sub)
         self.update_style(False)
 
     def update_style(self, is_hover):
@@ -111,59 +126,132 @@ class OCRListItem(QWidget):
         self.unhovered.emit()
 
 
+class ZoomableGraphicsView(QGraphicsView):
+    def __init__(self, scene, parent=None):
+        super().__init__(scene, parent)
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setDragMode(QGraphicsView.ScrollHandDrag)
+        self._zoom_level = 0
+
+    def wheelEvent(self, event):
+        angle = event.angleDelta().y()
+        factor = 1.15
+        
+        if angle > 0:
+            if self._zoom_level < 10:
+                self.scale(factor, factor)
+                self._zoom_level += 1
+        else:
+            if self._zoom_level > -5:
+                self.scale(1.0 / factor, 1.0 / factor)
+                self._zoom_level -= 1
+
 class OCRViewerWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.raw_results = []
         self.setup_ui()
         self.show_placeholders()
 
     def setup_ui(self):
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(1)
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(1)
 
         # 左侧：图形预览
         self.scene = QGraphicsScene()
-        self.view = QGraphicsView(self.scene)
+        self.view = ZoomableGraphicsView(self.scene)
         self.view.setStyleSheet("""
-            QGraphicsView { 
+            ZoomableGraphicsView { 
                 background-color: #f8f8f8; 
                 border: none;
                 border-right: 1px solid #e1dfdd;
             }
         """)
-        self.view.setDragMode(QGraphicsView.ScrollHandDrag) # 允许拖拽查看
         self.view.setRenderHint(QPainter.Antialiasing)
 
         self.highlighter = OCRAngledHighlightItem()
         self.scene.addItem(self.highlighter)
-        layout.addWidget(self.view, 3)
+        main_layout.addWidget(self.view, 3)
 
         # 右侧：列表展示
+        right_panel = QWidget()
+        right_panel.setMinimumWidth(220)
+        right_panel.setStyleSheet("background-color: #ffffff; border-left: 1px solid #edebe9;")
+        right_vbox = QVBoxLayout(right_panel)
+        right_vbox.setContentsMargins(0, 0, 0, 0)
+        right_vbox.setSpacing(0)
+
+        self.header = QWidget()
+        self.header.setFixedHeight(48)
+        self.header.setStyleSheet("""
+            QWidget { 
+                background-color: #ffffff; 
+                border-bottom: 1px solid #f3f2f1;
+                border: none; 
+            }
+        """)
+        header_layout = QHBoxLayout(self.header)
+        header_layout.setContentsMargins(16, 0, 8, 0)
+
+        self.title_label = QLabel(self.tr("OCR 识别结果"))
+        self.title_label.setStyleSheet("color: #323130; border: none;")
+        setFont(self.title_label, 13, QFont.Bold)
+        toolbar = QWidget()
+        toolbar.setStyleSheet("border: none; background: transparent;")
+        toolbar_layout = QHBoxLayout(toolbar)
+        toolbar_layout.setContentsMargins(0, 0, 0, 0)
+        toolbar_layout.setSpacing(4)
+        self.btn_copy = ToolButton(FluentIcon.COPY.qicon())
+        self.btn_copy.setIconSize(QSize(16, 16))
+        self.btn_copy.setStyleSheet("border-radius: 16px;")
+        self.btn_copy.setToolTip("复制所有文字")
+        self.btn_download = ToolButton(FluentIcon.DOWNLOAD.qicon())
+        self.btn_download.setIconSize(QSize(16, 16))
+        self.btn_download.setStyleSheet("border-radius: 16px;")
+        self.btn_download.setToolTip("结果导出")
+        self.btn_copy.clicked.connect(self.copy_all_text)
+        self.btn_download.clicked.connect(self.download_result)
+        toolbar_layout.addWidget(self.btn_copy)
+        toolbar_layout.addWidget(self.btn_download)
+
+        header_layout.addWidget(self.title_label)
+        header_layout.addStretch()
+        header_layout.addWidget(toolbar)
+
         scroll = ScrollArea()
-        scroll.setMinimumWidth(220)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setStyleSheet("background-color: #ffffff;")
-        list_container = QWidget()
-        list_container.setStyleSheet("background-color: #ffffff;")
-        self.list_layout = QVBoxLayout(list_container)
+        scroll.setStyleSheet("background-color: #ffffff; border: none;")
+        self.list_container = QWidget()
+        self.list_container.setStyleSheet("background-color: #ffffff;")
+        self.list_layout = QVBoxLayout(self.list_container)
         self.list_layout.setContentsMargins(0, 0, 0, 0)
         self.list_layout.setSpacing(0)
         self.list_layout.addStretch()
-        scroll.setWidget(list_container)
-        layout.addWidget(scroll)
+        scroll.setWidget(self.list_container)
+        right_vbox.addWidget(self.header)
+        right_vbox.addWidget(scroll)
+        main_layout.addWidget(right_panel)
+        self.header.hide()
 
     def show_placeholders(self):
-        text_item = self.scene.addText("原图显示区", QFont("Microsoft YaHei", 12))
+        virtual_rect = QRectF(-150, -150, 300, 300)
+        self.scene.setSceneRect(virtual_rect)
+        text_item = self.scene.addText(self.tr("原图显示区"), font=getFont(15))
         text_item.setDefaultTextColor(QColor("#888888"))
-        text_item.setPos(-40, -10) 
+        rect = text_item.boundingRect()
+        text_item.setPos(-rect.width() / 2, -rect.height() / 2) 
+        self.view.centerOn(0, 0)
 
-        self.placeholder_label = QLabel("等待 OCR 识别结果...")
+        self.placeholder_label = QLabel(self.tr("OCR 结果显示区"))
         self.placeholder_label.setAlignment(Qt.AlignCenter)
-        self.placeholder_label.setStyleSheet("color: #888888; font-size: 13px; margin-top: 300px;")
-        self.list_layout.insertWidget(0, self.placeholder_label)
-        self.list_layout.addStretch()
+        setFont(self.placeholder_label, 15)
+        self.placeholder_label.setStyleSheet("color: #888888;")
+        self.list_layout.insertWidget(0, self.placeholder_label, alignment=Qt.AlignCenter)
+        self.list_layout.insertStretch(0, 1)
+        self.list_layout.addStretch(1)
 
     def init_scene(self, show_placeholders=True):
         while self.list_layout.count() > 0:
@@ -172,6 +260,10 @@ class OCRViewerWidget(QWidget):
                 item.widget().deleteLater()
 
         self.scene.clear()
+        self.view.resetTransform()
+        self.view._zoom_level = 0
+        self.scene.setSceneRect(QRectF())
+        self.header.hide()
         if show_placeholders:
             self.show_placeholders()
 
@@ -179,7 +271,9 @@ class OCRViewerWidget(QWidget):
         pixmap = QPixmap(image_path)
         if pixmap.isNull():
             return
+        self.raw_results = raw_data[1]
         self.init_scene(show_placeholders=False)
+        self.header.show()
         self.scene.addPixmap(pixmap)
         self.scene.setSceneRect(pixmap.rect())
         
@@ -195,8 +289,43 @@ class OCRViewerWidget(QWidget):
             list_item.unhovered.connect(self.on_unhover)
             self.list_layout.addWidget(list_item)
         
-        self.list_layout.addStretch()
+        self.list_layout.addStretch(1)
         self.view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
+
+    def download_result(self):
+        if not self.raw_results: 
+            return
+        file_path, _ = QFileDialog.getSaveFileName(self, "导出识别结果", "OCR_Result.txt", "Text Files (*.txt)")
+        if not file_path:
+            return
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                for text, _ in self.raw_results:
+                    f.write(f"{text}\n")
+            self.show_toast("导出成功")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"导出失败: {str(e)}")
+
+    def copy_all_text(self):
+        if not self.raw_results: 
+            return
+        all_text = "\n".join([item[0] for item in self.raw_results])
+        QApplication.clipboard().setText(all_text)
+        self.show_toast("已复制到剪贴板")
+
+    def show_toast(self, message):
+        toast = QLabel(message, self.list_container)
+        toast.setStyleSheet("""
+            background: #333333; color: white; padding: 8px 16px; 
+            border-radius: 4px; font-size: 12px;
+        """)
+        toast.adjustSize()
+        # 居中显示在视图容器底部
+        x = (self.list_container.width() - toast.width()) // 2
+        y = self.list_container.height() - 60
+        toast.move(x, y)
+        toast.show()
+        QTimer.singleShot(1500, toast.deleteLater)
 
     def on_hover(self, poly, is_danger):
         self.highlighter.update_highlight(poly, is_danger)

@@ -678,6 +678,8 @@ class ImageNavigationWidget(QWidget):
                         global_event_bus.watermarkAdd_PreviewFile.emit(thumb.image_path)
                     elif self.task_type == "watermark_remove":
                         global_event_bus.watermarkRemove_PreviewFile.emit(thumb.image_path)
+                    elif self.task_type == "ocr":
+                        global_event_bus.OCR_PreviewFile.emit(thumb.image_path)
         self.prev_btn.setEnabled(len(self.total_images) > 1)
         self.next_btn.setEnabled(len(self.total_images) > 1)
 

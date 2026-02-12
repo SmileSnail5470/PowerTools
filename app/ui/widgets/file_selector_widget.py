@@ -165,7 +165,10 @@ class FileInfoWidget(SimpleCardWidget):
         self.iconWidget = QLabel("🖼️")
         setFont(self.iconWidget, 30)
         
-        self.titleLabel = BodyLabel(file_name, self)
+        if len(file_name) > 16:
+            self.titleLabel = BodyLabel("..." + file_name[-16:], self)
+        else:
+            self.titleLabel = BodyLabel(file_name, self)
         setFont(self.titleLabel, 12, QFont.DemiBold)
         self.titleLabel.setToolTip(image_path)
         self.titleLabel.setWordWrap(False)
