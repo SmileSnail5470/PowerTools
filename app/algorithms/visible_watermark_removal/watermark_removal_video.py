@@ -22,6 +22,7 @@ class VideoWatermarkRemover:
             sr_segment_onnx_path,
             pt_segment_onnx_path,
             text_detection_onnx_path,
+            yolo_detection_onnx_path,
             **kwargs
         ):
         if use_cache_mask and not mask_path:
@@ -31,6 +32,7 @@ class VideoWatermarkRemover:
                 sr_onnx_path=sr_segment_onnx_path,
                 pt_onnx_path=pt_segment_onnx_path,
                 text_detection_onnx_path=text_detection_onnx_path,
+                yolo_detection_onnx_path=yolo_detection_onnx_path,
                 **kwargs
             )
             tmp_mask_path = os.path.join(str(tmp_mask_dir), "mask.png")
@@ -58,6 +60,7 @@ class VideoWatermarkRemover:
                     sr_onnx_path=sr_segment_onnx_path,
                     pt_onnx_path=pt_segment_onnx_path,
                     text_detection_onnx_path=text_detection_onnx_path,
+                    yolo_detection_onnx_path=yolo_detection_onnx_path,
                     **kwargs
                 )
                 tmp_mask_path = os.path.join(str(tmp_mask_dir), frame_file.name)
@@ -167,6 +170,7 @@ class VideoWatermarkRemover:
                 sr_segment_onnx_path=sr_segment_onnx_path,
                 pt_segment_onnx_path=pt_segment_onnx_path,
                 text_detection_onnx_path=text_detection_onnx_path,
+                yolo_detection_onnx_path=yolo_detection_onnx_path,
                 **kwargs
             )
             

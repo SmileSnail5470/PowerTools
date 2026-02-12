@@ -23,6 +23,7 @@ from app.controllers.task_manager import global_task_manager
 from app.ui.common.task_params import bind_widget_to_param, TaskParams
 from app.ui.common.task_status import TaskStatusModel
 from app.ui.common.utils import get_file_type
+from app.ui.common.config import cfg
 
 from app.workers.ocr_work import OCRWork
 
@@ -426,8 +427,12 @@ class HeaderWidget(QWidget):
         if not params:
             error_msg = self.tr("请设置OCR识别参数")
             return error_msg, task_params
-        if "input_path" not in params or not params["input_path"]:
-            error_msg = self.tr("请选择要处理的文件或目录")
+        if not cfg.get(cfg.localOCREnabled):
+            error_msg = self.tr("请在设置页面打开 'OCR 能力' 开关")
+            return error_msg, task_params
+        
+        if "input_path" not in params or not params["input_path"] or " " in params["input_path"]:
+            error_msg = self.tr("请选择要处理的文件或目录且文件名不能有空格")
             return error_msg, task_params
         else:
             task_params["input_path"] = params["input_path"]

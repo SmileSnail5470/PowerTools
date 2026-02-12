@@ -67,8 +67,7 @@ class WatermarkRemoveWork(BaseWorker):
                 "use_cache_mask": True if "watermark_format" in kwargs and kwargs["watermark_format"] == "静态水印" else False,
                 "watermark_type": "all" if "watermark_content" in kwargs and kwargs["watermark_content"] == "通用水印" else "text",
                 "dilate_num": int(kwargs["mask_dilate"]),
-                "ffmpeg_path": os.getenv("POWERTOOLS_FFMPEG_BIN"),
-                "callback_func": progress_cb,
+                "ffmpeg_path": os.getenv("POWERTOOLS_FFMPEG_BIN")
             }
             self.watermark_remove_video_instance.process_video(**params)
         return output_file
