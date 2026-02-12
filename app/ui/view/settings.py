@@ -37,7 +37,11 @@ models_deps_urls = {
     "blind_watermark_addition": {
         "url": "",
         "sha256": ""
-    }
+    },
+    "ocr": {
+        "url": "",
+        "sha256": ""
+    },
 }
 
 
@@ -657,7 +661,7 @@ class Settings(QWidget):
         auto_start_switch = ToggleSwitch()
         auto_start_switch.setActive(cfg.get(cfg.autoStartup))
         auto_start_switch.toggled.connect(lambda flag: setattr(cfg.autoStartup, "value", flag))
-        auto_start_card = CustomCardGroupWidget(title=self.tr("开机自启动"), content=self.tr("系统启动时自动运行程序"), parent=self)
+        auto_start_card = CustomCardGroupWidget(title=self.tr("开机自启动"), content=self.tr("系统启动时自动运行程序（开发中）"), parent=self)
         auto_start_card.addWidget(auto_start_switch, stretch=0)
         auto_start_card.setSeparatorVisible(True)
         settings_cards.append(auto_start_card)
@@ -665,7 +669,7 @@ class Settings(QWidget):
         auto_update_switch = ToggleSwitch()
         auto_update_switch.setActive(cfg.get(cfg.autoUpdate))
         auto_update_switch.toggled.connect(lambda flag: setattr(cfg.autoUpdate, "value", flag))
-        auto_update_card = CustomCardGroupWidget(title=self.tr("自动更新"), content=self.tr("自动检查并安装新版本"), parent=self)
+        auto_update_card = CustomCardGroupWidget(title=self.tr("自动更新"), content=self.tr("自动检查并安装新版本（开发中）"), parent=self)
         auto_update_card.addWidget(auto_update_switch, stretch=0)
         auto_update_card.setSeparatorVisible(True)
         settings_cards.append(auto_update_card)
@@ -795,6 +799,28 @@ class Settings(QWidget):
         watermark_removal_card.addWidget(watermark_removal_switch, stretch=0)
         watermark_removal_card.setSeparatorVisible(True)
         ai_settings_cards.append(watermark_removal_card)
+
+        ocr_switch = ToggleSwitch()
+        self.ai_toggle_switchs.append(ocr_switch)
+        ocr_switch.setActive(cfg.get(cfg.localOCREnabled))
+        ocr_switch.toggled.connect(lambda flag: setattr(cfg.localOCREnabled, "value", flag))
+        ocr_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="ocr")
+        try:
+            text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{ocr_status.name}_status_info"]["text"]
+            color = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{ocr_status.name}_status_info"]["color"]
+            ocr_status.setLabel(text=text, color=color)
+        except Exception:
+            pass
+        self._bind_ai_toggle(
+            switch=ocr_switch,
+            badge=ocr_status,
+            local_ai_type="ocr"
+        )
+        ocr_card = CustomCardGroupWidget(title=self.tr("OCR 能力"), content=self.tr("智能识别提取图片中的文字"), parent=self)
+        ocr_card.addWidget(ocr_status, stretch=0)
+        ocr_card.addWidget(ocr_switch, stretch=0)
+        ocr_card.setSeparatorVisible(True)
+        ai_settings_cards.append(ocr_card)
 
         for card in ai_settings_cards:
             ai_settings.addCard(card=card)
