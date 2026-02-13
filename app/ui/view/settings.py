@@ -532,7 +532,9 @@ class SoftwareCard(QFrame):
                     text = "Failed"
                     color = self._get_status_badge_color()
             self.status_label.setLabel(text=text, color=color)
-            cfg.additionalParams.value.update({"SoftwareSettings": {f"{self.name}_status_info": {"text": text, "color": color}}})
+            tmp = cfg.get(cfg.additionalParams).get("SoftwareSettings", {})
+            tmp.update({f"{self.name}_status_info": {"text": text, "color": color}})
+            cfg.additionalParams.value.update({"SoftwareSettings": tmp})
         if error_msg:
             TeachingTip.create(
                 target=self.status_label,
@@ -572,7 +574,9 @@ class SoftwareCard(QFrame):
         self.status = ""
         color = self._get_status_badge_color()
         self.status_label.setLabel(text=text, color=color)
-        cfg.additionalParams.value.update({"SoftwareSettings": {f"{self.name}_status_info": {"text": text, "color": color}}})
+        tmp = cfg.get(cfg.additionalParams).get("SoftwareSettings", {})
+        tmp.update({f"{self.name}_status_info": {"text": text, "color": color}})
+        cfg.additionalParams.value.update({"SoftwareSettings": tmp})
 
 class Settings(QWidget):
     thread_pool = QThreadPool.globalInstance()
@@ -908,6 +912,9 @@ class Settings(QWidget):
             self.thread_pool.start(worker)
         else:
             badge.setLabel(text=self.tr("未启用"), color="#eab308")
+            tmp = cfg.get(cfg.additionalParams).get("LocalAISettings", {})
+            tmp.update({f"{badge.name}_status_info": {"text": self.tr("未启用"), "color": "#eab308"}})
+            cfg.additionalParams.value.update({"LocalAISettings": tmp})
 
     def _on_init_finished(
             self, ok: bool,
@@ -918,12 +925,16 @@ class Settings(QWidget):
         ):
         if ok:
             badge.setLabel(text=self.tr("已启用"), color="#22c55e")
-            cfg.additionalParams.value.update({"LocalAISettings": {f"{badge.name}_status_info": {"text": self.tr("已启用"), "color": "#22c55e"}}})
+            tmp = cfg.get(cfg.additionalParams).get("LocalAISettings", {})
+            tmp.update({f"{badge.name}_status_info": {"text": self.tr("已启用"), "color": "#22c55e"}})
+            cfg.additionalParams.value.update({"LocalAISettings": tmp})
             progress_dialog.accept()
         else:
             switch.setActive(False)
             badge.setLabel(text=self.tr("启用失败"), color="#ef4444")
-            cfg.additionalParams.value.update({"LocalAISettings": {f"{badge.name}_status_info": {"text": self.tr("启用失败"), "color": "#ef4444"}}})
+            tmp = cfg.get(cfg.additionalParams).get("LocalAISettings", {})
+            tmp.update({f"{badge.name}_status_info": {"text": self.tr("启用失败"), "color": "#ef4444"}})
+            cfg.additionalParams.value.update({"LocalAISettings": tmp})
             progress_dialog.enableCloseBtn()
             progress_dialog.append_log(f"\n❌ 错误信息：{error}")
             progress_dialog.progress.setRange(0, 1)
