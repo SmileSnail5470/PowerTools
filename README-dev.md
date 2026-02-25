@@ -18,42 +18,17 @@
 
 应用左侧导航切换功能，右侧为参数与预览区域。
 
-| 主页 | 水印添加 | 水印移除 |
-|------|----------|----------|
-| [![主页](docs/screenshots/home.png)](docs/screenshots/home.png) | [![水印添加](docs/screenshots/watermark-add.png)](docs/screenshots/watermark-add.png) | [![水印移除](docs/screenshots/watermark-remove.png)](docs/screenshots/watermark-remove.png) |
-
----
-
-## 产品能力
-
-### 💧 水印添加
-
-- **可见水印**：文字或图片水印，自定义字体、颜色、透明度、位置，支持图片与视频
-- **盲水印**：不可见版权信息，支持图片与视频
-- **批量处理**：单文件或整目录一键添加
-
-### 🧹 水印移除
-
-- **智能识别**：自动检测水印区域，同时也支持手动框选水印区域
-- **自然修复**：多种修复算法，尽量保持原图观感
-- **图片 / 视频**：常见格式，单文件与批量处理
-
-### 📝 文字提取（OCR）
-
-- 从图片中识别并提取文字，支持单张与批量
-- 多语言与识别精度持续优化中
-
-### 📸 屏幕截图 · 📜 滚动截图 · 🎨 图像编辑
-
-- 入口已预留，功能开发中，敬请期待
+| 主页 | 水印添加 | 水印移除 | OCR |
+|------|----------|----------|----------|
+| [![主页](docs/screenshots/home.png)](docs/screenshots/home.png) | [![水印添加](docs/screenshots/watermark-add.png)](docs/screenshots/watermark-add.png) | [![水印移除](docs/screenshots/watermark-remove.png)](docs/screenshots/watermark-remove.png) | [![文字识别](docs/screenshots/ocr.png)](docs/screenshots/ocr.png) |
 
 ---
 
 ## 安装
 
-### 方式一：下载 Release 安装包（推荐）
+### 下载 Release 安装包（推荐）
 
-我们会在 [Releases](https://github.com/SmileSnail5470/PowerTools/releases) 页面提供各平台的安装包，无需安装 Python 环境即可使用。
+在 [Releases](https://github.com/SmileSnail5470/PowerTools/releases) 页面提供各平台的安装包。
 
 | 平台 | 说明 |
 |------|------|
@@ -67,86 +42,31 @@
 3. 按上表完成安装或解压  
 4. 双击启动 PowerTools  
 
-> 若使用安装程序，建议安装到默认路径，以便自动创建快捷方式。
-
 ---
 
-### 方式二：从源码运行
-
-适合开发者或需要自行打包的场景。
-
-**环境要求：** Python 3.10+，Windows 10/11、macOS
-
-```bash
-# 克隆仓库
-git clone https://github.com/SmileSnail5470/PowerTools.git
-cd PowerTools
-
-# 建议使用虚拟环境
-python -m venv .venv
-# Windows:
-.venv\Scripts\Activate.ps1
-# macOS / Linux:
-source .venv/bin/activate
-
-# 安装依赖
-pip install -r requirements.txt
-
-# 启动
-python main.py
-```
-
----
-
-## 使用说明
-
-### 通用流程
-
-1. **启动**：双击桌面/菜单中的 PowerTools，或从命令行执行 `python main.py`（源码方式）。
-2. **选功能**：在左侧导航点击「主页」或直接选择「水印添加」「水印移除」「文字提取」等。
-3. **选文件**：在「文件选择」区域选择「文件」或「目录」，添加要处理的图片/视频。
-4. **设参数**：根据功能设置水印样式、输出路径、识别方式等。
-5. **执行**：点击「开始」或「处理」按钮，在状态栏或任务列表中查看进度。
-6. **查看结果**：处理完成后，在设置的输出目录中查看生成的文件；部分界面支持右侧预览对比。
-
----
+## 结果预览
 
 ### 水印添加
 
-1. 左侧选择 **水印添加**。
-2. **文件选择**：切换「文件」或「目录」，添加待处理图片/视频。
-3. **水印类型**：选择「可见水印」或「盲水印」。
-   - **可见水印**：设置文字内容、字体、颜色、透明度、位置等；或上传图片水印。
-   - **盲水印**：输入要嵌入的文本或密钥。
-4. **输出**：选择输出目录（或使用默认）。
-5. 点击 **开始**，等待任务完成，在输出目录查看带水印的文件。
+| 可见水印添加 | 盲水印添加提取 |
+|------|----------|
+| [![可见水印添加](docs/results/visible-watermark-add.gif)](docs/results/visible-watermark-add.gif) | [![水盲水印添加提取](docs/results/blind-watermark.gif)](docs/screenshots/blind-watermark.gif) |
 
 ---
 
 ### 水印移除
 
-1. 左侧选择 **水印移除**。
-2. **文件选择**：添加单张/多张图片或视频。
-3. **识别方式**：可选择「自动识别」或「手动框选」水印区域。
-4. **算法/参数**：根据需要选择修复算法或保持默认。
-5. **输出目录**：选择结果保存位置。
-6. 点击 **开始**，在右侧可对比原图与去水印结果，输出目录中保存处理后的文件。
+| 可见水印移除 |
+|------|
+| [![可见水印移除](docs/results/visible-watermark-remove.gif)](docs/results/visible-watermark-remove.gif) |
 
 ---
 
 ### 文字提取（OCR）
 
-1. 左侧选择 **文字提取**。
-2. **文件选择**：添加单张图片或包含图片的目录。
-3. 选择输出方式（如导出文本路径等，以实际界面为准）。
-4. 点击 **处理**，等待识别完成，在界面或输出文件中查看/复制文字。
-
----
-
-### 设置与主题
-
-- 点击左侧 **常规（设置）** 可配置语言、主题（浅色/深色）、DPI 缩放、日志级别等。
-- 任务列表与日志可在对应页面查看，便于排查问题。
+| 可见水印移除 |
+|------|
+| [![OCR 识别](docs/results/ocr.gif)](docs/results/ocr.gif) |
 
 ---
 
@@ -156,7 +76,7 @@ python main.py
 |------|------|------|
 | 水印添加 | ✅ 已完成 | 可见 + 盲水印，图片/视频，批量 |
 | 水印移除 | ✅ 已完成 | AI 去水印，图片/视频，单文件与批量 |
-| 文字提取(OCR) | 🚧 进行中 | 界面就绪，识别与体验持续完善 |
+| 文字提取(OCR) | ✅ 已完成 | 图片文字提取与识别 |
 | 屏幕截图 | 📌 规划中 | 入口已预留 |
 | 滚动截图 | 📌 规划中 | 入口已预留 |
 | 图像编辑 | 📌 规划中 | 入口已预留 |

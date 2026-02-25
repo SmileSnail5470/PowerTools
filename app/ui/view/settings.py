@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import os
+import gdown
 import platform
 import shutil
 import ssl
@@ -31,16 +32,16 @@ from app.utils.logger.decorators import log_exception, log_function_call
 
 models_deps_urls = {
     "visible_watermark_removal": {
-        "url": "",
-        "sha256": ""
+        "url": "1ulNiQo8G0XHiSP4gV7Hk",
+        "sha256": None
     },
     "blind_watermark_addition": {
-        "url": "",
-        "sha256": ""
+        "url": "1HgJzhcWxvhy2_QhbVFow6Z84yTRftgzL",
+        "sha256": None
     },
     "ocr": {
-        "url": "",
-        "sha256": ""
+        "url": "1PNEJ8UXyqxEbwDDq2CpnU5lTa0bUUGgo",
+        "sha256": None
     },
 }
 
@@ -108,7 +109,7 @@ class InitWorker(QRunnable):
                 tf.extractall(output_dir)
         return output_dir
     
-    def _download(self, url, output_path, expected_size=None, expected_sha256="", extract_to=None):
+    def _download_from_url(self, url, output_path, expected_size=None, expected_sha256=None, extract_to=None):
         max_retries = 3
         backoff = 0.5
         chunk_size = 1024 * 512
@@ -161,13 +162,30 @@ class InitWorker(QRunnable):
             self._extract_if_needed(output_path, extract_to)
             os.remove(output_path)
 
+    def _download_from_google_driver(self, url, output_path, expected_size=None, expected_sha256=None, extract_to=None):
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        gdown.download(id=url, output=output_path)
+        if expected_size is not None:
+            actual_size = os.path.getsize(output_path)
+            if actual_size != expected_size:
+                raise Exception(f"download file size check failed: expected {expected_size}, actual {actual_size}")
+        if expected_sha256 is not None:
+            actual_sha256 = self._sha256_of_file(output_path)
+            if actual_sha256.lower() != expected_sha256.lower():
+                raise Exception(f"SHA256 check failed: \n Expected: {expected_sha256}\n Actual: {actual_sha256}")
+        if extract_to:
+            os.makedirs(extract_to, exist_ok=True)
+            self._extract_if_needed(output_path, extract_to)
+            os.remove(output_path)
+
     @log_function_call(logger=logging.getLogger("UI"), level=logging.INFO)
     def _download_module(self):
         logger.info(f"start download {self.task_name} module.")
         resources_url = models_deps_urls[self.task_name]["url"]
         if not resources_url:
             raise Exception(f"{self.task_name} download_url not exist.")
-        self._download(
+        self._download_from_google_driver(
             url=resources_url,
             output_path=os.path.join(self.deps_path, "modules_deps.zip"),
             expected_sha256=models_deps_urls[self.task_name]["sha256"],

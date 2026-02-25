@@ -17,3 +17,4 @@ onnxruntime==1.23.2
 pyclipper==1.4.0
 shapely==2.1.2
 bitarray==3.7.1
+gdown==5.2.1

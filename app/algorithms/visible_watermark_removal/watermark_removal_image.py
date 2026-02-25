@@ -296,7 +296,6 @@ class ImageWatermarkRemove():
         
         remain_watermark = ((remain_watermark.astype(np.float32) / 255.0) > 0.5).astype(np.float32) * \
                             ((mask.astype(np.float32) / 255.0) > 0.5).astype(np.float32)
-        new_mask = remain_watermark
 
         watermark_detector = YOLODetection()
         watermark_detector.prepare(
@@ -312,6 +311,8 @@ class ImageWatermarkRemove():
             new_mask = output_masks[0, 0]              # [H, W]
             new_mask = np.clip(new_mask, 0.0, 1.0)
             new_mask = (new_mask * 255.0).astype(np.uint8)
+            new_mask = ((new_mask.astype(np.float32) / 255.0) > 0.5).astype(np.float32) * \
+                        ((mask.astype(np.float32) / 255.0) > 0.5).astype(np.float32)
             new_mask = np.maximum(((new_mask.astype(np.float32) / 255.0) > 0.5).astype(np.float32), remain_watermark)
             new_mask = (new_mask * 255).astype(np.uint8)
 
