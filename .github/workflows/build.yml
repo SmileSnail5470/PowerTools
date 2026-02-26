@@ -48,6 +48,13 @@ jobs:
           brew remove --force --ignore-dependencies openssl@3
           brew cleanup openssl@3
 
+      - name: Generate Qt resources
+        run: |
+          pyside6_rcc app/ui/library/qfluentwidgets/_rc/resource.qrc -o app/ui/library/qfluentwidgets/_rc/resource.py
+          pyside6_rcc app/ui/library/qframelesswindow/_rc/resource.qrc -o app/ui/library/qframelesswindow/_rc/resource.py
+          pyside6_rcc app/ui/resources/resource.qrc -o app/ui/resources/resource.py
+        shell: bash
+
       - name: Build
         if: runner.os != 'Windows'
         run: |
