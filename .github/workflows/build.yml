@@ -99,8 +99,8 @@ jobs:
       - name: Upload library artifact
         uses: actions/upload-artifact@v4
         with:
-            name: powertools-${{ matrix.os }}-${{ matrix.arch }}-py${{ matrix.python-version }}
-            path: powertools-${{ matrix.os }}-${{ matrix.arch }}-py${{ matrix.python-version }}.zip
+            name: powertools-${{ matrix.os }}-${{ matrix.arch }}
+            path: powertools-${{ matrix.os }}-${{ matrix.arch }}.zip
 
   release:
     needs: build
