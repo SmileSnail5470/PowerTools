@@ -116,6 +116,8 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v1
         with:
+          repository: SmileSnail5470/PowerTools
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
           files: artifacts/**/*.zip
+          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
