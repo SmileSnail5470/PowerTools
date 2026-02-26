@@ -20,9 +20,6 @@ def find_project_root():
 def get_base_options(outdir):
     return [
         sys.executable, '-m', 'nuitka',
-        '--include-package=pip',
-        '--include-package=setuptools',
-        '--include-package=wheel',
         '--enable-plugin=pyside6',
         '--include-qt-plugins=multimedia',
         '--assume-yes-for-downloads',
