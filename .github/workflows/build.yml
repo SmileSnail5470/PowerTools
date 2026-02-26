@@ -11,7 +11,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-latest, macos-latest, macos-15-intel]
+        # os: [windows-latest, macos-latest, macos-15-intel]
+        os: [windows-latest]
         arch: [x86_64, arm64]
         python-version: ["3.12"]
         exclude:
