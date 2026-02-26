@@ -50,9 +50,9 @@ jobs:
 
       - name: Generate Qt resources
         run: |
-          pyside6_rcc app/ui/library/qfluentwidgets/_rc/resource.qrc -o app/ui/library/qfluentwidgets/_rc/resource.py
-          pyside6_rcc app/ui/library/qframelesswindow/_rc/resource.qrc -o app/ui/library/qframelesswindow/_rc/resource.py
-          pyside6_rcc app/ui/resources/resource.qrc -o app/ui/resources/resource.py
+          pyside6-rcc app/ui/library/qfluentwidgets/_rc/resource.qrc -o app/ui/library/qfluentwidgets/_rc/resource.py
+          pyside6-rcc app/ui/library/qframelesswindow/_rc/resource.qrc -o app/ui/library/qframelesswindow/_rc/resource.py
+          pyside6-rcc app/ui/resources/resource.qrc -o app/ui/resources/resource.py
         shell: bash
 
       - name: Build
