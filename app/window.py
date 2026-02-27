@@ -1,8 +1,11 @@
-from PySide6.QtCore import QSize, QTimer, QUrl
-from PySide6.QtGui import QIcon, QDesktopServices
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QSize, QTimer, QUrl, Qt
+from PySide6.QtGui import QIcon, QDesktopServices, QPixmap, QPainter, QColor
+from PySide6.QtWidgets import QApplication, QLabel
 
-from app.ui.library.qfluentwidgets import (NavigationItemPosition, FluentWindow, SplashScreen, SystemThemeListener, isDarkTheme)
+from app.ui.library.qfluentwidgets import (
+    NavigationItemPosition, FluentWindow, SplashScreen, SystemThemeListener, isDarkTheme, MessageBoxBase,
+    SubtitleLabel, CaptionLabel, setFont
+)
 from app.ui.library.qfluentwidgets import FluentIcon as FIF
 
 from app.ui.view.home import Home
@@ -123,8 +126,64 @@ class MainWindow(FluentWindow):
         url = QUrl("https://github.com/SmileSnail5470/PowerTools/issues")
         QDesktopServices.openUrl(url)
 
+    def _combine_qr_codes(self, ali_path, wx_path):
+        ali_pix = QPixmap(ali_path)
+        wx_pix = QPixmap(wx_path)
+    
+        size = 256
+        ali_pix = ali_pix.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        wx_pix = wx_pix.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        
+        padding = 0
+        text_height = 0
+        combined_width = size * 2 + padding * 3
+        combined_height = size + text_height + padding
+        
+        combined_pixmap = QPixmap(combined_width, combined_height)
+        combined_pixmap.fill(Qt.transparent)
+        
+        painter = QPainter(combined_pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        painter.drawPixmap(padding, padding, ali_pix)
+        painter.drawPixmap(size + padding * 2, padding, wx_pix)
+        
+        painter.end()
+        return combined_pixmap
+
     def welcome(self):
-        pass
+        class WelcomeMessageBox(MessageBoxBase):
+            def __init__(self, parent=None, combined_pixmap=None):
+                super().__init__(parent)
+                self.setWindowTitle(self.tr("欢迎使用 PowerTools"))
+                self.titleLabel = SubtitleLabel(self.tr("感谢支持开源项目"), self)
+                self.contentLabel = CaptionLabel(
+                    self.tr("如果您觉得 PowerTools 提升了您的效率，欢迎扫码支持作者，让项目持续更新！"), self
+                )
+                self.contentLabel.setWordWrap(True)  
+                self.qrLabel = QLabel(self)
+                if combined_pixmap.isNull():
+                    self.qrLabel.setText(self.tr("（赞助码图片加载失败）"))
+                else:
+                    self.qrLabel.setPixmap(combined_pixmap.scaled(512, 256, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                self.qrLabel.setAlignment(Qt.AlignCenter)
+
+                # 将组件添加到对话框布局中
+                self.viewLayout.addWidget(self.titleLabel)
+                self.viewLayout.addWidget(self.contentLabel)
+                self.viewLayout.addWidget(self.qrLabel)
+
+                # 修改按钮文本
+                self.yesButton.setText(self.tr("给个好评"))
+                self.cancelButton.setText(self.tr("下次一定"))
+
+                self.widget.setMinimumWidth(512)
+
+        combined_pixmap = self._combine_qr_codes(":/powertools/images/alipay.jpg", ":/powertools/images/wechat.jpg")
+        w = WelcomeMessageBox(self, combined_pixmap)
+        if w.exec():
+            url = QUrl("https://github.com/SmileSnail5470/PowerTools")
+            QDesktopServices.openUrl(url)
 
     def resizeEvent(self, e):
         super().resizeEvent(e)

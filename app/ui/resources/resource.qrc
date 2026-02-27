@@ -15,5 +15,7 @@
         <file>images/icons/Price_black.svg</file>
         <file>images/icons/Price_white.svg</file>
         <file>images/logo.png</file>
+        <file>images/alipay.jpg</file>
+        <file>images/wechat.jpg</file>
     </qresource>
 </RCC>

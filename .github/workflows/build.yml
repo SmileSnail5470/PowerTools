@@ -11,8 +11,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        # os: [windows-latest, macos-latest, macos-15-intel]
-        os: [windows-latest]
+        os: [windows-latest, macos-latest, macos-15-intel]
         arch: [x86_64, arm64]
         python-version: ["3.12"]
         exclude:
@@ -124,8 +123,8 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v1
         with:
-          repository: SmileSnail5470/PowerTools
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
           files: artifacts/**/*.zip
-          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
