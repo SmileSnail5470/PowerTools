@@ -40,7 +40,21 @@
 1. 打开项目 [Releases](https://github.com/SmileSnail5470/PowerTools/releases) 页面  
 2. 选择最新版本，下载与您系统对应的安装包  
 3. 按上表完成安装或解压  
-4. 在解压目录中，双击启动 PowerTools  
+4. 在解压目录中，双击启动 PowerTools
+
+**可选步骤（也可在设置页面开启对应功能，会自动下载模型文件，需要科学上网才可以下载）：**
+- 下载 [OCR 模型](https://drive.google.com/file/d/1PNEJ8UXyqxEbwDDq2CpnU5lTa0bUUGgo/view?usp=sharing)
+- 下载 [去水印模型](https://drive.google.com/file/d/1ulNiQo8G0XHiSP4gV7Hk-ng4XCJSvTlL/view?usp=sharing)
+- 下载 [盲水印添加模型](https://drive.google.com/file/d/1HgJzhcWxvhy2_QhbVFow6Z84yTRftgzL/view?usp=sharing)
+
+下载完解压后，启动软件，导航到设置界面，设置【AI模型依赖路径】为解压后的路径父目录。例如下面的 `../deps` 目录下的结构是
+```bash
+.
+├── blind_watermark_addition
+├── ocr
+└── visible_watermark_removal
+```
+![AI 模型依赖路径设置示例](docs/screenshots/models_path.png)
 
 ---
 
@@ -80,17 +94,6 @@
 | 屏幕截图 | 📌 规划中 | 入口已预留 |
 | 滚动截图 | 📌 规划中 | 入口已预留 |
 | 图像编辑 | 📌 规划中 | 入口已预留 |
-
----
-
-## 更新日志
-
-### [v0.0.1]
-### 新功能
-- **水印添加**：支持可见水印（文字/图片）与盲水印，图片与视频，单文件与批量处理
-- **水印移除**：AI 智能识别与多种修复算法，支持自动检测与手动框选，图片与视频
-- **文字提取(OCR)**：图片文字提取与识别，单文件与批量
-- **界面与基础**：Fluent Design 风格、任务队列、资源监控、设置与日志
 
 ---
 
