@@ -273,6 +273,8 @@ class WatermarkMaskTool(MyMessageBoxBase):
         self.mask_path = os.path.join(cfg.get(cfg.cachePath), "watermark_removal", os.path.basename(file_path).split(".")[0])
         self.mask_file = ""
         self.temp_dir = None
+        if os.path.exists(self.mask_path):
+            shutil.rmtree(self.mask_path)
         os.makedirs(self.mask_path, exist_ok=True)
         self._init_title_bar()
         self.setModal(True)
@@ -312,6 +314,8 @@ class WatermarkMaskTool(MyMessageBoxBase):
             for i in range(self.frame_control_widget.total_frames() - self.frame_control_widget.current_frame()):
                 dst_file_name = "{:06d}".format(int(os.path.basename(last_mask_file).split(".")[0]) + i + 1)
                 dst_file = os.path.join(os.path.dirname(last_mask_file), "{0}.png".format(dst_file_name))
+                if os.path.exists(dst_file):
+                    os.remove(dst_file)
                 shutil.copy2(last_mask_file, dst=dst_file)
         self.reject()
 
@@ -437,7 +441,7 @@ class WatermarkMaskTool(MyMessageBoxBase):
         )
         info_text.setWordWrap(True)
         info_text.setStyleSheet("color: #aaaaaa;")
-        setFont(info_text, 12)
+        setFont(info_text, 10)
         info_layout.addWidget(info_text)
         
         layout.addWidget(info_group)
