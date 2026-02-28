@@ -80,7 +80,7 @@
 
 ### 文字提取（OCR）
 
-| 可见水印移除 |
+| 文字提取 |
 |------|
 | [![OCR 识别](docs/results/ocr.gif)](docs/results/ocr.gif) |
 
