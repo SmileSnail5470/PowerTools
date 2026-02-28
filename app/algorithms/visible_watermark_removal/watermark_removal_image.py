@@ -297,6 +297,8 @@ class ImageWatermarkRemove():
         remain_watermark = ((remain_watermark.astype(np.float32) / 255.0) > 0.5).astype(np.float32) * \
                             ((mask.astype(np.float32) / 255.0) > 0.5).astype(np.float32)
 
+        new_mask = remain_watermark
+        
         watermark_detector = YOLODetection()
         watermark_detector.prepare(
             confidence=kwargs.get("confidence", 0.03), 

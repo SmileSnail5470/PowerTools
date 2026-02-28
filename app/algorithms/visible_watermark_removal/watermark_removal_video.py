@@ -50,7 +50,7 @@ class VideoWatermarkRemover:
             masks = os.listdir(mask_path)
             masks.sort()
             for frame_file, tmp_mask_path in zip(frame_files, masks):
-                frame_mask_map[str(frame_file)] = tmp_mask_path
+                frame_mask_map[str(frame_file)] = os.path.join(mask_path, tmp_mask_path)
             tmp_mask_dir = mask_path
         else:
             # 动态水印，ai 检测
