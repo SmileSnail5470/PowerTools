@@ -1,4 +1,5 @@
 import json
+import platform
 import subprocess
 from ._run import Error
 from ._utils import convert_kwargs_to_cmd_line_args
@@ -17,7 +18,7 @@ def probe(filename, cmd='ffprobe', **kwargs):
     args += convert_kwargs_to_cmd_line_args(kwargs)
     args += [filename]
 
-    p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=subprocess.CREATE_NO_WINDOW if platform.system().lower() == "windows" else 0)
     out, err = p.communicate()
     if p.returncode != 0:
         raise Error('ffprobe', out, err)

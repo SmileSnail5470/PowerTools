@@ -1,4 +1,5 @@
 from __future__ import unicode_literals
+import platform
 from .dag import get_outgoing_edges, topo_sort
 from ._utils import basestring, convert_kwargs_to_cmd_line_args
 from builtins import str
@@ -282,6 +283,8 @@ def run_async(
     stdin_stream = subprocess.PIPE if pipe_stdin else None
     stdout_stream = subprocess.PIPE if pipe_stdout or quiet else None
     stderr_stream = subprocess.PIPE if pipe_stderr or quiet else None
+    if "creationflags" not in kwagrs:
+        kwagrs["creationflags"] = subprocess.CREATE_NO_WINDOW if platform.system().lower() == "windows" else 0
     return subprocess.Popen(
         args, stdin=stdin_stream, stdout=stdout_stream, stderr=stderr_stream, **kwagrs
     )
