@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QWidget, QFrame, QHBoxLayout, QLabel, QGraphicsDropShadowEffect, QVBoxLayout, QListWidget, 
     QListWidgetItem, QPushButton, QApplication
 )
-from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, Property, QRectF, Signal, QRect
+from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, Property, QRectF, Signal, QRect, QTimer
 from app.ui.library.qfluentwidgets import setFont
 from app.ui.common.task_status import TaskStatusModel
 
@@ -69,8 +69,8 @@ class ProgressRing(QWidget):
         painter.setPen(pen)
         
         # 计算角度
-        start_angle = -90  # 从顶部开始
-        span_angle = (self._percentage / 100) * 360
+        start_angle = 90  # 从顶部开始
+        span_angle = -(self._percentage / 100) * 360
         
         # 绘制进度弧
         rect = QRectF(center_x - radius, center_y - radius, radius * 2, radius * 2)
@@ -411,6 +411,16 @@ class StatusInfoWidget(QWidget):
         
         self.setup_ui()
         self.setup_style()
+
+        self._simulated_percentage = 0.0
+        self._real_percentage = 0.0
+
+        self._real_segment = 0.0
+        self._sim_start = 0.0
+        self._sim_end = 0.0
+
+        self._progress_timer = QTimer(self)
+        self._progress_timer.timeout.connect(self._increase_simulated_progress)
         
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -477,22 +487,46 @@ class StatusInfoWidget(QWidget):
         else:
             
             self.failure_popup.show_at(self.failed_card)
-        
+
     def update_display(self, data):
-        self.total_card.update_value(data['total'])
-        self.processed_card.update_value(data['processed'])
+        total = data['total']
+        processed = data['processed']
+        self.total_card.update_value(total)
+        self.processed_card.update_value(processed)
         self.success_card.update_value(data['success'])
         self.failed_card.update_value(data['failed'])
+
+        if total == 0:
+            self._simulated_percentage = 0
+            self.progress_ring.set_percentage_animated(0)
+            self._progress_timer.start(1000)
+            return
         
-        # 更新进度环
-        if data['total'] == 0:
-            percentage = 0
-        else:
-            percentage = (data['processed'] / data['total']) * 100
-        self.progress_ring.set_percentage_animated(percentage)
-        
-        # 更新失败列表
+        self._real_segment = 100 / total
+        current_index = processed
+        sim_segment = self._real_segment * 0.9
+        self._sim_start = current_index * self._real_segment
+        self._sim_end = self._sim_start + sim_segment
+        if processed == total:
+            self.progress_ring.set_percentage_animated(100)
+            self._progress_timer.stop()
+            return
+        self._real_percentage = processed * self._real_segment
+        if self._simulated_percentage < self._real_percentage:
+            self._simulated_percentage = self._real_percentage
+        self._update_progress_display()
         self.update_failure_list(data)
+
+    def _increase_simulated_progress(self):
+        if self._simulated_percentage < self._sim_end:
+            remaining = self._sim_end - self._simulated_percentage
+            step = max(0.1, remaining * 0.01)
+            self._simulated_percentage += step
+        self._update_progress_display()
+
+    def _update_progress_display(self):
+        display = max(self._simulated_percentage, self._real_percentage)
+        self.progress_ring.set_percentage_animated(display)
         
     def update_failure_list(self, data):
         self.failure_popup.clear_failures()
