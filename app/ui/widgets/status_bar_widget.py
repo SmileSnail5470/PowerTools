@@ -522,7 +522,7 @@ class StatusInfoWidget(QWidget):
             remaining = self._sim_end - self._simulated_percentage
             step = max(0.1, remaining * 0.01)
             self._simulated_percentage += step
-        self._update_progress_display()
+            self._update_progress_display()
 
     def _update_progress_display(self):
         display = max(self._simulated_percentage, self._real_percentage)
