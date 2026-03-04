@@ -23,7 +23,7 @@
 | [![主页](docs/screenshots/home.png)](docs/screenshots/home.png) | [![水印添加](docs/screenshots/watermark-add.png)](docs/screenshots/watermark-add.png) | [![水印移除](docs/screenshots/watermark-remove.png)](docs/screenshots/watermark-remove.png) | [![文字识别](docs/screenshots/ocr.png)](docs/screenshots/ocr.png) |
 
 ---
-
+**QQ交流群**：1080076113
 ## 开发进度与更新计划
 ### 🛠 进行中
 - **优化视频去水印效果**
