@@ -92,7 +92,7 @@ def log_performance(
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            log = logger or logging.getLogger(f"{func.__module__}.performance")
+            log = logger or logging.getLogger(func.__module__)
             
             start_time = time.perf_counter()
             func_name = f"{func.__module__}.{func.__name__}"

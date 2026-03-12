@@ -293,7 +293,7 @@ class WatermarkMaskTool(MyMessageBoxBase):
             (
                 ffmpeg
                 .input(self.file_path)
-                .output(os.path.join(frames_dir, "%06d.png"), start_number=0)
+                .output(os.path.join(frames_dir, "%06d.png"), start_number=0, vsync="passthrough")
                 .overwrite_output()
                 .global_args("-hide_banner", "-loglevel", "error")
                 .run(cmd=os.path.join(os.getenv("POWERTOOLS_FFMPEG_BIN"), "ffmpeg.exe" if platform.system().lower() == "windows" else "ffmpeg"))

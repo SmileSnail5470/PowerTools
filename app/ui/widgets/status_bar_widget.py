@@ -508,8 +508,9 @@ class StatusInfoWidget(QWidget):
         self._sim_start = current_index * self._real_segment
         self._sim_end = self._sim_start + sim_segment
         if processed == total:
-            self.progress_ring.set_percentage_animated(100)
             self._progress_timer.stop()
+            self._progress_timer.singleShot(500, lambda: self.progress_ring.set_percentage_animated(100))
+            self.update_failure_list(data)
             return
         self._real_percentage = processed * self._real_segment
         if self._simulated_percentage < self._real_percentage:

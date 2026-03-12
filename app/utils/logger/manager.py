@@ -91,14 +91,10 @@ class LogManager:
             backup_count=self.config.backup_count,
             encoding='utf-8',
         )
-        perf_handler.setLevel(logging.DEBUG)
+        perf_handler.setLevel(logging.WARNING)
         perf_handler.setFormatter(PerformanceFormatter())
         self._handlers['performance_file'] = perf_handler
-        
-        perf_logger = logging.getLogger('performance')
-        perf_logger.setLevel(logging.DEBUG)
-        perf_logger.addHandler(perf_handler)
-        perf_logger.propagate = False
+        self.root_logger.addHandler(perf_handler)
     
     def _setup_console_handler(self):
         console_handler = logging.StreamHandler(sys.stdout)

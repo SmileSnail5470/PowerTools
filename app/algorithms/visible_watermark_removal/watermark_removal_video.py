@@ -67,11 +67,11 @@ class VideoWatermarkRemover:
                 Image.fromarray(mask).convert("L").save(tmp_mask_path)
                 frame_mask_map[str(frame_file)] = tmp_mask_path
 
-    def _merge_processed_frames(self, processed_frames_dir, fps, has_audio, input_video_path, output_video_path):
+    def _merge_processed_frames(self, processed_frames_dir, has_audio, fps, input_video_path, output_video_path):
         video_input = ffmpeg.input(
             str(processed_frames_dir / '%06d.png'),
-            framerate=fps,
-            pixel_format='rgb24'
+            pixel_format='rgb24',
+            framerate=fps
         )
     
         output_kwargs = {
@@ -143,7 +143,7 @@ class VideoWatermarkRemover:
             (
                 ffmpeg
                 .input(input_video_path)
-                .output(str(frames_dir / '%06d.png'), start_number=0)
+                .output(str(frames_dir / '%06d.png'), start_number=0, vsync="passthrough")
                 .overwrite_output()
                 .run(capture_stdout=True, capture_stderr=True)
             )
@@ -195,9 +195,9 @@ class VideoWatermarkRemover:
                     callback_func(len(os.listdir(str(processed_frames_dir))), total_frames)
 
             self._merge_processed_frames(
-                processed_frames_dir=processed_frames_dir, 
-                fps=fps, 
+                processed_frames_dir=processed_frames_dir,
                 has_audio=has_audio, 
+                fps=fps,
                 input_video_path=input_video_path,
                 output_video_path=output_video_path
             )
@@ -226,7 +226,7 @@ if __name__ == "__main__":
         watermark_type="text",
         use_cache_mask=True,
         image_refine_type=refine_type,
-        ffmpeg_path="/Users/yangliuqing/Workspace/Yangliuqing/Code/pyside6/PowerTools/app/resources/ffmpeg/bin",
+        ffmpeg_path="",
         callback_func=callback,
         text_det_unclip_ratio=1.8
     )
