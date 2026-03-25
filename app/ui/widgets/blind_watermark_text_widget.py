@@ -1,8 +1,8 @@
-from PySide6.QtCore import Qt, QEasingCurve, Signal, QSize
+from PySide6.QtCore import Qt, QEasingCurve, Signal, QSize, QRegularExpression
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLineEdit, QLabel, QPushButton, QGraphicsDropShadowEffect, QHBoxLayout
 )
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QRegularExpressionValidator
 from app.ui.library.qfluentwidgets import setFont, FlowLayout, TeachingTip, InfoBarIcon, TeachingTipTailPosition, FluentIcon
 
 
@@ -104,11 +104,13 @@ class BlindWatermarkInputPanel(QWidget):
         h_layout.setSpacing(8)
 
         self.input = QLineEdit()
-        self.input.setReadOnly(True)
+        self.input.setReadOnly(False)
+        self.input.setMaxLength(self.max_length)
+        self.input.setValidator(QRegularExpressionValidator(QRegularExpression("[A-Za-z1-4]*")))
         self.input.setPlaceholderText(self.tr("输入水印文字"))
         self.input.setMinimumHeight(36)
         setFont(self.input, 13)
-        self.input.textChanged.connect(lambda s: self.textUpdate.emit(s))
+        self.input.textChanged.connect(lambda s: self.textUpdate.emit(s.upper()))
         h_layout.addWidget(self.input)
 
         remove_btn = DeleteButton(self)

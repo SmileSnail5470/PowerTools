@@ -5,3 +5,4 @@ app/ui/library/qfluentwidgets/_rc/resource.py
 app/ui/library/qframelesswindow/_rc/resource.py
 app/ui/resources/resource.py
 dist/*
+app/resources/deps/super_resolution/*
