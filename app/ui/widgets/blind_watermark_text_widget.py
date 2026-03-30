@@ -131,15 +131,6 @@ class BlindWatermarkInputPanel(QWidget):
         charset_label.setStyleSheet("color: #888888;")
         charset_layout.addWidget(charset_label)
 
-        self.charset_input = QLineEdit()
-        self.charset_input.setMaxLength(31)
-        self.charset_input.setText("".join(self.allowed_chars))
-        self.charset_input.setMinimumHeight(36)
-        setFont(self.charset_input, 13)
-        self.charset_input.textChanged.connect(self.update_charset)
-        charset_layout.addWidget(self.charset_input)
-        layout.addLayout(charset_layout)
-
         char_label = QLabel(self.tr(f"可选字符集（最大字符长度 {self.max_length}）"))
         setFont(char_label, 10)
         char_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
@@ -159,6 +150,15 @@ class BlindWatermarkInputPanel(QWidget):
             btn.clicked.connect(lambda checked, c=ch: self.append_char(c))
             self.flow_layout.addWidget(btn)
         layout.addWidget(char_container)
+
+        self.charset_input = QLineEdit()
+        self.charset_input.setMaxLength(31)
+        self.charset_input.setText("".join(self.allowed_chars))
+        self.charset_input.setMinimumHeight(36)
+        setFont(self.charset_input, 13)
+        self.charset_input.textChanged.connect(self.update_charset)
+        charset_layout.addWidget(self.charset_input)
+        layout.addLayout(charset_layout)
 
     def apply_style(self):
         self.setStyleSheet(

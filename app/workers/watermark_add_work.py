@@ -114,7 +114,6 @@ class WatermarkAddWork(BaseWorker):
 
         elif not is_visible_watermark:
             custom_characters = kwargs["custom_characters"] if "custom_characters" in kwargs else list("ABCDEFGHIJKLMNOPQRSTUVWXYZ,1234")
-            print("custom_characters: ", custom_characters)
             os.environ["BLIND_WATERMARK_CHARSET"] = "".join(custom_characters) + "`"
             if file_type == "image":
                 params = {
