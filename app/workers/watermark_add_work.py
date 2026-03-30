@@ -113,6 +113,9 @@ class WatermarkAddWork(BaseWorker):
                 self.visible_watermark_addition_instance.video_add_text_watermark(**params)
 
         elif not is_visible_watermark:
+            custom_characters = kwargs["custom_characters"] if "custom_characters" in kwargs else list("ABCDEFGHIJKLMNOPQRSTUVWXYZ,1234")
+            print("custom_characters: ", custom_characters)
+            os.environ["BLIND_WATERMARK_CHARSET"] = "".join(custom_characters) + "`"
             if file_type == "image":
                 params = {
                     "input_image_path": input_path,

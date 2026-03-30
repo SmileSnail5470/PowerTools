@@ -339,7 +339,9 @@ class WatermarkContentCard(HeaderCardWidget):
         self.blind_watermark_input = BlindWatermarkInputPanel()
         self.blind_watermark_input.hide()
         bind_widget_to_param(self.blind_watermark_input, "textUpdate", watermark_add_params, "watermark_text", transform=None)
+        bind_widget_to_param(self.blind_watermark_input, "charsChange", watermark_add_params, "custom_characters", transform=None)
         self.blind_watermark_input.textUpdate.emit("POWERTOOLS")
+        self.blind_watermark_input.charsChange.emit("ABCDEFGHIJKLMNOPQRSTUVWXYZ,1234")
         main_layout.addWidget(self.blind_watermark_input)
         
         # 文字水印设置界面
@@ -903,6 +905,7 @@ class HeaderWidget(QWidget):
                 return error_msg, task_params
             task_params["watermark_text"] = params["watermark_text"]
             task_params["blind_watermark_model_name"] = params["blind_watermark_model_name"]
+            task_params["custom_characters"] = params["custom_characters"]
         return error_msg, task_params
 
 

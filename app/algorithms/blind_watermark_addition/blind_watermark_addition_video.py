@@ -83,6 +83,9 @@ class VideoBlindWatermarkEmbed():
         )
 
         ecc = HammingECC()
+        if os.getenv("BLIND_WATERMARK_CHARSET") is not None:
+            charset = os.getenv("BLIND_WATERMARK_CHARSET")
+            ecc.CHARSET = charset
         msgs, _ = ecc.str_to_tensor(message)
 
         # Process the video
@@ -216,6 +219,9 @@ class VideoBlindWatermarkDetect():
         soft_msgs = np.concatenate(soft_msgs, axis=0)
         soft_msgs = soft_msgs.mean(axis=0)
         ecc = HammingECC()
+        if os.getenv("BLIND_WATERMARK_CHARSET") is not None:
+            charset = os.getenv("BLIND_WATERMARK_CHARSET")
+            ecc.CHARSET = charset
         preds_str, _ = ecc.tensor_to_string(soft_msgs)
         metrics = {
             "file": input_path,

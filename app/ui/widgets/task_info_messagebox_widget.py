@@ -15,6 +15,7 @@ param_name_map = {
     "mask_dilate": "水印 Mask 扩张系数",
     "model_name": "模型类型",
     "watermark_text": "水印文本",
+    "custom_characters": "盲水印字符集",
     "font": "字体",
     "font_size": "字体大小",
     "font_color": "字体颜色",

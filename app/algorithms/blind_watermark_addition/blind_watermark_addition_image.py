@@ -39,6 +39,9 @@ class ImageBlindWatermarkEmbed():
 
         # Watermark embedding
         ecc = HammingECC()
+        if os.getenv("BLIND_WATERMARK_CHARSET") is not None:
+            charset = os.getenv("BLIND_WATERMARK_CHARSET")
+            ecc.CHARSET = charset
         msgs, _ = ecc.str_to_tensor(message)
 
         imgs_ws = self.session.run(
@@ -95,6 +98,9 @@ class ImageBlindWatermarkDetect():
         )[0]
 
         ecc = HammingECC()
+        if os.getenv("BLIND_WATERMARK_CHARSET") is not None:
+            charset = os.getenv("BLIND_WATERMARK_CHARSET")
+            ecc.CHARSET = charset
         preds_str, preds = ecc.tensor_to_string(preds)
         metrics = {
             "file": input_image_path,

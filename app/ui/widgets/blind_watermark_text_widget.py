@@ -1,3 +1,4 @@
+import re
 from PySide6.QtCore import Qt, QEasingCurve, Signal, QSize, QRegularExpression
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLineEdit, QLabel, QPushButton, QGraphicsDropShadowEffect, QHBoxLayout
@@ -74,8 +75,9 @@ class DeleteButton(QPushButton):
 
 class BlindWatermarkInputPanel(QWidget):
     textUpdate = Signal(str)
+    charsChange = Signal(str)
 
-    def __init__(self, allowed_chars=None, max_length = 15, parent=None):
+    def __init__(self, allowed_chars=None, max_length = 15, reg_exp="[A-Za-z1-4]*", parent=None):
         super().__init__(parent)
 
         if allowed_chars is None:
@@ -83,6 +85,7 @@ class BlindWatermarkInputPanel(QWidget):
 
         self.allowed_chars = allowed_chars
         self.max_length = max_length
+        self.reg_exp = reg_exp
 
         self.setObjectName("BlindWatermarkInputPanel")
         self.setup_ui()
@@ -106,7 +109,7 @@ class BlindWatermarkInputPanel(QWidget):
         self.input = QLineEdit()
         self.input.setReadOnly(False)
         self.input.setMaxLength(self.max_length)
-        self.input.setValidator(QRegularExpressionValidator(QRegularExpression("[A-Za-z1-4]*")))
+        self.input.setValidator(QRegularExpressionValidator(QRegularExpression(self.reg_exp)))
         self.input.setPlaceholderText(self.tr("输入水印文字"))
         self.input.setMinimumHeight(36)
         setFont(self.input, 13)
@@ -119,24 +122,42 @@ class BlindWatermarkInputPanel(QWidget):
 
         layout.addLayout(h_layout)
 
+        charset_layout = QVBoxLayout()
+        charset_layout.setContentsMargins(0, 0, 0, 0)
+        charset_layout.setSpacing(8)
+
+        charset_label = QLabel(self.tr("字符集(最多 31 个字符)"))
+        setFont(charset_label, 13)
+        charset_label.setStyleSheet("color: #888888;")
+        charset_layout.addWidget(charset_label)
+
+        self.charset_input = QLineEdit()
+        self.charset_input.setMaxLength(31)
+        self.charset_input.setText("".join(self.allowed_chars))
+        self.charset_input.setMinimumHeight(36)
+        setFont(self.charset_input, 13)
+        self.charset_input.textChanged.connect(self.update_charset)
+        charset_layout.addWidget(self.charset_input)
+        layout.addLayout(charset_layout)
+
         char_label = QLabel(self.tr(f"可选字符集（最大字符长度 {self.max_length}）"))
         setFont(char_label, 10)
         char_label.setStyleSheet("color: #888888;")  # 设置为浅灰色
         layout.addWidget(char_label)
 
-        flow_layout = FlowLayout(None, needAni=True)
-        flow_layout.setAnimation(250, QEasingCurve.OutQuad)
-        flow_layout.setContentsMargins(10, 10, 10, 10)
-        flow_layout.setVerticalSpacing(8)
-        flow_layout.setHorizontalSpacing(4)
+        self.flow_layout = FlowLayout(None, needAni=True)
+        self.flow_layout.setAnimation(250, QEasingCurve.OutQuad)
+        self.flow_layout.setContentsMargins(10, 10, 10, 10)
+        self.flow_layout.setVerticalSpacing(8)
+        self.flow_layout.setHorizontalSpacing(4)
 
         char_container = QWidget()
-        char_container.setLayout(flow_layout)
+        char_container.setLayout(self.flow_layout)
 
         for ch in self.allowed_chars:
             btn = FluentTagButton(ch)
             btn.clicked.connect(lambda checked, c=ch: self.append_char(c))
-            flow_layout.addWidget(btn)
+            self.flow_layout.addWidget(btn)
         layout.addWidget(char_container)
 
     def apply_style(self):
@@ -170,3 +191,33 @@ class BlindWatermarkInputPanel(QWidget):
             )
             return
         self.input.setText(current + ch)
+
+    def build_char_buttons(self):
+        while self.flow_layout.count():
+            item = self.flow_layout.takeAt(0)
+            item.deleteLater()
+        for ch in self.allowed_chars:
+            btn = FluentTagButton(ch)
+            btn.clicked.connect(lambda checked, c=ch: self.append_char(c))
+            self.flow_layout.addWidget(btn)
+
+    def build_reg_exp(self):
+        escaped = [re.escape(ch) for ch in self.allowed_chars]
+        pattern = f"[{''.join(escaped)}]*"
+        return pattern
+
+    def update_charset(self, text):
+        new_chars = []
+        upper_text = text.upper()
+        if upper_text != text:
+            self.charset_input.blockSignals(True)
+            self.charset_input.setText(upper_text)
+            self.charset_input.blockSignals(False)
+        for ch in upper_text:
+            if ch not in new_chars:
+                new_chars.append(ch)
+        self.allowed_chars = new_chars
+        new_reg = self.build_reg_exp()
+        self.input.setValidator(QRegularExpressionValidator(QRegularExpression(new_reg)))
+        self.build_char_buttons()
+        self.charsChange.emit("".join(self.allowed_chars))
