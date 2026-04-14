@@ -3,6 +3,7 @@ import platform
 import sys
 import numpy as np
 import onnxruntime as ort
+ort.preload_dlls(directory="")
 from PIL import Image
 from app.algorithms.blind_watermark_addition.ecc_utils import HammingECC
 

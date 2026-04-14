@@ -10,6 +10,7 @@ import numpy as np
 import math
 import time
 import onnxruntime as ort
+ort.preload_dlls(directory="")
 import uuid
 
 
