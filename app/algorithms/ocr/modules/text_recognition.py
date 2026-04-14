@@ -1,6 +1,8 @@
 import copy
 import os
+import platform
 import re
+import sys
 import yaml
 os.environ["FLAGS_allocator_strategy"] = "auto_growth"
 import cv2
@@ -8,6 +10,7 @@ import numpy as np
 import math
 import time
 import onnxruntime as ort
+import uuid
 
 
 class BaseRecLabelDecode(object):
@@ -216,9 +219,21 @@ class CTCLabelDecode(BaseRecLabelDecode):
 def create_predictor(onnx_path):
     session_options = ort.SessionOptions()
     session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    available = ort.get_available_providers()
+    is_apple_silicon = sys.platform == "darwin" and platform.machine() == "arm64"
+    if is_apple_silicon:
+        providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+        provider_options = [{}, {}]
+    elif "CUDAExecutionProvider" in available:
+        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        provider_options = [{}, {}]
+    else:
+        providers = ["CPUExecutionProvider"]
+        provider_options = [{}]
     sess = ort.InferenceSession(
         onnx_path,
-        providers=["CPUExecutionProvider"],
+        providers=providers,
+        provider_options=provider_options,
         sess_options=session_options,
     )
     inputs = sess.get_inputs()
@@ -249,7 +264,10 @@ def build_post_process(config: dict, global_config=None):
 
 class TextRecognizer():
     def __init__(self):
-        pass
+        self._temp_dict_file = None
+    
+    def __del__(self):
+        self.cleanup()
 
     def prepare(self, onnx_path):
         self.onnx_path = onnx_path
@@ -265,9 +283,15 @@ class TextRecognizer():
             raise ValueError(f"{model_name} is not supported. Please check if the model is supported by the PaddleOCR wheel.")
         
         rec_char_list = model_config.get("PostProcess", {}).get("character_dict", [])
-        rec_char_dict_path = f"{rec_model_dir}/ppocr_keys.txt"
+        # 使用唯一名字的临时文件避免多线程竞争
+        unique_id = str(uuid.uuid4())[:8]
+        rec_char_dict_path = os.path.join(rec_model_dir, f"ppocr_keys_{unique_id}.txt")
+        
         with open(rec_char_dict_path, "w", encoding="utf-8") as f:
             f.writelines([char + "\n" for char in rec_char_list])
+        
+        # 保存临时文件路径用于后续清理
+        self._temp_dict_file = rec_char_dict_path
 
         self.rec_image_shape = [3, 48, 320]
         self.rec_batch_num = 6
@@ -286,6 +310,14 @@ class TextRecognizer():
             self.config,
         ) = create_predictor(onnx_path=self.onnx_path)
         self.return_word_box = False
+    
+    def cleanup(self):
+        if self._temp_dict_file and os.path.exists(self._temp_dict_file):
+            try:
+                os.remove(self._temp_dict_file)
+                self._temp_dict_file = None
+            except Exception as e:
+                print(f"Warning: Failed to remove temp dict file {self._temp_dict_file}: {e}")
 
     def resize_norm_img(self, img, max_wh_ratio):
         imgC, imgH, imgW = self.rec_image_shape
@@ -351,4 +383,5 @@ class TextRecognizer():
             )
             for rno in range(len(rec_result)):
                 rec_res[indices[beg_img_no + rno]] = rec_result[rno]
+        self.cleanup()
         return rec_res, time.time() - st

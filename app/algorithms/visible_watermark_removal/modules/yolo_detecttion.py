@@ -1,3 +1,6 @@
+import platform
+import sys
+
 from PIL import Image
 import cv2
 import numpy as np
@@ -172,9 +175,21 @@ class YOLODetection():
     def _create_predictor(self, onnx_path):
         session_options = ort.SessionOptions()
         session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        available = ort.get_available_providers()
+        is_apple_silicon = sys.platform == "darwin" and platform.machine() == "arm64"
+        if is_apple_silicon:
+            providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+            provider_options = [{}, {}]
+        elif "CUDAExecutionProvider" in available:
+            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+            provider_options = [{}, {}]
+        else:
+            providers = ["CPUExecutionProvider"]
+            provider_options = [{}]
         sess = ort.InferenceSession(
             onnx_path,
-            providers=["CPUExecutionProvider"],
+            providers=providers,
+            provider_options=provider_options,
             sess_options=session_options,
         )
         inputs = sess.get_inputs()
