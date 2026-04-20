@@ -136,9 +136,9 @@ class VideoBlindWatermarkEmbed():
             os.remove(temp_output)
         os.rename(output_path, temp_output)
 
-        videostream = ffmpeg.input(temp_output)
+        videostream = ffmpeg.input(temp_output).video
         if has_audio:
-            audiostream = ffmpeg.input(input_path)
+            audiostream = ffmpeg.input(input_path).audio
             process3 = (
                 ffmpeg.output(
                     videostream,
