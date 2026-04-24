@@ -21,8 +21,8 @@ class EMDFInpaint():
         available = ort.get_available_providers()
         is_apple_silicon = sys.platform == "darwin" and platform.machine() == "arm64"
         if is_apple_silicon:
-            providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
-            provider_options = [{}, {}]
+            providers = ["CPUExecutionProvider"]
+            provider_options = [{}]
         elif "CUDAExecutionProvider" in available:
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
             provider_options = [{}, {}]
