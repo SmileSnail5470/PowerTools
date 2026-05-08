@@ -24,41 +24,30 @@ def get_color(index: int) -> Tuple[int, int, int]:
     return PALETTE[index % len(PALETTE)]
 
 def save_visualization(
-    img: np.ndarray,
-    results: List[InferenceResult],
-    filename: str,
-    prompt_points: List[Tuple[float, float]] = None,
-    prompt_boxes: List[Tuple[float, float, float, float]] = None,
-):
-    """Draw results on image and save (equivalent to save_visualization)."""
-    if prompt_points is None:
-        prompt_points = []
-    if prompt_boxes is None:
-        prompt_boxes = []
-
+        img: np.ndarray,
+        results: List[InferenceResult],
+        filename: str,
+        prompt_points: List[Tuple[float, float]] = None,
+        prompt_boxes: List[Tuple[float, float, float, float]] = None,
+    ):
+    prompt_points = [] if prompt_points is None else prompt_points
+    prompt_boxes = [] if prompt_boxes is None else prompt_boxes
     overlay = img.copy()
-
     for i, r in enumerate(results):
         color = get_color(i)
-        b, g, r_ = color  # BGR for OpenCV
-
-        # Draw colored mask (semi-transparent)
+        b, g, r_ = color
         colored_mask = np.zeros_like(img)
         colored_mask[r.mask > 0] = [b, g, r_]
         overlay = cv2.addWeighted(overlay, 1.0, colored_mask, 0.5, 0)
 
-        # Draw bounding box
         x, y, w, h = map(int, r.box)
         cv2.rectangle(overlay, (x, y), (x + w, y + h), (b, g, r_), 2)
 
-        # Draw label with semi-transparent background
         text = f"{r.label} {r.score:.4f}"
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.6
         thickness = 1
-        (text_w, text_h), baseline = cv2.getTextSize(
-            text, font, font_scale, thickness
-        )
+        text_w, text_h, baseline = cv2.getTextSize(text, font, font_scale, thickness)
 
         label_x = max(0, x)
         label_y = max(text_h + 5, y)
@@ -66,7 +55,6 @@ def save_visualization(
         label_h = text_h + 5
 
         if label_w > 0 and label_h > 0 and label_x + label_w <= overlay.shape[1] and label_y >= label_h:
-            # Create semi-transparent background for label
             label_bg = overlay[label_y - label_h : label_y, label_x : label_x + label_w].copy()
             cv2.rectangle(
                 label_bg,
@@ -82,7 +70,6 @@ def save_visualization(
                 0.4,
                 0,
             )
-            # White text
             cv2.putText(
                 overlay,
                 text,
@@ -93,16 +80,12 @@ def save_visualization(
                 thickness,
                 cv2.LINE_AA,
             )
-
-    # Draw prompt points
     for px, py in prompt_points:
         pt = (int(px), int(py))
         # Outer black circle
         cv2.circle(overlay, pt, 6, (0, 0, 0), 1, cv2.LINE_AA)
         # Inner white dot
         cv2.circle(overlay, pt, 5, (255, 255, 255), -1, cv2.LINE_AA)
-
-    # Draw prompt boxes
     for bx, by, bw, bh in prompt_boxes:
         cv2.rectangle(
             overlay,
@@ -112,9 +95,7 @@ def save_visualization(
             2,
             cv2.LINE_AA,
         )
-
     cv2.imwrite(filename, overlay)
-    print(f"Saved: {filename} (Found {len(results)} objects)")
 
 
 class SegmentationInference():

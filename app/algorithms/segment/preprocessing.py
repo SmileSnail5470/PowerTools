@@ -1,8 +1,3 @@
-"""
-CUDA kernel equivalent for image preprocessing:
-  BGR/RGB uint8 → CHW RGB float32 with normalization (val - 127.5) / 127.5
-"""
-
 import numpy as np
 import cv2
 
@@ -23,7 +18,6 @@ def preprocess_cpu(
     h, w = image.shape[:2]
 
     if is_bgr:
-        # BGR → RGB conversion inline (matching CUDA kernel)
         b = (image[:, :, 0].astype(np.float32) - 127.5) / 127.5
         g = (image[:, :, 1].astype(np.float32) - 127.5) / 127.5
         r = (image[:, :, 2].astype(np.float32) - 127.5) / 127.5
