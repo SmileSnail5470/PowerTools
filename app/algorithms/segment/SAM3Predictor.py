@@ -8,6 +8,7 @@ import numpy as np
 import onnxruntime as ort
 from app.algorithms.segment.SimpleTokenizer import SimpleTokenizer
 from app.algorithms.segment.preprocessing import preprocess_opencv
+ort.preload_dlls(directory="")
 
 
 @dataclass
@@ -104,7 +105,7 @@ class SAM3Predictor:
         self,
         bgr_img: np.ndarray,
         text: str,
-        threshold: float = 0.25,
+        threshold: float = 0.5,
         max_detections: int = 0,
     ) -> List[InferenceResult]:
         """Text-prompted grounding segmentation.

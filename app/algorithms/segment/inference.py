@@ -75,7 +75,7 @@ class SegmentationInference():
             model_dir: str, 
             prompt_mode: str = "texts",       # "texts", "points", or "boxes"
             prompt_value: str = "watermark",  # Text prompt or "x,y" for points or "x1,y1,x2,y2" for boxes
-            threshold: float = 0.25,          # Confidence threshold
+            threshold: float = 0.5,           # Confidence threshold
             max_detections: int = 0,          # Max detections (0 = unlimited)
             label: str = "object"             # Class label for points/boxes   
         ):
@@ -143,8 +143,8 @@ if __name__ == "__main__":
     inference = SegmentationInference(
         model_dir=model_dir,
         prompt_mode="texts",
-        prompt_value="watermarks",
-        threshold=0.25,
+        prompt_value="watermark",
+        threshold=0.5,
         max_detections=0,
         label="watermark"
     )
