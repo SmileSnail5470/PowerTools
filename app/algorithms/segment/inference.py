@@ -5,18 +5,7 @@ from app.algorithms.segment.SAM3Predictor import SAM3Predictor, InferenceResult
 
 
 PALETTE = [
-    (255, 0, 0),
-    (0, 255, 0),
-    (0, 0, 255),
-    (255, 255, 0),
-    (255, 0, 255),
-    (0, 255, 255),
-    (255, 128, 0),
-    (255, 0, 128),
-    (128, 255, 0),
-    (0, 255, 128),
-    (128, 0, 255),
-    (0, 128, 255),
+    (255, 255, 0)
 ]
 
 
@@ -36,50 +25,32 @@ def save_visualization(
     for i, r in enumerate(results):
         color = get_color(i)
         b, g, r_ = color
-        colored_mask = np.zeros_like(img)
-        colored_mask[r.mask > 0] = [b, g, r_]
-        overlay = cv2.addWeighted(overlay, 1.0, colored_mask, 0.5, 0)
-
-        x, y, w, h = map(int, r.box)
-        cv2.rectangle(overlay, (x, y), (x + w, y + h), (b, g, r_), 2)
-
-        text = f"{r.label} {r.score:.4f}"
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.6
-        thickness = 1
-        text_w, text_h, baseline = cv2.getTextSize(text, font, font_scale, thickness)
-
-        label_x = max(0, x)
-        label_y = max(text_h + 5, y)
-        label_w = min(text_w, overlay.shape[1] - label_x)
-        label_h = text_h + 5
-
-        if label_w > 0 and label_h > 0 and label_x + label_w <= overlay.shape[1] and label_y >= label_h:
-            label_bg = overlay[label_y - label_h : label_y, label_x : label_x + label_w].copy()
-            cv2.rectangle(
-                label_bg,
-                (0, 0),
-                (label_w, label_h),
-                (b, g, r_),
-                -1,
-            )
-            overlay[label_y - label_h : label_y, label_x : label_x + label_w] = cv2.addWeighted(
-                overlay[label_y - label_h : label_y, label_x : label_x + label_w],
-                0.6,
-                label_bg,
-                0.4,
-                0,
-            )
-            cv2.putText(
-                overlay,
-                text,
-                (label_x, label_y - 5),
-                font,
-                font_scale,
-                (255, 255, 255),
-                thickness,
-                cv2.LINE_AA,
-            )
+        mask = r.mask > 0
+        overlay[mask] = (
+            overlay[mask] * 0.45
+            + np.array([b, g, r_]) * 0.55
+        ).astype(np.uint8)
+        contours, _ = cv2.findContours(
+            r.mask.astype(np.uint8),
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE
+        )
+        cv2.drawContours(
+            overlay,
+            contours,
+            -1,
+            (0, 0, 0),
+            4,
+            cv2.LINE_AA
+        )
+        cv2.drawContours(
+            overlay,
+            contours,
+            -1,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA
+        )
     for px, py in prompt_points:
         pt = (int(px), int(py))
         # Outer black circle
@@ -115,10 +86,19 @@ class SegmentationInference():
         self.max_detections = max_detections
         self.label = label
 
+    def _save_mask(self, img, results, output_mask_path):
+        h, w = img.shape[:2]
+        mask_image = np.zeros((h, w), dtype=np.uint8)
+        for r in results:
+            mask_image[r.mask > 0] = 255
+        if output_mask_path is not None:
+            cv2.imwrite(output_mask_path, mask_image)
+        return mask_image
+
     def prepare(self):
         self.predictor = SAM3Predictor(self.model_dir)
 
-    def inference_image(self, input_image_path: str, output_image_path: str):
+    def inference_image(self, input_image_path: str, output_mask_path: str | None = None, output_visualization_path: str | None = None) -> np.ndarray:
         img = cv2.imread(input_image_path)
         if img is None:
             raise ValueError(f"Could not read image: {input_image_path}")
@@ -147,4 +127,29 @@ class SegmentationInference():
             bw, bh = x2 - x1, y2 - y1
             prompt_boxes.append((x1, y1, bw, bh))
             results = self.predictor.predict_box(img, (x1, y1, bw, bh), threshold=self.threshold, max_detections=self.max_detections, label=self.label)
-        save_visualization(img, results, output_image_path, prompt_points, prompt_boxes)
+        if output_visualization_path is not None:
+            save_visualization(img, results, output_visualization_path, prompt_points, prompt_boxes)
+        mask_image = self._save_mask(img, results, output_mask_path)
+        return mask_image # [H, W] 0-255 uint8
+
+
+if __name__ == "__main__":
+    import os
+    import time
+    model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "resources", "deps", "segment")
+    input_image_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assess", "test2.jpg")
+    output_mask_path = "output_mask.png"
+    output_visualization_path = "output_visualization.png"
+    inference = SegmentationInference(
+        model_dir=model_dir,
+        prompt_mode="texts",
+        prompt_value="watermarks",
+        threshold=0.25,
+        max_detections=0,
+        label="watermark"
+    )
+    inference.prepare()
+    start_time = time.time()
+    inference.inference_image(input_image_path, output_mask_path, output_visualization_path)
+    end_time = time.time()
+    print(f"Inference completed in {end_time - start_time:.2f} seconds. Output saved to {output_mask_path}")
