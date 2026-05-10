@@ -1,4 +1,5 @@
 import math
+import os
 import platform
 import sys
 from dataclasses import dataclass
@@ -40,7 +41,7 @@ class SAM3Predictor:
 
     def _get_session_options(self) -> ort.SessionOptions:
         opts = ort.SessionOptions()
-        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
         return opts
 
     def _ensure_grounding_models(self):
@@ -50,19 +51,19 @@ class SAM3Predictor:
         providers, provider_options = self._get_providers()
 
         self._g_encoder_session = ort.InferenceSession(
-            f"{self.model_dir}/sam3_grounding_encoder.onnx",
+            os.path.join(self.model_dir, "sam3_grounding_encoder.onnx"),
             opts,
             providers=providers,
             provider_options=provider_options,
         )
         self._lang_session = ort.InferenceSession(
-            f"{self.model_dir}/sam3_language_encoder.onnx",
+            os.path.join(self.model_dir, "sam3_language_encoder.onnx"),
             opts,
             providers=providers,
             provider_options=provider_options,
         )
         self._g_decoder_session = ort.InferenceSession(
-            f"{self.model_dir}/sam3_grounding_decoder.onnx",
+            os.path.join(self.model_dir, "sam3_grounding_decoder.onnx"),
             opts,
             providers=providers,
             provider_options=provider_options,
@@ -75,13 +76,13 @@ class SAM3Predictor:
         providers, provider_options = self._get_providers()
 
         self._i_encoder_session = ort.InferenceSession(
-            f"{self.model_dir}/sam3_encoder.onnx",
+            os.path.join(self.model_dir, "sam3_encoder.onnx"),
             opts,
             providers=providers,
             provider_options=provider_options,
         )
         self._i_decoder_session = ort.InferenceSession(
-            f"{self.model_dir}/sam3_decoder.onnx",
+            os.path.join(self.model_dir, "sam3_decoder.onnx"),
             opts,
             providers=providers,
             provider_options=provider_options,
@@ -93,13 +94,21 @@ class SAM3Predictor:
         if is_apple_silicon:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
-        elif "CUDAExecutionProvider" in available:
+        elif "CUDAExecutionProvider" in available and self._hash_cuda_gpu():
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
             provider_options = [{}, {}]
         else:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
         return providers, provider_options
+    
+    def _hash_cuda_gpu(self):
+        if platform.system() != "Windows":
+            return True
+        cuda_path = r"C:\Program Files\NVIDIA Corporation"
+        if os.path.exists(cuda_path):
+            return True
+        return False
 
     def predict_text(
         self,

@@ -443,6 +443,14 @@ def transform(data, ops=None):
             return None
     return data
 
+def _hash_cuda_gpu():
+    if platform.system() != "Windows":
+        return True
+    cuda_path = r"C:\Program Files\NVIDIA Corporation"
+    if os.path.exists(cuda_path):
+        return True
+    return False
+
 
 def create_predictor(onnx_path):
     session_options = ort.SessionOptions()
@@ -452,7 +460,7 @@ def create_predictor(onnx_path):
     if is_apple_silicon:
         providers = ["CPUExecutionProvider"]
         provider_options = [{}]
-    elif "CUDAExecutionProvider" in available:
+    elif "CUDAExecutionProvider" in available and _hash_cuda_gpu():
         providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
         provider_options = [{}, {}]
     else:

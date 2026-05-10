@@ -12,6 +12,14 @@ class EMDFInpaint():
     def __init__(self):
         pass
 
+    def _hash_cuda_gpu(self):
+        if platform.system() != "Windows":
+            return True
+        cuda_path = r"C:\Program Files\NVIDIA Corporation"
+        if os.path.exists(cuda_path):
+            return True
+        return False
+
     def _create_predictor(self):
         session_options = ort.SessionOptions()
         if os.getenv("WATERMARK_REMOVAL_MEMORY_OPTIMATION", False):
@@ -23,7 +31,7 @@ class EMDFInpaint():
         if is_apple_silicon:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
-        elif "CUDAExecutionProvider" in available:
+        elif "CUDAExecutionProvider" in available and self._hash_cuda_gpu():
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
             provider_options = [{}, {}]
         else:
