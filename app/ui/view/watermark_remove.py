@@ -22,6 +22,7 @@ from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
 from app.ui.widgets.watermark_manual_select_widget import WatermarkMaskTool
+from app.ui.widgets.custom_navigation import CustomNavigation
 
 from app.ui.common.event_bus import global_event_bus
 from app.controllers.task_manager import global_task_manager
@@ -430,7 +431,14 @@ class PreviewWidget(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(5)
 
+        # 添加导航栏
+        self.navigation = CustomNavigation(navigation_item_texts=[self.tr("结果对比预览"), self.tr("Mask对比预览")], parent=self)
+        main_layout.addWidget(self.navigation)
+        self.navigation.hide()
+
+        # 预览区域
         self.stack = QStackedLayout()
+        self.stack.setObjectName("CompareStackWidget")
         self.stack.setContentsMargins(0, 0, 0, 0)
 
         self.placeholder_widget = QLabel("请选择图片或视频文件进行预览", parent=self)
@@ -475,8 +483,10 @@ class PreviewWidget(QWidget):
         self.files_preview_info = {}
         self.media_type = "image"
         if not file_path:
+            self.navigation.hide()
             self.stack.setCurrentIndex(0)
             return
+        self.navigation.show()
         if os.path.isdir(file_path):
             tmp_file_path = os.path.join(file_path, os.listdir(file_path)[0])
         else:
