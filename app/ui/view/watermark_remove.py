@@ -23,6 +23,7 @@ from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
 from app.ui.widgets.watermark_manual_select_widget import WatermarkMaskTool
 from app.ui.widgets.custom_navigation import CustomNavigation
+from app.ui.widgets.watermark_detect_settings import WatermarkDetectSettings
 
 from app.ui.common.event_bus import global_event_bus
 from app.controllers.task_manager import global_task_manager
@@ -91,38 +92,41 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
         self.viewLayout.setContentsMargins(10, 10, 10, 10)
         self.viewLayout.addLayout(main_layout)
 
-        self.toggle_switch_btns: list[ToggleSwitch] = []
+        # self.toggle_switch_btns: list[ToggleSwitch] = []
 
-        ai_detect_btn= ToggleSwitch(on_color="#4FACFE")
-        ai_detect_btn.setActive(True)
-        self.toggle_switch_btns.append(ai_detect_btn)
-        ai_detect_btn.toggled.connect(lambda state, bt=ai_detect_btn: self._on_state_changed(changed_btn=bt, state=state, detect_type="ai_detect"))
-        ai_detect_card = CustomCardGroupWidget(
-            title=self.tr("AI 自动检测"), 
-            content=self.tr("使用 AI 算法自动识别水印"), 
-            parent=self,
-            text_layout_contents_margins=(12, 0, 0, 0),
-            label_v_space=2
-        )
-        ai_detect_card.setSeparatorVisible(True)
-        ai_detect_card.addWidget(ai_detect_btn)
-        main_layout.addWidget(ai_detect_card)
+        # ai_detect_btn= ToggleSwitch(on_color="#4FACFE")
+        # ai_detect_btn.setActive(True)
+        # self.toggle_switch_btns.append(ai_detect_btn)
+        # ai_detect_btn.toggled.connect(lambda state, bt=ai_detect_btn: self._on_state_changed(changed_btn=bt, state=state, detect_type="ai_detect"))
+        # ai_detect_card = CustomCardGroupWidget(
+        #     title=self.tr("AI 自动检测"), 
+        #     content=self.tr("使用 AI 算法自动识别水印"), 
+        #     parent=self,
+        #     text_layout_contents_margins=(12, 0, 0, 0),
+        #     label_v_space=2
+        # )
+        # ai_detect_card.setSeparatorVisible(True)
+        # ai_detect_card.addWidget(ai_detect_btn)
+        # main_layout.addWidget(ai_detect_card)
 
-        manual_detec_btn = ToggleSwitch(on_color="#4FACFE")
-        self.toggle_switch_btns.append(manual_detec_btn)
-        manual_detec_btn.toggled.connect(lambda state, bt=manual_detec_btn: self._on_state_changed(changed_btn=bt, state=state, detect_type="manual_detect"))
-        manual_detect_card = CustomCardGroupWidget(
-            title=self.tr("手动标注"), 
-            content=self.tr("在预览区手动框选水印"), 
-            parent=self,
-            text_layout_contents_margins=(12, 0, 0, 0),
-            label_v_space=2
-        )
-        manual_detect_card.setSeparatorVisible(True)
-        manual_detect_card.addWidget(manual_detec_btn)
-        bind_widget_to_param(self, "detect_type", watermark_remove_params, "watermark_detect_type", transform=None)
-        self.detect_type.emit("ai_detect")
-        main_layout.addWidget(manual_detect_card)
+        # manual_detec_btn = ToggleSwitch(on_color="#4FACFE")
+        # self.toggle_switch_btns.append(manual_detec_btn)
+        # manual_detec_btn.toggled.connect(lambda state, bt=manual_detec_btn: self._on_state_changed(changed_btn=bt, state=state, detect_type="manual_detect"))
+        # manual_detect_card = CustomCardGroupWidget(
+        #     title=self.tr("手动标注"), 
+        #     content=self.tr("在预览区手动框选水印"), 
+        #     parent=self,
+        #     text_layout_contents_margins=(12, 0, 0, 0),
+        #     label_v_space=2
+        # )
+        # manual_detect_card.setSeparatorVisible(True)
+        # manual_detect_card.addWidget(manual_detec_btn)
+        # bind_widget_to_param(self, "detect_type", watermark_remove_params, "watermark_detect_type", transform=None)
+        # self.detect_type.emit("ai_detect")
+        # main_layout.addWidget(manual_detect_card)
+
+        watermark_detect_settings = WatermarkDetectSettings(self)
+        main_layout.addWidget(watermark_detect_settings)
 
     def _on_state_changed(self, changed_btn, state, detect_type):
         if not state:
@@ -397,8 +401,8 @@ class ControlPanelWidget(ScrollArea):
         watermarkDetectionTypeCard = WatermarkDetectionTypeCard(self)
         main_layout.addWidget(watermarkDetectionTypeCard)
 
-        watermarkAIDetectionSettings = WatermarkAIDetectionSettings(self)
-        main_layout.addWidget(watermarkAIDetectionSettings)
+        # watermarkAIDetectionSettings = WatermarkAIDetectionSettings(self)
+        # main_layout.addWidget(watermarkAIDetectionSettings)
 
         watermarkMaskDilate = WatermarkMaskDilate(self)
         main_layout.addWidget(watermarkMaskDilate)
@@ -417,9 +421,9 @@ class ControlPanelWidget(ScrollArea):
 
         main_layout.addStretch(1)
 
-        watermarkDetectionTypeCard.detect_type.connect(
-            lambda t: watermarkAIDetectionSettings.set_visible(t)
-        )
+        # watermarkDetectionTypeCard.detect_type.connect(
+        #     lambda t: watermarkAIDetectionSettings.set_visible(t)
+        # )
 
 
 class PreviewWidget(QWidget):
