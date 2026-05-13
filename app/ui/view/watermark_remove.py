@@ -426,6 +426,7 @@ class PreviewWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("PreviewWidget")
+        self.preview_mode = "ResultCompared"
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -433,6 +434,7 @@ class PreviewWidget(QWidget):
 
         # 添加导航栏
         self.navigation = CustomNavigation(navigation_item_texts=[self.tr("结果对比预览"), self.tr("Mask对比预览")], parent=self)
+        self.navigation.currentTextChanged.connect(self._on_navigation_changed)
         main_layout.addWidget(self.navigation)
         self.navigation.hide()
 
@@ -473,6 +475,7 @@ class PreviewWidget(QWidget):
 
         global_event_bus.watermarkRemove_InputFileUpdate.connect(self.update_init_preview)
         global_event_bus.watermarkRemove_TaskFinished.connect(self.update_preview)
+        global_event_bus.watermarkRemove_TaskProgress.connect(self.update_process)
         global_event_bus.watermarkRemove_PreviewFile.connect(self._on_preview_file)
         global_event_bus.watermarkRemove_ImageNavigationInit.connect(lambda: self.image_navigation_widget.clear_images())
 
@@ -500,17 +503,48 @@ class PreviewWidget(QWidget):
             self.stack.setCurrentIndex(2)
             self.media_type = "video"
         else:
+            self.navigation.hide()
             self.placeholder_widget.setText(f"不支持的文件类型: {ext}")
             self.stack.setCurrentIndex(0)
 
     def update_preview(self, input_path, output_path):
-        self.files_preview_info[input_path] = output_path
+        preview_mode = "ResultCompared"
+        if preview_mode not in self.files_preview_info:
+            self.files_preview_info[preview_mode] = {}
+        self.files_preview_info[preview_mode][input_path] = output_path
+        current_file_path = self.image_navigation_widget.get_current_image()
+        if current_file_path:
+            self._on_preview_file(current_file_path)
+
+    def update_process(self, input_path, value, mask_path):
+        if value not in self.files_preview_info:
+            self.files_preview_info[value] = {}
+        self.files_preview_info[value][input_path] = mask_path
         self.image_navigation_widget.load_images([input_path], self.media_type)
 
-    def _on_preview_file(self, path):
-        out = self.files_preview_info.get(path)
-        widget = self.stack.currentWidget()
+    def _on_navigation_changed(self, text):
+        if text == self.tr("结果对比预览"):
+            self.preview_mode = "ResultCompared"
+        elif text == self.tr("Mask对比预览"):
+            self.preview_mode = "MaskCompleted"
+        else:
+            self.preview_mode = "ResultCompared"
+        current_file_path = self.image_navigation_widget.get_current_image()
+        if current_file_path:
+            self._on_preview_file(current_file_path)
 
+    def _on_preview_file(self, path):
+        out = self.files_preview_info.get(self.preview_mode, {}).get(path, None)
+        if out is None:
+            if self.media_type == "image":
+                self.image_viewer.init_scene()
+                self.stack.setCurrentIndex(1)
+            else:
+                self.video_viewer.init_scene()
+                self.stack.setCurrentIndex(2)
+            return
+
+        widget = self.stack.currentWidget()
         if self.media_type=="image" and out and widget and hasattr(widget, "set_images"):
             widget.set_images(img1=path, img2=out)
         elif self.media_type=="video" and out and widget and hasattr(widget, "setVideos"):
@@ -611,6 +645,9 @@ class HeaderWidget(QWidget):
             future.cancelled.connect(
                 lambda path=input_path: watermark_remove_task_status_model.report_failure(path, "任务被取消")
             )
+            future.progress.connect(
+                lambda value, msg, path=input_path: self._task_progress(path, value, msg)
+            )
 
         TeachingTip.create(
             target=self.process_btn,
@@ -622,6 +659,9 @@ class HeaderWidget(QWidget):
             duration=2000,
             parent=self
         )
+
+    def _task_progress(self, input_path, value, msg):
+        global_event_bus.watermarkRemove_TaskProgress.emit(input_path, value, msg)
 
     def _task_finished(self, input_path, output_path):
         watermark_remove_task_status_model.report_success()

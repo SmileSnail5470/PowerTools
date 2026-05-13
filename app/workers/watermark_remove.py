@@ -47,6 +47,7 @@ class WatermarkRemoveWork(BaseWorker):
                 "refine_type": kwargs["model_name"],
                 "watermark_type": "all" if "watermark_content" in kwargs and kwargs["watermark_content"] == "通用水印" else "text",
                 "dilate_num": int(kwargs["mask_dilate"]),
+                "process_cb": progress_cb,
             }
             self.watermark_remove_image_instance.run(**params)
         else:
@@ -67,7 +68,8 @@ class WatermarkRemoveWork(BaseWorker):
                 "use_cache_mask": True if "watermark_format" in kwargs and kwargs["watermark_format"] == "静态水印" else False,
                 "watermark_type": "all" if "watermark_content" in kwargs and kwargs["watermark_content"] == "通用水印" else "text",
                 "dilate_num": int(kwargs["mask_dilate"]),
-                "ffmpeg_path": os.getenv("POWERTOOLS_FFMPEG_BIN")
+                "ffmpeg_path": os.getenv("POWERTOOLS_FFMPEG_BIN"),
+                "process_cb": progress_cb,
             }
             self.watermark_remove_video_instance.process_video(**params)
         return output_file

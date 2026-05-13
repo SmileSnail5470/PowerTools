@@ -14,7 +14,7 @@ class TaskStatus(Enum):
 class TaskFuture(QObject):
     """任务Future对象，用于跟踪任务状态和结果"""
     
-    progress = Signal(int)
+    progress = Signal(str, str)
     finished = Signal(object)
     failed = Signal(Exception)
     cancelled = Signal()
@@ -89,13 +89,14 @@ class TaskFuture(QObject):
         
         self.state_changed.emit(state)
 
-    def set_progress(self, value: int):
+    def set_progress(self, value: str, msg: str = ""):
         """更新任务进度
         
         Args:
-            value: 进度值（0-100）
+            value: 进度值
+            msg: 进度消息
         """
-        self.progress.emit(value)
+        self.progress.emit(value, msg)
 
     def set_result(self, result: Any):
         """设置任务结果（内部使用）"""

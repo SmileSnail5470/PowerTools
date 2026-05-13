@@ -1,3 +1,5 @@
+import cv2
+import numpy as np
 import app.utils.ffmpeg as ffmpeg
 import shutil
 import tempfile
@@ -10,6 +12,23 @@ from app.algorithms.visible_watermark_removal.watermark_removal_image import Ima
 class VideoWatermarkRemover:
     def __init__(self):
         pass
+
+    def _save_mask_visualization(
+            self,
+            img_path,
+            mask: np.ndarray,
+            file_path: str,
+        ):
+        img = cv2.imread(img_path)
+        overlay = img.copy()
+        color = (255, 0, 0)
+        b, g, r_ = color
+        mask = mask > 0
+        overlay[mask] = (
+            overlay[mask] * 0.55
+            + np.array([b, g, r_]) * 0.45
+        ).astype(np.uint8)
+        cv2.imwrite(file_path, overlay)
 
     def _prepare_masks(
             self, 
@@ -173,6 +192,26 @@ class VideoWatermarkRemover:
                 yolo_detection_onnx_path=yolo_detection_onnx_path,
                 **kwargs
             )
+
+            process_cb = kwargs.get("process_cb", None)
+            if process_cb is not None:
+                tmp_visualzation_path = os.path.join(str(tmp_mask_dir), "visualization")
+                for frame_file, tmp_mask_path in frame_mask_map.items():
+                    os.mkdir(tmp_visualzation_path, exist_ok=True)
+                    self._save_mask_visualization(
+                        img_path=str(frame_file),
+                        mask=cv2.imread(tmp_mask_path, cv2.IMREAD_GRAYSCALE),
+                        file_path=os.path.join(tmp_visualzation_path, os.path.basename(tmp_mask_path))
+                    )
+                output_video_tmp_path = "{0}_mask_visualization.mp4".format(output_video_path.rsplit(".", 1)[0])
+                self._merge_processed_frames(
+                    processed_frames_dir=tmp_visualzation_path,
+                    has_audio=has_audio, 
+                    fps=fps,
+                    input_video_path=input_video_path,
+                    output_video_path=output_video_tmp_path
+                )
+                process_cb("MaskCompleted", output_video_tmp_path)
             
             for _, frame_file in enumerate(frame_files):
                 output_frame_path = processed_frames_dir / frame_file.name

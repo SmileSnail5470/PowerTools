@@ -1,3 +1,4 @@
+from typing import List, Tuple
 import cv2
 import numpy as np
 from app.algorithms.visible_watermark_removal.modules.sr_segment import SLBRSegment
@@ -229,6 +230,23 @@ class ImageWatermarkRemove():
     def __init__(self):
         pass
 
+    def _save_mask_visualization(
+            self,
+            img_path,
+            mask: np.ndarray,
+            file_path: str,
+        ):
+        img = cv2.imread(img_path)
+        overlay = img.copy()
+        color = (255, 0, 0)
+        b, g, r_ = color
+        mask = mask > 0
+        overlay[mask] = (
+            overlay[mask] * 0.55
+            + np.array([b, g, r_]) * 0.45
+        ).astype(np.uint8)
+        cv2.imwrite(file_path, overlay)
+
     def _read_mask(self, mask_path):
         mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
         if mask.ndim == 3 and mask.shape[2] == 1:
@@ -269,6 +287,15 @@ class ImageWatermarkRemove():
         else:
             # 读取人工标注的水印掩码
             mask = self._read_mask(mask_path=mask_path)
+        process_cb = kwargs.get("process_cb", None)
+        if process_cb is not None:
+            mask_tmp_path = "{0}_mask.png".format(output_path.rsplit(".", 1)[0])
+            self._save_mask_visualization(
+                img_path=image_path,
+                mask=mask,
+                file_path=mask_tmp_path,
+            )
+            process_cb("MaskCompleted", mask_tmp_path)
 
         image_inpainting = WatermarkInpaint(
             mask=mask,
