@@ -4,10 +4,14 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
 from PySide6.QtCore import Qt, QPropertyAnimation, QPoint, QEasingCurve, QTimer, Signal
 from PySide6.QtGui import QColor, QFont
 from app.ui.library.qfluentwidgets import setFont
+from app.ui.common.utils import get_file_type
 from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
+from app.ui.widgets.watermark_manual_select_widget import WatermarkMaskTool
 
 
 class OptionCard(QFrame):
+    clicked = Signal()
+
     def __init__(self, title, desc, parent=None):
         super().__init__(parent)
         self.setCursor(Qt.PointingHandCursor)
@@ -41,20 +45,26 @@ class OptionCard(QFrame):
                 child.update_style()
         self.selected = True
         self.update_style()
+        self.clicked.emit()
 
 class WatermarkDetectSettings(QWidget):
     watermarkDetectType = Signal(str)         # AI交互/AI自动/人工检测
+    watermarkFormat = Signal(str)             # 静态水印/动态水印
+    manualWatermarktMaskPath = Signal(str)    # 手动标注 Mask 路径
     # AI 交互检测信号
     watermarkAIInteractiveType = Signal(str)  # 语义检测/空间范围检测
     watermarkDetectPrompt = Signal(str)       # 语义检测提示词
-    watermarkFormat = Signal(str)             # 静态水印/动态水印
     watermarkBoxes = Signal(list)             # 水印空间范围 boxes 坐标
+    # AI 自动检测
+    watermarkContent = Signal(str)            # 通用水印/文字水印
 
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
 
         self.current_tab_index = 0
+        self.file_path = None
+
         self.setObjectName("WatermarkDetectSettings")
         self.init_ui()
         self.apply_styles()
@@ -111,10 +121,13 @@ class WatermarkDetectSettings(QWidget):
         grid0_l = QHBoxLayout(grid0)
         grid0_l.setContentsMargins(0,0,0,0)
         c1 = OptionCard(self.tr("通用水印"), self.tr("Logo、图案、复合元素"))
+        c1.clicked.connect(lambda: self.watermarkContent.emit("general_watermark"))
         c1.selected = True
         c1.update_style()
         grid0_l.addWidget(c1)
-        grid0_l.addWidget(OptionCard(self.tr("文字水印"), self.tr("纯文本、日期、字幕")))
+        c1_1 = OptionCard(self.tr("文字水印"), self.tr("纯文本、日期、字幕"))
+        c1_1.clicked.connect(lambda: self.watermarkContent.emit("text_watermark"))
+        grid0_l.addWidget(c1_1)
         p0_l.addWidget(grid0)
         p0_l.addSpacing(24)
         
@@ -123,10 +136,13 @@ class WatermarkDetectSettings(QWidget):
         grid1_l = QHBoxLayout(grid1)
         grid1_l.setContentsMargins(0,0,0,0)
         c2 = OptionCard(self.tr("静态水印"), self.tr("固定位置不移动"))
+        c2.clicked.connect(lambda: self.watermarkFormat.emit("static_watermark"))
         c2.selected = True
         c2.update_style()
         grid1_l.addWidget(c2)
-        grid1_l.addWidget(OptionCard(self.tr("动态水印"), self.tr("移动、缩放、淡入淡出")))
+        c2_1 = OptionCard(self.tr("动态水印"), self.tr("移动、缩放、淡入淡出"))
+        c2_1.clicked.connect(lambda: self.watermarkFormat.emit("dynamic_watermark"))
+        grid1_l.addWidget(c2_1)
         p0_l.addWidget(grid1)
 
         # AI 交互 ---
@@ -138,7 +154,9 @@ class WatermarkDetectSettings(QWidget):
         ms_l = QHBoxLayout(self.mode_switch)
         ms_l.setContentsMargins(4,4,4,4)
         self.btn_sem = QPushButton(self.tr("语义识别"))
+        self.btn_sem.clicked.connect(lambda _: self.watermarkAIInteractiveType.emit("semantic_detect"))
         self.btn_spa = QPushButton(self.tr("空间范围识别"))
+        self.btn_spa.clicked.connect(lambda _: self.watermarkAIInteractiveType.emit("space_detect"))
         for b in [self.btn_sem, self.btn_spa]:
             b.setObjectName("modeBtn")
             b.setCheckable(True)
@@ -155,6 +173,7 @@ class WatermarkDetectSettings(QWidget):
         self.input_box.setObjectName("inputBox")
         setFont(self.input_box, 13)
         self.input_box.setPlaceholderText(self.tr("文本描述（请输入英文）..."))
+        self.input_box.textChanged.emit(lambda text: self.watermarkDetectPrompt.emit(self.input_box.text()))
         sem_l.addWidget(self.input_box)
         chip_l = QHBoxLayout()
         chip_l.setSpacing(8)
@@ -176,6 +195,7 @@ class WatermarkDetectSettings(QWidget):
         spa_l = QVBoxLayout(spa_w)
         spa_l.setContentsMargins(0,10,0,10)
         spa_l.addWidget(self.create_label_group(self.tr("精准框选"), self.tr("在图片区手动框选位置")))
+        spa_l.addStretch()
         sec_btn = QPushButton(self.tr("🎯 开始水印框选"))
         sec_btn.setObjectName("secondaryBtn")
         sec_btn.clicked.connect(lambda _: self._watermark_area_selector())
@@ -189,10 +209,13 @@ class WatermarkDetectSettings(QWidget):
         grid2_l = QHBoxLayout(grid2)
         grid2_l.setContentsMargins(0,0,0,0)
         c3 = OptionCard(self.tr("静态水印"), self.tr("固定位置不移动"))
+        c3.clicked.connect(lambda: self.watermarkFormat.emit("static_watermark"))
         c3.selected = True
         c3.update_style()
         grid2_l.addWidget(c3)
-        grid2_l.addWidget(OptionCard(self.tr("动态水印"), self.tr("移动、缩放、淡入淡出")))
+        c3_1 = OptionCard(self.tr("动态水印"), self.tr("移动、缩放、淡入淡出"))
+        c3_1.clicked.connect(lambda: self.watermarkFormat.emit("dynamic_watermark"))
+        grid2_l.addWidget(c3_1)
         p1_l.addWidget(grid2)
 
         # 手工标注 ---
@@ -216,6 +239,7 @@ class WatermarkDetectSettings(QWidget):
         
         self.primary_btn = QPushButton(self.tr("开始标注水印"))
         self.primary_btn.setObjectName("primaryBtn")
+        self.primary_btn.clicked.connect(lambda _: self._process_manual_detect())
         setFont(self.primary_btn, 13, QFont.DemiBold)
         p2_l.addWidget(self.primary_btn)
         
@@ -359,10 +383,24 @@ class WatermarkDetectSettings(QWidget):
             #primaryBtn:hover { background: #1D4ED8; }
         """)
 
+    def set_file_path(self, file_path):
+        self.file_path = file_path
+
     def _watermark_area_selector(self):
-        area_selector = AreaSelectorDialog(parent=self)
+        if not self.file_path:
+            return
+        area_selector = AreaSelectorDialog(file_path=self.file_path, parent=self)
         area_selector.exec()
         boxes = []
         for item in area_selector.get_results():
             boxes.append((item["x"], item["y"], item["x"] + item["w"], item["y"] + item["h"]))
         self.watermarkBoxes.emit(boxes)
+
+    def _process_manual_detect(self):
+        if not self.file_path:
+            return
+        is_video = True if get_file_type(self.file_path)=="video" else False
+        watermarkMaskTool = WatermarkMaskTool(file_path=self.file_path, is_video=is_video, parent=self.window())
+        watermarkMaskTool.exec()
+        mask_path = watermarkMaskTool.get_mask_path()
+        self.manualWatermarktMaskPath.emit(mask_path)

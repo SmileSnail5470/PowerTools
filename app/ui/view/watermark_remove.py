@@ -15,8 +15,7 @@ from app.ui.library.qfluentwidgets import(
 from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.file_selector_widget import FileSelectorWidget
 from app.ui.widgets.directory_selector_widget import DirectorySelectorWidget
-from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget, StyleCard, CardSeparator
-from app.ui.widgets.toggle_switch_widget import ToggleSwitch
+from app.ui.widgets.custom_card_group_widget import StyleCard, CardSeparator
 from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget
 from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
@@ -92,107 +91,26 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
         self.viewLayout.setContentsMargins(10, 10, 10, 10)
         self.viewLayout.addLayout(main_layout)
 
-        # self.toggle_switch_btns: list[ToggleSwitch] = []
+        watermark_detect_settings = WatermarkDetectSettings(parent=self)
+        bind_widget_to_param(watermark_detect_settings, "watermarkDetectType", watermark_remove_params, "watermark_detect_type", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkFormat", watermark_remove_params, "watermark_format", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "manualWatermarktMaskPath", watermark_remove_params, "manual_watermark_mask_path", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkAIInteractiveType", watermark_remove_params, "watermark_ai_interactive_type", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkDetectPrompt", watermark_remove_params, "watermark_detect_prompt", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkBoxes", watermark_remove_params, "watermark_boxes", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkContent", watermark_remove_params, "watermark_content", transform=None)
+        # 设置参数默认值
+        watermark_detect_settings.watermarkDetectType.emit("ai_interactive_detect")
+        watermark_detect_settings.watermarkFormat.emit("static_watermark")
+        watermark_detect_settings.manualWatermarktMaskPath.emit("")
+        watermark_detect_settings.watermarkAIInteractiveType.emit("semantic_detect")
+        watermark_detect_settings.watermarkDetectPrompt.emit("")
+        watermark_detect_settings.watermarkBoxes.emit([])
+        watermark_detect_settings.watermarkContent.emit("general_watermark")
 
-        # ai_detect_btn= ToggleSwitch(on_color="#4FACFE")
-        # ai_detect_btn.setActive(True)
-        # self.toggle_switch_btns.append(ai_detect_btn)
-        # ai_detect_btn.toggled.connect(lambda state, bt=ai_detect_btn: self._on_state_changed(changed_btn=bt, state=state, detect_type="ai_detect"))
-        # ai_detect_card = CustomCardGroupWidget(
-        #     title=self.tr("AI 自动检测"), 
-        #     content=self.tr("使用 AI 算法自动识别水印"), 
-        #     parent=self,
-        #     text_layout_contents_margins=(12, 0, 0, 0),
-        #     label_v_space=2
-        # )
-        # ai_detect_card.setSeparatorVisible(True)
-        # ai_detect_card.addWidget(ai_detect_btn)
-        # main_layout.addWidget(ai_detect_card)
+        global_event_bus.watermarkRemove_InputFileUpdate.connect(lambda file_path: watermark_detect_settings.set_file_path(file_path=file_path))
 
-        # manual_detec_btn = ToggleSwitch(on_color="#4FACFE")
-        # self.toggle_switch_btns.append(manual_detec_btn)
-        # manual_detec_btn.toggled.connect(lambda state, bt=manual_detec_btn: self._on_state_changed(changed_btn=bt, state=state, detect_type="manual_detect"))
-        # manual_detect_card = CustomCardGroupWidget(
-        #     title=self.tr("手动标注"), 
-        #     content=self.tr("在预览区手动框选水印"), 
-        #     parent=self,
-        #     text_layout_contents_margins=(12, 0, 0, 0),
-        #     label_v_space=2
-        # )
-        # manual_detect_card.setSeparatorVisible(True)
-        # manual_detect_card.addWidget(manual_detec_btn)
-        # bind_widget_to_param(self, "detect_type", watermark_remove_params, "watermark_detect_type", transform=None)
-        # self.detect_type.emit("ai_detect")
-        # main_layout.addWidget(manual_detect_card)
-
-        watermark_detect_settings = WatermarkDetectSettings(self)
         main_layout.addWidget(watermark_detect_settings)
-
-    def _on_state_changed(self, changed_btn, state, detect_type):
-        if not state:
-            if len(self.toggle_switch_btns) == 2:
-                for btn in self.toggle_switch_btns:
-                    if not btn.isActive() and btn is not changed_btn:
-                        self.detect_type.emit(detect_type)
-                        btn.setActive(True)
-            return
-        for btn in self.toggle_switch_btns:
-            if btn is changed_btn:
-                self.detect_type.emit(detect_type)
-                continue
-            btn.setActive(False)
-
-
-class WatermarkAIDetectionSettings(HeaderCardWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setTitle(self.tr("⚙️ AI检测设置"))
-        self.setBorderRadius(8)
-
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(10)
-
-        self.viewLayout.setContentsMargins(10, 10, 10, 10)
-        self.viewLayout.addLayout(main_layout)
-
-        watermark_content_combox = ComboBox()
-        setFont(watermark_content_combox, 12)
-        watermark_content_combox.addItems(["通用水印", "文字水印"])
-        watermark_content_card = CustomCardGroupWidget(
-            title=self.tr("水印类型"), 
-            content=self.tr("文字：要求图像无文字 \n通用：通用场景"), 
-            parent=self,
-            text_layout_contents_margins=(12, 0, 0, 0),
-            label_v_space=2
-        )
-        watermark_content_card.addWidget(watermark_content_combox, stretch=0)
-        watermark_content_card.setSeparatorVisible(True)
-        bind_widget_to_param(watermark_content_combox, "currentTextChanged", watermark_remove_params, "watermark_content", transform=None)
-        watermark_content_combox.currentTextChanged.emit("通用水印")
-        main_layout.addWidget(watermark_content_card)
-
-        watermark_format_combox = ComboBox()
-        setFont(watermark_format_combox, 12)
-        watermark_format_combox.addItems(["静态水印", "动态水印"])
-        watermark_format_card = CustomCardGroupWidget(
-            title=self.tr("水印形式"), 
-            content=self.tr("只针对视频有效"), 
-            parent=self,
-            text_layout_contents_margins=(12, 0, 0, 0),
-            label_v_space=2
-        )
-        watermark_format_card.addWidget(watermark_format_combox, stretch=0)
-        watermark_format_card.setSeparatorVisible(True)
-        bind_widget_to_param(watermark_format_combox, "currentTextChanged", watermark_remove_params, "watermark_format", transform=None)
-        watermark_format_combox.currentTextChanged.emit("静态水印")
-        main_layout.addWidget(watermark_format_card)
-
-    def set_visible(self, detect_type: str):
-        if detect_type == "ai_detect":
-            self.show()
-        else:
-            self.hide()
 
 
 class WatermarkMaskDilate(HeaderCardWidget):
@@ -401,9 +319,6 @@ class ControlPanelWidget(ScrollArea):
         watermarkDetectionTypeCard = WatermarkDetectionTypeCard(self)
         main_layout.addWidget(watermarkDetectionTypeCard)
 
-        # watermarkAIDetectionSettings = WatermarkAIDetectionSettings(self)
-        # main_layout.addWidget(watermarkAIDetectionSettings)
-
         watermarkMaskDilate = WatermarkMaskDilate(self)
         main_layout.addWidget(watermarkMaskDilate)
 
@@ -420,10 +335,6 @@ class ControlPanelWidget(ScrollArea):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         main_layout.addStretch(1)
-
-        # watermarkDetectionTypeCard.detect_type.connect(
-        #     lambda t: watermarkAIDetectionSettings.set_visible(t)
-        # )
 
 
 class PreviewWidget(QWidget):

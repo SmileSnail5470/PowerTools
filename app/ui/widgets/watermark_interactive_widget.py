@@ -1,13 +1,15 @@
 import time
 from PySide6.QtCore import Qt, QRectF, Signal, QObject, QEvent
-from PySide6.QtGui import QPixmap, QColor, QPen, QBrush, QFont, QPainter
+from PySide6.QtGui import QPixmap, QColor, QPen, QBrush, QFont, QPainter, QImage
 from PySide6.QtWidgets import (
-    QDialog, QWidget, QVBoxLayout, QHBoxLayout,
+    QDialog, QWidget, QVBoxLayout, QHBoxLayout, QSlider,
     QLabel, QPushButton, QScrollArea, QFrame, QGraphicsView,
     QGraphicsScene, QGraphicsRectItem, QGraphicsPixmapItem, QGraphicsDropShadowEffect
 )
+import cv2
 from app.ui.widgets.image_preview_widget import ScrollBar
 from app.ui.library.qfluentwidgets import setFont
+from app.ui.common.utils import get_file_type
 
 
 COLOR_ACCENT = "#0071e3"
@@ -71,40 +73,83 @@ class CoordItem(QFrame):
 
 
 class AreaSelectorDialog(QDialog):
-    def __init__(self, image_path=None, parent=None):
+    def __init__(self, file_path=None, parent=None):
         super().__init__(parent=parent)
         self.setWindowTitle(self.tr("水印框选器"))
         self.setMinimumSize(900, 800)
         self.setStyleSheet(f"background-color: {COLOR_BG};")
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.setWindowFlags(
+            Qt.WindowType.Dialog | 
+            Qt.WindowType.WindowTitleHint | 
+            Qt.WindowType.WindowSystemMenuHint | 
+            Qt.WindowType.WindowCloseButtonHint
+        )
         
         self.saved_boxes = []
         self.is_drawing = False
         self.active_rect_item = None
 
+        self.cap = None
+        self.total_frames = 0
+        self.fps = 30
         self.original_pixmap = QPixmap()
         self.scale_ratio = 1.0  # 原始尺寸 / 视图尺寸
 
         self.setup_ui()
-        if image_path:
-            self.load_image(image_path)
+        if file_path:
+            self.load_file(file_path)
 
-    def load_image(self, path):
+    def load_file(self, path):
         if not path:
             return
-        self.original_pixmap = QPixmap(path)
-        if self.original_pixmap.isNull():
-            return
+        media_type = get_file_type(path)
+        if media_type == "image":
+            self.slider.hide()
+            self.original_pixmap = QPixmap(path)
+            if self.original_pixmap.isNull():
+                return
 
-        view_w, view_h = 800, 600
-        self.scale_ratio = self.original_pixmap.width() / view_w
-        scaled_pixmap = self.original_pixmap.scaled(
-            view_w, view_h, 
-            Qt.AspectRatioMode.KeepAspectRatio, 
-            Qt.TransformationMode.SmoothTransformation
-        )
-        self.img_item.setPixmap(scaled_pixmap)
-        self.scene.setSceneRect(scaled_pixmap.rect())
+            view_w, view_h = 800, 600
+            self.scale_ratio = self.original_pixmap.width() / view_w
+            scaled_pixmap = self.original_pixmap.scaled(
+                view_w, view_h, 
+                Qt.AspectRatioMode.KeepAspectRatio, 
+                Qt.TransformationMode.SmoothTransformation
+            )
+            self.img_item.setPixmap(scaled_pixmap)
+            self.scene.setSceneRect(scaled_pixmap.rect())
+        else:
+            self.slider.show()
+            self._load_video(path=path)
+
+    def _load_video(self, path):
+        self.cap = cv2.VideoCapture(path)
+        if not self.cap.isOpened(): 
+            return
+        self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+        self.slider.setMaximum(self.total_frames - 1)
+        orig_w = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+        view_w = 800
+        self.scale_ratio = orig_w / view_w
+        self._update_frame(0)
+
+    def _update_frame(self, frame_idx):
+        if not self.cap: 
+            return
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        success, frame = self.cap.read()
+        if success:
+            rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, ch = rgb_image.shape
+            qimg = QImage(rgb_image.data, w, h, ch * w, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(qimg).scaled(
+                800, 600, 
+                Qt.AspectRatioMode.KeepAspectRatio, 
+                Qt.TransformationMode.SmoothTransformation
+            )
+            self.img_item.setPixmap(pixmap)
+            self.scene.setSceneRect(pixmap.rect())
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -138,6 +183,31 @@ class AreaSelectorDialog(QDialog):
         self.scene.setSceneRect(0, 0, 800, 600)
         self.view.setFixedSize(800, 600)
         container_layout.addWidget(self.view)
+
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setMinimum(0)
+        self.slider.setFixedHeight(24) 
+        self.slider.setStyleSheet(f"""
+            QSlider {{
+                background: transparent;
+            }}
+            QSlider::groove:horizontal {{
+                height: 6px;
+                background: #e0e0e0;
+                border-radius: 3px;
+            }}
+            QSlider::handle:horizontal {{
+                background: {COLOR_ACCENT};
+                width: 16px;
+                height: 16px;
+                margin: -5px 0;
+                border-radius: 8px;
+            }}
+        """)
+        self.slider.valueChanged.connect(self._update_frame)
+        self.slider.hide()
+        container_layout.addWidget(self.slider)
+
         main_layout.addWidget(canvas_container, 0, Qt.AlignmentFlag.AlignHCenter)
 
         # 信息面板
