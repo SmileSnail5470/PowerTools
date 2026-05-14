@@ -1,8 +1,10 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, 
                              QLabel, QPushButton, QLineEdit, QStackedWidget, 
                              QFrame, QGraphicsDropShadowEffect)
-from PySide6.QtCore import Qt, QPropertyAnimation, QPoint, QEasingCurve, QTimer
-from PySide6.QtGui import QColor
+from PySide6.QtCore import Qt, QPropertyAnimation, QPoint, QEasingCurve, QTimer, Signal
+from PySide6.QtGui import QColor, QFont
+from app.ui.library.qfluentwidgets import setFont
+from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
 
 
 class OptionCard(QFrame):
@@ -14,8 +16,10 @@ class OptionCard(QFrame):
         layout = QVBoxLayout(self)
         self.title_label = QLabel(title)
         self.title_label.setObjectName("optTitle")
+        setFont(self.title_label, 13, QFont.DemiBold)
         self.desc_label = QLabel(desc)
         self.desc_label.setObjectName("optDesc")
+        setFont(self.desc_label, 11)
         
         layout.addWidget(self.title_label)
         if desc:
@@ -39,6 +43,14 @@ class OptionCard(QFrame):
         self.update_style()
 
 class WatermarkDetectSettings(QWidget):
+    watermarkDetectType = Signal(str)         # AI交互/AI自动/人工检测
+    # AI 交互检测信号
+    watermarkAIInteractiveType = Signal(str)  # 语义检测/空间范围检测
+    watermarkDetectPrompt = Signal(str)       # 语义检测提示词
+    watermarkFormat = Signal(str)             # 静态水印/动态水印
+    watermarkBoxes = Signal(list)             # 水印空间范围 boxes 坐标
+
+
     def __init__(self, parent=None):
         super().__init__(parent=parent)
 
@@ -73,12 +85,15 @@ class WatermarkDetectSettings(QWidget):
         self.slider.setAttribute(Qt.WA_TransparentForMouseEvents) 
         
         self.tab_btns = []
-        for i, text in enumerate([self.tr("AI 交互"), self.tr("AI 全自动"), self.tr("手工标注")]):
+        for i, items in enumerate([(self.tr("AI 交互"), "ai_interactive_detect"), (self.tr("AI 全自动"), "ai_auto_detect"), (self.tr("手工标注"), "manual_detect")]):
+            text, signal_value = items
             btn = QPushButton(text)
             btn.setObjectName("tabItem")
             btn.setCheckable(True)
             btn.setCursor(Qt.PointingHandCursor)
+            setFont(btn, 13, QFont.DemiBold)
             btn.clicked.connect(lambda _, idx=i: self.switch_tab(idx))
+            btn.clicked.connect(lambda _, signal_value=signal_value: self.watermarkDetectType.emit(signal_value))
             self.tabs_layout.addWidget(btn)
             self.tab_btns.append(btn)
 
@@ -113,7 +128,6 @@ class WatermarkDetectSettings(QWidget):
         grid1_l.addWidget(c2)
         grid1_l.addWidget(OptionCard(self.tr("动态水印"), self.tr("移动、缩放、淡入淡出")))
         p0_l.addWidget(grid1)
-        p0_l.addStretch()
 
         # AI 交互 ---
         p1 = QWidget()
@@ -139,6 +153,7 @@ class WatermarkDetectSettings(QWidget):
         sem_l.addWidget(self.create_label_group(self.tr("文本语义描述"), self.tr("输入想识别的特定元素描述")))
         self.input_box = QLineEdit()
         self.input_box.setObjectName("inputBox")
+        setFont(self.input_box, 13)
         self.input_box.setPlaceholderText(self.tr("文本描述（请输入英文）..."))
         sem_l.addWidget(self.input_box)
         chip_l = QHBoxLayout()
@@ -151,9 +166,9 @@ class WatermarkDetectSettings(QWidget):
         for t in [self.tr("水印"), self.tr("字幕"), self.tr("水印和字幕")]:
             cp = QPushButton(t)
             cp.setObjectName("chip")
+            setFont(cp, 12)
             cp.clicked.connect(lambda _, text=t: self.input_box.setText(text_map[text]))
             chip_l.addWidget(cp)
-        chip_l.addStretch()
         sem_l.addLayout(chip_l)
         self.sub_stack.addWidget(sem_w)
         
@@ -163,7 +178,9 @@ class WatermarkDetectSettings(QWidget):
         spa_l.addWidget(self.create_label_group(self.tr("精准框选"), self.tr("在图片区手动框选位置")))
         sec_btn = QPushButton(self.tr("🎯 开始水印框选"))
         sec_btn.setObjectName("secondaryBtn")
-        spa_l.addWidget(sec_btn); self.sub_stack.addWidget(spa_w)
+        sec_btn.clicked.connect(lambda _: self._watermark_area_selector())
+        spa_l.addWidget(sec_btn)
+        self.sub_stack.addWidget(spa_w)
         
         p1_l.addWidget(self.sub_stack)
         p1_l.addSpacing(20)
@@ -173,10 +190,10 @@ class WatermarkDetectSettings(QWidget):
         grid2_l.setContentsMargins(0,0,0,0)
         c3 = OptionCard(self.tr("静态水印"), self.tr("固定位置不移动"))
         c3.selected = True
+        c3.update_style()
         grid2_l.addWidget(c3)
         grid2_l.addWidget(OptionCard(self.tr("动态水印"), self.tr("移动、缩放、淡入淡出")))
         p1_l.addWidget(grid2)
-        p1_l.addStretch()
 
         # 手工标注 ---
         p2 = QWidget()
@@ -186,18 +203,20 @@ class WatermarkDetectSettings(QWidget):
         icon.setStyleSheet("font-size: 36px;")
         icon.setAlignment(Qt.AlignCenter)
         t2 = QLabel(self.tr("画笔编辑模式"))
+        setFont(t2, 14, QFont.Bold)
         t2.setObjectName("h2")
         t2.setAlignment(Qt.AlignCenter)
         d2 = QLabel(self.tr("请在工作区直接涂抹水印区域。"))
         d2.setObjectName("labelDesc")
+        setFont(d2, 11)
         d2.setAlignment(Qt.AlignCenter)
         p2_l.addWidget(icon)
         p2_l.addWidget(t2)
         p2_l.addWidget(d2) 
-        p2_l.addStretch()
         
         self.primary_btn = QPushButton(self.tr("开始标注水印"))
         self.primary_btn.setObjectName("primaryBtn")
+        setFont(self.primary_btn, 13, QFont.DemiBold)
         p2_l.addWidget(self.primary_btn)
         
         self.stack.addWidget(p1)
@@ -217,10 +236,12 @@ class WatermarkDetectSettings(QWidget):
         l.setSpacing(2)
         t = QLabel(title)
         t.setObjectName("labelTitle")
+        setFont(t, 13, QFont.DemiBold)
         l.addWidget(t)
         if desc:
             d = QLabel(desc)
             d.setObjectName("labelDesc")
+            setFont(d, 12)
             l.addWidget(d)
         return w
     
@@ -230,6 +251,20 @@ class WatermarkDetectSettings(QWidget):
         self.slider.setFixedSize(btn_width - 10, self.tabs_container.height() - 10)
         target_x = 5 + self.current_tab_index * btn_width
         self.slider.move(target_x, 5)
+
+    def get_current_page_height(self, index: int):
+        widget = self.stack.widget(index)
+        widget.adjustSize()
+        return widget.sizeHint().height()
+    
+    def animate_height_change(self, target_height: int):
+        start_height = self.card.height()
+        self.height_anim = QPropertyAnimation(self.card, b"maximumHeight")
+        self.height_anim.setDuration(250)
+        self.height_anim.setStartValue(start_height)
+        self.height_anim.setEndValue(target_height)
+        self.height_anim.setEasingCurve(QEasingCurve.OutCubic)
+        self.height_anim.start()
 
     def switch_tab(self, index, animated=True):
         self.current_tab_index = index
@@ -249,6 +284,10 @@ class WatermarkDetectSettings(QWidget):
         self.stack.setCurrentIndex(index)
         for i, btn in enumerate(self.tab_btns):
             btn.setChecked(i == index)
+        content_height = self.get_current_page_height(index)
+        extra_height = 90  # tabs + spacing + margins
+        target_height = content_height + extra_height
+        self.animate_height_change(target_height)
 
     def apply_styles(self):
         shadow = QGraphicsDropShadowEffect()
@@ -261,34 +300,34 @@ class WatermarkDetectSettings(QWidget):
             #mainWin { background-color: #F0F2F5; }
             #panelCard { background: white; border-radius: 24px; }
             #titleIndicator { background: #2563EB; border-radius: 2px; }
-            #h2 { font-size: 20px; font-weight: 700; color: #0F172A; }
+            #h2 { color: #0F172A; }
             
             #tabsContainer { background: #F1F5F9; border-radius: 14px; }
             #slider { background: white; border-radius: 10px; }
             #tabItem { 
                 border: none; background: transparent; color: #64748B; 
-                font-weight: 600; font-size: 14px; padding: 12px 0;
+                padding: 12px 0;
             }
             #tabItem:checked { color: #2563EB; }
             
-            #labelTitle { font-size: 15px; font-weight: 600; color: #0F172A; }
-            #labelDesc { font-size: 12px; color: #94A3B8; }
+            #labelTitle { color: #0F172A; }
+            #labelDesc { color: #94A3B8; }
             
             OptionCard { background: #FAFBFC; border: 1.5px solid #E2E8F0; border-radius: 12px; }
             OptionCard[selected="true"] { background: #EFF6FF; border-color: #2563EB; }
-            #optTitle { font-size: 14px; font-weight: 600; color: #0F172A; }
+            #optTitle { color: #0F172A; }
             OptionCard[selected="true"] #optTitle { color: #2563EB; }
-            #optDesc { font-size: 11px; color: #94A3B8; }
+            #optDesc { color: #94A3B8; }
             
             #inputBox { 
                 padding: 12px; border: 1.5px solid #E2E8F0; border-radius: 12px; 
-                font-size: 14px; background: white;
+                background: white; color: #0F172A;
             }
             #inputBox:focus { border: 1.5px solid #2563EB; }
             
             #chip { 
                 background: #F1F5F9; border: none; border-radius: 15px; 
-                padding: 6px 12px; color: #64748B; font-size: 12px; 
+                padding: 6px 12px; color: #64748B; 
             }
             #chip:hover { background: #2563EB; color: white; }
             
@@ -315,7 +354,15 @@ class WatermarkDetectSettings(QWidget):
             }
             #primaryBtn { 
                 background: #2563EB; color: white; border: none; border-radius: 14px; 
-                padding: 16px; font-size: 16px; font-weight: 600; margin-top: 10px;
+                padding: 16px; margin-top: 10px;
             }
             #primaryBtn:hover { background: #1D4ED8; }
         """)
+
+    def _watermark_area_selector(self):
+        area_selector = AreaSelectorDialog(parent=self)
+        area_selector.exec()
+        boxes = []
+        for item in area_selector.get_results():
+            boxes.append((item["x"], item["y"], item["x"] + item["w"], item["y"] + item["h"]))
+        self.watermarkBoxes.emit(boxes)
