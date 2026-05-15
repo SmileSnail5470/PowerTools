@@ -12,6 +12,10 @@ param_name_map = {
     "blind_watermark_task_type": "盲水印任务类型",
     "blind_watermark_model_name": "盲水印算法",
     "watermark_detect_type": "水印检测方式",
+    "manual_watermark_mask_path": "人工标注 Mask 路径",
+    "watermark_ai_interactive_type": "AI 交互检测水印方式",
+    "watermark_detect_prompt": "AI 水印检测提示词",
+    "watermark_boxes": "AI 框选检测 Box",
     "mask_dilate": "水印 Mask 扩张系数",
     "model_name": "模型类型",
     "watermark_text": "水印文本",
@@ -21,7 +25,7 @@ param_name_map = {
     "font_color": "字体颜色",
     "watermark_image": "图片水印位置",
     "watermark_opacity": "水印透明度（%）",
-    "watermark_content": "水印格式",
+    "watermark_content": "水印样式",
     "watermark_format": "水印形式",
     "watermark_location": "水印位置",
     "watermark_rotation": "水印旋转角度（{0}）".format("\u00B0"),
@@ -151,8 +155,15 @@ class TaskInfoMessageBox(MessageBoxBase):
             body_layout.addWidget(scroll_area)
         if self.task_type == "watermark-remove":
             value_map = {
-                "ai_detect": "AI 检测",
-                "manual_detect": "人工检测",
+                "ai_auto_detect": "AI 全自动检测",
+                "ai_interactive_detect": "AI 交互检测",
+                "manual_detect": "手工标注",
+                "general_watermark": "通用水印",
+                "text_watermark": "文本水印",
+                "static_watermark": "静态",
+                "dynamic_watermark": "动态",
+                "semantic_detect": "语义检测",
+                "space_detect": "空间位置检测",
                 "patchwiper": "细节增强",
                 "emdf": "智能修补",
                 "grig": "平衡修复",
@@ -181,7 +192,7 @@ class TaskInfoMessageBox(MessageBoxBase):
             for key, value in self.task_params.items():
                 if key in ["input_path", "output_path", "output_format"]:
                     continue
-                param_widget = self.create_param_widget(param_name_map[key], value if value not in value_map else value_map[value])
+                param_widget = self.create_param_widget(param_name_map[key], str(value) if str(value) not in value_map else value_map[value])
                 params_grid.addWidget(param_widget, row, col)
                 col += 1
                 if col >= 1:

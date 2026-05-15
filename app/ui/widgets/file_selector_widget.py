@@ -68,7 +68,8 @@ class FileUploadWidget(SimpleCardWidget):
             self,
             "选择文件",
             "", 
-            "图片文件 (*.png *.jpg *.jpeg *.bmp *.avif *.webp);;视频文件 (*.mp4 *.avi *.mov *.mkv);;所有文件 (*)"
+            "图片文件 (*.png *.jpg *.jpeg *.bmp *.avif *.webp);;视频文件 (*.mp4 *.avi *.mov *.mkv);;所有文件 (*)",
+            options=QFileDialog.Option.DontUseNativeDialog
         )
         if files:
             self.file_selected.emit(files)

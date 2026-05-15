@@ -652,7 +652,7 @@ class OutputSettingsCard(HeaderCardWidget):
             self,
             "选择文件夹",
             "",
-            QFileDialog.Option.ShowDirsOnly
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog
         )
         if directory:
             self.save_location_line_edit.setText(directory)

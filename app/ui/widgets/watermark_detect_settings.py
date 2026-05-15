@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, 
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSlider,
                              QLabel, QPushButton, QLineEdit, QStackedWidget, 
                              QFrame, QGraphicsDropShadowEffect)
 from PySide6.QtCore import Qt, QPropertyAnimation, QPoint, QEasingCurve, QTimer, Signal
@@ -55,6 +55,7 @@ class WatermarkDetectSettings(QWidget):
     watermarkAIInteractiveType = Signal(str)  # 语义检测/空间范围检测
     watermarkDetectPrompt = Signal(str)       # 语义检测提示词
     watermarkBoxes = Signal(list)             # 水印空间范围 boxes 坐标
+    watermarkConfidence = Signal(float)       # 水印置信度
     # AI 自动检测
     watermarkContent = Signal(str)            # 通用水印/文字水印
 
@@ -173,7 +174,7 @@ class WatermarkDetectSettings(QWidget):
         self.input_box.setObjectName("inputBox")
         setFont(self.input_box, 13)
         self.input_box.setPlaceholderText(self.tr("文本描述（请输入英文）..."))
-        self.input_box.textChanged.emit(lambda text: self.watermarkDetectPrompt.emit(self.input_box.text()))
+        self.input_box.textChanged.connect(lambda text: self.watermarkDetectPrompt.emit(text))
         sem_l.addWidget(self.input_box)
         chip_l = QHBoxLayout()
         chip_l.setSpacing(8)
@@ -201,9 +202,45 @@ class WatermarkDetectSettings(QWidget):
         sec_btn.clicked.connect(lambda _: self._watermark_area_selector())
         spa_l.addWidget(sec_btn)
         self.sub_stack.addWidget(spa_w)
-        
         p1_l.addWidget(self.sub_stack)
         p1_l.addSpacing(20)
+
+        conf_w = QWidget()
+        conf_l = QVBoxLayout(conf_w)
+        conf_l.setContentsMargins(0, 0, 0, 0)
+        conf_l.setSpacing(10)
+
+        conf_header = QHBoxLayout()
+        conf_info_vbox = QVBoxLayout()
+        conf_info_vbox.setSpacing(2)
+        ct = QLabel(self.tr("水印置信度"))
+        ct.setObjectName("labelTitle")
+        setFont(ct, 13, QFont.DemiBold)
+        cd = QLabel(self.tr("设置检测算法的灵敏度阈值"))
+        cd.setObjectName("labelDesc")
+        setFont(cd, 11)
+        conf_info_vbox.addWidget(ct)
+        conf_info_vbox.addWidget(cd)
+        
+        self.conf_val_label = QLabel("0.50")
+        self.conf_val_label.setObjectName("confValBadge")
+        setFont(self.conf_val_label, 12, QFont.Bold)
+        
+        conf_header.addLayout(conf_info_vbox)
+        conf_header.addStretch()
+        conf_header.addWidget(self.conf_val_label)
+        conf_l.addLayout(conf_header)
+
+        self.conf_slider = QSlider(Qt.Horizontal)
+        self.conf_slider.setObjectName("confSlider")
+        self.conf_slider.setRange(0, 100)
+        self.conf_slider.setValue(50)
+        self.conf_slider.setCursor(Qt.PointingHandCursor)
+        self.conf_slider.valueChanged.connect(self._on_conf_changed)
+        conf_l.addWidget(self.conf_slider)
+        p1_l.addWidget(conf_w)
+        p1_l.addSpacing(20)
+
         p1_l.addWidget(self.create_label_group(self.tr("水印形式"), self.tr("选择水印在时间轴上的状态")))
         grid2 = QWidget()
         grid2_l = QHBoxLayout(grid2)
@@ -381,7 +418,36 @@ class WatermarkDetectSettings(QWidget):
                 padding: 16px; margin-top: 10px;
             }
             #primaryBtn:hover { background: #1D4ED8; }
+            #confValBadge {
+                color: #2563EB;
+                background-color: #EFF6FF;
+                padding: 4px 10px;
+                border-radius: 6px;
+                min-width: 40px;
+            }
+            #confSlider::groove:horizontal {
+                border-radius: 3px;
+                height: 6px;
+                background: #E2E8F0;
+            }
+            #confSlider::handle:horizontal {
+                background: white;
+                border: 2px solid #2563EB;
+                width: 16px;
+                height: 16px;
+                margin: -6px 0;
+                border-radius: 9px;
+            }
+            #confSlider::sub-page:horizontal {
+                background: #2563EB;
+                border-radius: 3px;
+            }
         """)
+
+    def _on_conf_changed(self, value):
+        float_val = value / 100.0
+        self.conf_val_label.setText(f"{float_val:.2f}")
+        self.watermarkConfidence.emit(float_val)
 
     def set_file_path(self, file_path):
         self.file_path = file_path

@@ -67,7 +67,7 @@ class DirectoryUploadWidget(SimpleCardWidget):
             self,
             "选择文件夹",
             "",
-            QFileDialog.Option.ShowDirsOnly
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog
         )
         if directory:
             self.directory_selected.emit([directory])

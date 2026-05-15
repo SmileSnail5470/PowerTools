@@ -20,7 +20,6 @@ from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigation
 from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
-from app.ui.widgets.watermark_manual_select_widget import WatermarkMaskTool
 from app.ui.widgets.custom_navigation import CustomNavigation
 from app.ui.widgets.watermark_detect_settings import WatermarkDetectSettings
 
@@ -99,6 +98,7 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
         bind_widget_to_param(watermark_detect_settings, "watermarkDetectPrompt", watermark_remove_params, "watermark_detect_prompt", transform=None)
         bind_widget_to_param(watermark_detect_settings, "watermarkBoxes", watermark_remove_params, "watermark_boxes", transform=None)
         bind_widget_to_param(watermark_detect_settings, "watermarkContent", watermark_remove_params, "watermark_content", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkConfidence", watermark_remove_params, "watermark_confidence", transform=None)
         # 设置参数默认值
         watermark_detect_settings.watermarkDetectType.emit("ai_interactive_detect")
         watermark_detect_settings.watermarkFormat.emit("static_watermark")
@@ -107,6 +107,7 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
         watermark_detect_settings.watermarkDetectPrompt.emit("")
         watermark_detect_settings.watermarkBoxes.emit([])
         watermark_detect_settings.watermarkContent.emit("general_watermark")
+        watermark_detect_settings.watermarkConfidence.emit(0.5)
 
         global_event_bus.watermarkRemove_InputFileUpdate.connect(lambda file_path: watermark_detect_settings.set_file_path(file_path=file_path))
 
@@ -298,7 +299,7 @@ class OutputSettingsCard(HeaderCardWidget):
             self,
             "选择文件夹",
             "",
-            QFileDialog.Option.ShowDirsOnly
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog
         )
         if directory:
             self.save_location_line_edit.setText(directory)
@@ -527,20 +528,10 @@ class HeaderWidget(QWidget):
         if os.path.isdir(input_path):
             for one_file in os.listdir(input_path):
                 task_params["input_path"] = os.path.join(input_path, one_file)
-                if task_params["watermark_detect_type"] != "ai_detect":
-                    is_video = get_file_type(task_params["input_path"]) == "video"
-                    watermarkMaskTool = WatermarkMaskTool(file_path=task_params["input_path"], is_video=is_video, parent=self.window())
-                    watermarkMaskTool.exec()
-                    task_params["mask_path"] = watermarkMaskTool.get_mask_path()
                 task_instance = WatermarkRemoveWork(**task_params)
                 func, args, kwargs = task_instance.to_worker()
                 total_tasks.append((func, args, kwargs))
         else:
-            if task_params["watermark_detect_type"] != "ai_detect":
-                is_video = get_file_type(task_params["input_path"]) == "video"
-                watermarkMaskTool = WatermarkMaskTool(file_path=task_params["input_path"], is_video=is_video, parent=self.window())
-                watermarkMaskTool.exec()
-                task_params["mask_path"] = watermarkMaskTool.get_mask_path()
             task_instance = WatermarkRemoveWork(**task_params)
             func, args, kwargs = task_instance.to_worker()
             total_tasks.append((func, args, kwargs))
@@ -607,6 +598,10 @@ class HeaderWidget(QWidget):
             return error_msg, task_params
         else:
             task_params["watermark_detect_type"] = params["watermark_detect_type"]
+
+        if params["watermark_detect_type"] == "ai_interactive_detect" and not cfg.get(cfg.localObjectSegmentationEnabled):
+            error_msg = self.tr("请在设置页面打开 '物体分割AI能力' 开关")
+            return error_msg, task_params
         
         if "mask_dilate" not in params:
             error_msg = self.tr("请设置水印 Mask 扩张系数")
@@ -627,9 +622,19 @@ class HeaderWidget(QWidget):
             task_params["output_path"] = params["output_path"]
             task_params["output_format"] = params["output_format"]
 
-        if params["watermark_detect_type"] == "ai_detect":
+        if params["watermark_detect_type"] == "ai_auto_detect":
             task_params["watermark_content"] = params["watermark_content"]
             task_params["watermark_format"] = params["watermark_format"]
+        if params["watermark_detect_type"] == "ai_interactive_detect":
+            task_params["watermark_ai_interactive_type"] = params["watermark_ai_interactive_type"]
+            task_params["watermark_format"] = params["watermark_format"]
+            task_params["watermark_confidence"] = params["watermark_confidence"]
+            if task_params["watermark_ai_interactive_type"] == "semantic_detect":
+                task_params["watermark_detect_prompt"] = params["watermark_detect_prompt"]
+            if task_params["watermark_ai_interactive_type"] == "space_detect":
+                task_params["watermark_boxes"] = params["watermark_boxes"]
+        if params["watermark_detect_type"] == "manual_detect":
+            task_params["manual_watermark_mask_path"] = params["manual_watermark_mask_path"]
         return error_msg, task_params
 
 

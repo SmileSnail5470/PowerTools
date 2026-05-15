@@ -37,21 +37,28 @@ class VideoWatermarkRemover:
             mask_path: str, 
             use_cache_mask: bool, 
             watermark_type: str,
+            ai_detect_type,
+            ai_interactive_type,
+            ai_interactive_prompt,
+            ai_interactive_boxes,
+            watermark_confidence: float,
             frame_files: list,
             sr_segment_onnx_path,
             pt_segment_onnx_path,
             text_detection_onnx_path,
             yolo_detection_onnx_path,
+            segment_onnx_dir,
             **kwargs
         ):
         if use_cache_mask and not mask_path:
             # 静态水印，AI检测
-            mask = WatermarkSegment(watermark_type).segment(
+            mask = WatermarkSegment(watermark_type, ai_detect_type, ai_interactive_type, ai_interactive_prompt, ai_interactive_boxes, watermark_confidence).segment(
                 image_path=str(frame_files[0]),
                 sr_onnx_path=sr_segment_onnx_path,
                 pt_onnx_path=pt_segment_onnx_path,
                 text_detection_onnx_path=text_detection_onnx_path,
                 yolo_detection_onnx_path=yolo_detection_onnx_path,
+                segment_onnx_dir=segment_onnx_dir,
                 **kwargs
             )
             tmp_mask_path = os.path.join(str(tmp_mask_dir), "mask.png")
@@ -74,12 +81,13 @@ class VideoWatermarkRemover:
         else:
             # 动态水印，ai 检测
             for i, frame_file in enumerate(frame_files):
-                mask = WatermarkSegment(watermark_type).segment(
+                mask = WatermarkSegment(watermark_type, ai_detect_type, ai_interactive_type, ai_interactive_prompt, ai_interactive_boxes, watermark_confidence).segment(
                     image_path=str(frame_file),
                     sr_onnx_path=sr_segment_onnx_path,
                     pt_onnx_path=pt_segment_onnx_path,
                     text_detection_onnx_path=text_detection_onnx_path,
                     yolo_detection_onnx_path=yolo_detection_onnx_path,
+                    segment_onnx_dir=segment_onnx_dir,
                     **kwargs
                 )
                 tmp_mask_path = os.path.join(str(tmp_mask_dir), frame_file.name)
@@ -131,10 +139,16 @@ class VideoWatermarkRemover:
             lama_onnx_path,
             text_detection_onnx_path,
             yolo_detection_onnx_path,
+            segment_onnx_dir,
             mask_path: str = "",
             image_refine_type: str = "coordfill",  # patchwiper/lama/transparent/cv2/coordfill
             use_cache_mask: bool = False,
             watermark_type: str = "all",      # text / all
+            ai_detect_type: str = "ai_interactive_detect",      # ai_interactive_detect/ai_auto_detect
+            ai_interactive_type: str = "semantic_detect",       # semantic_detect/space_detect
+            ai_interactive_prompt: str = "watermark",
+            ai_interactive_boxes: list = [],
+            watermark_confidence: float = 0.5,
             ffmpeg_path: str = "",
             callback_func = None,
             **kwargs
@@ -185,11 +199,17 @@ class VideoWatermarkRemover:
                 mask_path=mask_path, 
                 use_cache_mask=use_cache_mask, 
                 watermark_type=watermark_type,
+                ai_detect_type=ai_detect_type,
+                ai_interactive_type=ai_interactive_type,
+                ai_interactive_prompt=ai_interactive_prompt,
+                ai_interactive_boxes=ai_interactive_boxes,
+                watermark_confidence=watermark_confidence,
                 frame_files=frame_files,
                 sr_segment_onnx_path=sr_segment_onnx_path,
                 pt_segment_onnx_path=pt_segment_onnx_path,
                 text_detection_onnx_path=text_detection_onnx_path,
                 yolo_detection_onnx_path=yolo_detection_onnx_path,
+                segment_onnx_dir=segment_onnx_dir,
                 **kwargs
             )
 

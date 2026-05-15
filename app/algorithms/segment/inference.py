@@ -74,7 +74,7 @@ class SegmentationInference():
             self, 
             model_dir: str, 
             prompt_mode: str = "texts",       # "texts", "points", or "boxes"
-            prompt_value: str = "watermark",  # Text prompt or "x,y" for points or "x1,y1,x2,y2" for boxes
+            prompt_value: str = "watermark",  # Text prompt or ["x,y"] for points or ["x1,y1,x2,y2"] for boxes
             threshold: float = 0.5,           # Confidence threshold
             max_detections: int = 0,          # Max detections (0 = unlimited)
             label: str = "object"             # Class label for points/boxes   
@@ -112,44 +112,26 @@ class SegmentationInference():
                 cls_results = self.predictor.predict_text(img, cls, threshold=self.threshold, max_detections=self.max_detections)
                 results.extend(cls_results)
         elif self.prompt_mode == "points":
-            parts = self.prompt_value.split(",")
-            if len(parts) < 2:
-                raise ValueError("Error: points mode expects 'x,y' format")
-            x, y = float(parts[0].strip()), float(parts[1].strip())
-            prompt_points.append((x, y))
-            results = self.predictor.predict_point(img, (x, y), threshold=self.threshold, max_detections=self.max_detections, label=self.label)
+            for one_prompt_value in self.prompt_value:
+                parts = one_prompt_value.split(",")
+                if len(parts) < 2:
+                    raise ValueError("Error: points mode expects 'x,y' format")
+                x, y = float(parts[0].strip()), float(parts[1].strip())
+                prompt_points.append((x, y))
+                one_results = self.predictor.predict_point(img, (x, y), threshold=self.threshold, max_detections=self.max_detections, label=self.label)
+                results.extend(one_results)
         elif self.prompt_mode == "boxes":
-            parts = self.prompt_value.split(",")
-            if len(parts) < 4:
-                raise ValueError("Error: boxes mode expects 'x1,y1,x2,y2' format")
-            x1, y1 = float(parts[0].strip()), float(parts[1].strip())
-            x2, y2 = float(parts[2].strip()), float(parts[3].strip())
-            bw, bh = x2 - x1, y2 - y1
-            prompt_boxes.append((x1, y1, bw, bh))
-            results = self.predictor.predict_box(img, (x1, y1, bw, bh), threshold=self.threshold, max_detections=self.max_detections, label=self.label)
+            for one_prompt_value in self.prompt_value:
+                parts = one_prompt_value.split(",")
+                if len(parts) < 4:
+                    raise ValueError("Error: boxes mode expects 'x1,y1,x2,y2' format")
+                x1, y1 = float(parts[0].strip()), float(parts[1].strip())
+                x2, y2 = float(parts[2].strip()), float(parts[3].strip())
+                bw, bh = x2 - x1, y2 - y1
+                prompt_boxes.append((x1, y1, bw, bh))
+                one_results = self.predictor.predict_box(img, (x1, y1, bw, bh), threshold=self.threshold, max_detections=self.max_detections, label=self.label)
+                results.extend(one_results)
         if output_visualization_path is not None:
             save_visualization(img, results, output_visualization_path, prompt_points, prompt_boxes)
         mask_image = self._save_mask(img, results, output_mask_path)
         return mask_image # [H, W] 0-255 uint8
-
-
-if __name__ == "__main__":
-    import os
-    import time
-    model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "resources", "deps", "segment")
-    input_image_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assess", "test2.jpg")
-    output_mask_path = "output_mask.png"
-    output_visualization_path = "output_visualization.png"
-    inference = SegmentationInference(
-        model_dir=model_dir,
-        prompt_mode="texts",
-        prompt_value="watermark",
-        threshold=0.5,
-        max_detections=0,
-        label="watermark"
-    )
-    inference.prepare()
-    start_time = time.time()
-    inference.inference_image(input_image_path, output_mask_path, output_visualization_path)
-    end_time = time.time()
-    print(f"Inference completed in {end_time - start_time:.2f} seconds. Output saved to {output_mask_path}")

@@ -110,14 +110,14 @@ class AreaSelectorDialog(QDialog):
                 return
 
             view_w, view_h = 800, 600
-            self.scale_ratio = self.original_pixmap.width() / view_w
+            self.scale_ratio = max(self.original_pixmap.width() / view_w, self.original_pixmap.height() / view_h, 1.0)
             scaled_pixmap = self.original_pixmap.scaled(
-                view_w, view_h, 
+                int(self.original_pixmap.width() / self.scale_ratio), int(self.original_pixmap.height() / self.scale_ratio), 
                 Qt.AspectRatioMode.KeepAspectRatio, 
                 Qt.TransformationMode.SmoothTransformation
             )
             self.img_item.setPixmap(scaled_pixmap)
-            self.scene.setSceneRect(scaled_pixmap.rect())
+            self.scene.setSceneRect(0, 0, int(self.original_pixmap.width() / self.scale_ratio), int(self.original_pixmap.height() / self.scale_ratio))
         else:
             self.slider.show()
             self._load_video(path=path)
@@ -129,9 +129,6 @@ class AreaSelectorDialog(QDialog):
         self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.fps = self.cap.get(cv2.CAP_PROP_FPS)
         self.slider.setMaximum(self.total_frames - 1)
-        orig_w = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-        view_w = 800
-        self.scale_ratio = orig_w / view_w
         self._update_frame(0)
 
     def _update_frame(self, frame_idx):
@@ -143,13 +140,17 @@ class AreaSelectorDialog(QDialog):
             rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             h, w, ch = rgb_image.shape
             qimg = QImage(rgb_image.data, w, h, ch * w, QImage.Format_RGB888)
+            vw, vh = 800, 600
+            self.scale_ratio = max(w / vw, h / vh, 1.0)
+            target_w = int(w / self.scale_ratio)
+            target_h = int(h / self.scale_ratio)
             pixmap = QPixmap.fromImage(qimg).scaled(
-                800, 600, 
+                target_w, target_h, 
                 Qt.AspectRatioMode.KeepAspectRatio, 
                 Qt.TransformationMode.SmoothTransformation
             )
             self.img_item.setPixmap(pixmap)
-            self.scene.setSceneRect(pixmap.rect())
+            self.scene.setSceneRect(0, 0, target_w, target_h)
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -174,6 +175,7 @@ class AreaSelectorDialog(QDialog):
         self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.view.viewport().setCursor(Qt.CursorShape.CrossCursor)
         self.view.setFrameShape(QFrame.Shape.NoFrame)
+        self.view.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.view.setStyleSheet("border-radius: 12px; background-color: #f0f0f0;")
         
         placeholder = QPixmap(800, 600)
@@ -181,27 +183,37 @@ class AreaSelectorDialog(QDialog):
         self.img_item = QGraphicsPixmapItem(placeholder)
         self.scene.addItem(self.img_item)
         self.scene.setSceneRect(0, 0, 800, 600)
-        self.view.setFixedSize(800, 600)
+        # self.view.setFixedSize(900, 700)
         container_layout.addWidget(self.view)
 
         self.slider = QSlider(Qt.Orientation.Horizontal)
         self.slider.setMinimum(0)
-        self.slider.setFixedHeight(24) 
+        self.slider.setFixedHeight(24)
+        self.slider.setCursor(Qt.PointingHandCursor) 
         self.slider.setStyleSheet(f"""
             QSlider {{
                 background: transparent;
             }}
             QSlider::groove:horizontal {{
                 height: 6px;
-                background: #e0e0e0;
+                background: #E2E8F0;
+                border-radius: 3px;
+            }}
+            QSlider::sub-page:horizontal {{
+                background: {COLOR_ACCENT};
                 border-radius: 3px;
             }}
             QSlider::handle:horizontal {{
-                background: {COLOR_ACCENT};
-                width: 16px;
-                height: 16px;
-                margin: -5px 0;
+                background: white;
+                border: 2px solid {COLOR_ACCENT};
+                width: 14px;
+                height: 14px;
+                margin: -6px 0;
                 border-radius: 8px;
+            }}
+            QSlider::handle:horizontal:hover {{
+                background: #F8FAFC;
+                border-width: 3px;
             }}
         """)
         self.slider.valueChanged.connect(self._update_frame)
