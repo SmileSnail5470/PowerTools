@@ -118,6 +118,7 @@ class AreaSelectorDialog(QDialog):
             )
             self.img_item.setPixmap(scaled_pixmap)
             self.scene.setSceneRect(0, 0, int(self.original_pixmap.width() / self.scale_ratio), int(self.original_pixmap.height() / self.scale_ratio))
+            self.view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
         else:
             self.slider.show()
             self._load_video(path=path)
@@ -151,6 +152,7 @@ class AreaSelectorDialog(QDialog):
             )
             self.img_item.setPixmap(pixmap)
             self.scene.setSceneRect(0, 0, target_w, target_h)
+            self.view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -176,6 +178,8 @@ class AreaSelectorDialog(QDialog):
         self.view.viewport().setCursor(Qt.CursorShape.CrossCursor)
         self.view.setFrameShape(QFrame.Shape.NoFrame)
         self.view.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.view.setStyleSheet("border-radius: 12px; background-color: #f0f0f0;")
         
         placeholder = QPixmap(800, 600)

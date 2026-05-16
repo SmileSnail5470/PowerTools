@@ -1,4 +1,5 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSlider,
+import sys
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSlider, QFileDialog,
                              QLabel, QPushButton, QLineEdit, QStackedWidget, 
                              QFrame, QGraphicsDropShadowEffect)
 from PySide6.QtCore import Qt, QPropertyAnimation, QPoint, QEasingCurve, QTimer, Signal
@@ -51,6 +52,7 @@ class WatermarkDetectSettings(QWidget):
     watermarkDetectType = Signal(str)         # AI交互/AI自动/人工检测
     watermarkFormat = Signal(str)             # 静态水印/动态水印
     manualWatermarktMaskPath = Signal(str)    # 手动标注 Mask 路径
+    maskDirectoryChanged = Signal(str)        # 人工指定 Mask 路径
     # AI 交互检测信号
     watermarkAIInteractiveType = Signal(str)  # 语义检测/空间范围检测
     watermarkDetectPrompt = Signal(str)       # 语义检测提示词
@@ -65,6 +67,7 @@ class WatermarkDetectSettings(QWidget):
 
         self.current_tab_index = 0
         self.file_path = None
+        self.mask_dir_path = ""
 
         self.setObjectName("WatermarkDetectSettings")
         self.init_ui()
@@ -259,7 +262,32 @@ class WatermarkDetectSettings(QWidget):
         # 手工标注 ---
         p2 = QWidget()
         p2_l = QVBoxLayout(p2)
-        p2_l.setContentsMargins(0,40,0,0)
+        p2_l.setContentsMargins(0,0,0,0)
+
+        p2_l.addWidget(self.create_label_group(self.tr("导入已有水印标注"), self.tr("若选择 Mask 目录，将跳过手动标注")))
+        dir_layout = QHBoxLayout()
+        dir_layout.setSpacing(8)
+        self.dir_input = QLineEdit()
+        self.dir_input.setObjectName("inputBox")
+        self.dir_input.setReadOnly(True)
+        self.dir_input.setPlaceholderText(self.tr("未选择目录（选填）..."))
+        setFont(self.dir_input, 12)
+        self.dir_select_btn = QPushButton(self.tr("打开"))
+        self.dir_select_btn.setObjectName("secondaryBtn")
+        self.dir_select_btn.setFixedHeight(40)
+        setFont(self.dir_select_btn, 12, QFont.DemiBold)
+        self.dir_select_btn.clicked.connect(self._on_select_mask_dir)
+        self.dir_clear_btn = QPushButton("清除")
+        self.dir_clear_btn.setObjectName("secondaryBtn")
+        self.dir_clear_btn.setFixedHeight(40)
+        self.dir_clear_btn.setVisible(False)
+        self.dir_clear_btn.clicked.connect(self._on_clear_mask_dir)
+        dir_layout.addWidget(self.dir_input)
+        dir_layout.addWidget(self.dir_clear_btn)
+        dir_layout.addWidget(self.dir_select_btn)
+        p2_l.addLayout(dir_layout)
+        p2_l.addSpacing(10)
+
         icon = QLabel("🎨")
         icon.setStyleSheet("font-size: 36px;")
         icon.setAlignment(Qt.AlignCenter)
@@ -419,6 +447,7 @@ class WatermarkDetectSettings(QWidget):
                 padding: 16px; margin-top: 10px;
             }
             #primaryBtn:hover { background: #1D4ED8; }
+            #primaryBtn:disabled { background: #CBD5E1; color: #94A3B8; }
             #confValBadge {
                 color: #2563EB;
                 background-color: #EFF6FF;
@@ -444,6 +473,29 @@ class WatermarkDetectSettings(QWidget):
                 border-radius: 3px;
             }
         """)
+
+    def _on_select_mask_dir(self):
+        dir_path = QFileDialog.getExistingDirectory(
+            self,
+            self.tr("选择 Mask 目录"), 
+            "", 
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog if sys.platform == "darwin" else QFileDialog.Option(0)
+        )
+        if dir_path:
+            self.mask_dir_path = dir_path
+            self.dir_input.setText(dir_path)
+            self.dir_clear_btn.setVisible(True)
+            self.dir_select_btn.setVisible(False)
+            self.primary_btn.setEnabled(False)
+            self.maskDirectoryChanged.emit(dir_path)
+
+    def _on_clear_mask_dir(self):
+        self.mask_dir_path = ""
+        self.dir_input.clear()
+        self.dir_clear_btn.setVisible(False)
+        self.dir_select_btn.setVisible(True)
+        self.primary_btn.setEnabled(True)
+        self.maskDirectoryChanged.emit("")
 
     def _on_conf_changed(self, value):
         float_val = value / 100.0
