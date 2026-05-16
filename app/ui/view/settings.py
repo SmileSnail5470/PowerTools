@@ -575,7 +575,7 @@ class SoftwareCard(QFrame):
                 self,
                 "选择文件夹",
                 "",
-                QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog
+                QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog if sys.platform == "darwin" else QFileDialog.Option(0)
             )
             if directory:
                 self.path_input.setText(directory)
@@ -585,7 +585,7 @@ class SoftwareCard(QFrame):
                 "选择文件",
                 "", 
                 "所有文件 (*)",
-                options=QFileDialog.Option.DontUseNativeDialog
+                options=QFileDialog.Option.DontUseNativeDialog if sys.platform == "darwin" else QFileDialog.Option(0)
             )
             if files:
                 self.path_input.setText(files)
@@ -903,7 +903,7 @@ class Settings(QWidget):
             self,
             "选择文件夹",
             "",
-            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog if sys.platform == "darwin" else QFileDialog.Option(0)
         )
         if directory:
             widget.setText(directory)

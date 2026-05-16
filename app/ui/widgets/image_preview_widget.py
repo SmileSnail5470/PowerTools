@@ -652,7 +652,7 @@ class ImageNavigationWidget(QWidget):
         self.update_display()
 
     def get_current_image(self):
-        return self.total_images[self.current_index]
+        return self.total_images[self.current_index] if self.current_index < len(self.total_images) else None
 
     def clear_images(self):
         for i in reversed(range(self.thumbnail_layout.count() - 1)):

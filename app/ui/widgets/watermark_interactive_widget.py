@@ -183,7 +183,6 @@ class AreaSelectorDialog(QDialog):
         self.img_item = QGraphicsPixmapItem(placeholder)
         self.scene.addItem(self.img_item)
         self.scene.setSceneRect(0, 0, 800, 600)
-        # self.view.setFixedSize(900, 700)
         container_layout.addWidget(self.view)
 
         self.slider = QSlider(Qt.Orientation.Horizontal)
@@ -206,9 +205,9 @@ class AreaSelectorDialog(QDialog):
             QSlider::handle:horizontal {{
                 background: white;
                 border: 2px solid {COLOR_ACCENT};
-                width: 14px;
-                height: 14px;
-                margin: -6px 0;
+                width: 16px;
+                height: 16px;
+                margin: -5px 0;
                 border-radius: 8px;
             }}
             QSlider::handle:horizontal:hover {{

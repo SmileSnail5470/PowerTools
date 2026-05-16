@@ -137,6 +137,8 @@ class VideoWatermarkRemover:
             pt_inpaint_onnx_path, 
             cf_onnx_path, 
             lama_onnx_path,
+            emdf_onnx_path,
+            grig_onnx_path,
             text_detection_onnx_path,
             yolo_detection_onnx_path,
             segment_onnx_dir,
@@ -149,6 +151,7 @@ class VideoWatermarkRemover:
             ai_interactive_prompt: str = "watermark",
             ai_interactive_boxes: list = [],
             watermark_confidence: float = 0.5,
+            dilate_num: int = 2,
             ffmpeg_path: str = "",
             callback_func = None,
             **kwargs
@@ -213,11 +216,11 @@ class VideoWatermarkRemover:
                 **kwargs
             )
 
-            process_cb = kwargs.get("process_cb", None)
+            process_cb = kwargs.pop("process_cb", None)
             if process_cb is not None:
                 tmp_visualzation_path = os.path.join(str(tmp_mask_dir), "visualization")
                 for frame_file, tmp_mask_path in frame_mask_map.items():
-                    os.mkdir(tmp_visualzation_path, exist_ok=True)
+                    os.makedirs(tmp_visualzation_path, exist_ok=True)
                     self._save_mask_visualization(
                         img_path=str(frame_file),
                         mask=cv2.imread(tmp_mask_path, cv2.IMREAD_GRAYSCALE),
@@ -225,7 +228,7 @@ class VideoWatermarkRemover:
                     )
                 output_video_tmp_path = "{0}_mask_visualization.mp4".format(output_video_path.rsplit(".", 1)[0])
                 self._merge_processed_frames(
-                    processed_frames_dir=tmp_visualzation_path,
+                    processed_frames_dir=Path(tmp_visualzation_path),
                     has_audio=has_audio, 
                     fps=fps,
                     input_video_path=input_video_path,
@@ -243,11 +246,20 @@ class VideoWatermarkRemover:
                     pt_inpaint_onnx_path=pt_inpaint_onnx_path, 
                     cf_onnx_path=cf_onnx_path, 
                     lama_onnx_path=lama_onnx_path,
+                    emdf_onnx_path=emdf_onnx_path,
+                    grig_onnx_path=grig_onnx_path,
                     text_detection_onnx_path=text_detection_onnx_path,
                     yolo_detection_onnx_path=yolo_detection_onnx_path,
+                    segment_onnx_dir=segment_onnx_dir,
                     mask_path=frame_mask_map[str(frame_file)],
                     refine_type=image_refine_type,
                     watermark_type=watermark_type,
+                    ai_detect_type=ai_detect_type,
+                    ai_interactive_type=ai_interactive_type,
+                    ai_interactive_prompt=ai_interactive_prompt,
+                    ai_interactive_boxes=ai_interactive_boxes,
+                    watermark_confidence=watermark_confidence,
+                    dilate_num=dilate_num,
                     **kwargs
                 )
                 if callback_func:
@@ -260,32 +272,3 @@ class VideoWatermarkRemover:
                 input_video_path=input_video_path,
                 output_video_path=output_video_path
             )
-
-
-def callback(current_frame, total_frames):
-    print(f"处理进度: {current_frame}/{total_frames}")
-
-
-if __name__ == "__main__":
-    refine_type = "coordfill"
-    input_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assess", "test.mp4")
-    out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"output_{refine_type}.mp4")
-    water_remove = VideoWatermarkRemover()
-    water_remove.process_video(
-        input_video_path=input_path, 
-        output_video_path=out_path,
-        # mask_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "assess", "1_mask.png"),
-        sr_segment_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "OnnxModels", "sr_segment.onnx"),
-        pt_segment_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "OnnxModels", "pt_segment.onnx"),
-        pt_inpaint_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "OnnxModels", "pt_inpaint.onnx"), 
-        cf_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "OnnxModels", "cf.onnx"), 
-        lama_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "OnnxModels", "lama_fp32.onnx"),
-        text_detection_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "OnnxModels", "pp_ocr_det.onnx"),
-        yolo_detection_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "OnnxModels", "yolo.onnx"),
-        watermark_type="text",
-        use_cache_mask=True,
-        image_refine_type=refine_type,
-        ffmpeg_path="",
-        callback_func=callback,
-        text_det_unclip_ratio=1.8
-    )

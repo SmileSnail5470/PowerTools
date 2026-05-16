@@ -235,6 +235,7 @@ class WatermarkDetectSettings(QWidget):
         self.conf_slider.setObjectName("confSlider")
         self.conf_slider.setRange(0, 100)
         self.conf_slider.setValue(50)
+        self.conf_slider.setFixedHeight(24)
         self.conf_slider.setCursor(Qt.PointingHandCursor)
         self.conf_slider.valueChanged.connect(self._on_conf_changed)
         conf_l.addWidget(self.conf_slider)
@@ -431,12 +432,12 @@ class WatermarkDetectSettings(QWidget):
                 background: #E2E8F0;
             }
             #confSlider::handle:horizontal {
-                background: white;
-                border: 2px solid #2563EB;
+                background: #2563EB;
+                border: none;
                 width: 16px;
                 height: 16px;
-                margin: -6px 0;
-                border-radius: 9px;
+                margin: -5px 0;
+                border-radius: 8px;
             }
             #confSlider::sub-page:horizontal {
                 background: #2563EB;
