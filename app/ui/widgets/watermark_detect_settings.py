@@ -1,3 +1,4 @@
+import os
 import sys
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSlider, QFileDialog,
                              QLabel, QPushButton, QLineEdit, QStackedWidget, 
@@ -487,7 +488,7 @@ class WatermarkDetectSettings(QWidget):
             self.dir_clear_btn.setVisible(True)
             self.dir_select_btn.setVisible(False)
             self.primary_btn.setEnabled(False)
-            self.maskDirectoryChanged.emit(dir_path)
+            self.maskDirectoryChanged.emit(dir_path) if len(os.listdir(dir_path)) == 1 else self.maskDirectoryChanged.emit(os.path.join(dir_path, os.listdir(dir_path)[0]))
 
     def _on_clear_mask_dir(self):
         self.mask_dir_path = ""

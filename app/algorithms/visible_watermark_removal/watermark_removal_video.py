@@ -224,7 +224,7 @@ class VideoWatermarkRemover:
                     self._save_mask_visualization(
                         img_path=str(frame_file),
                         mask=cv2.imread(tmp_mask_path, cv2.IMREAD_GRAYSCALE),
-                        file_path=os.path.join(tmp_visualzation_path, os.path.basename(tmp_mask_path))
+                        file_path=os.path.join(tmp_visualzation_path, os.path.basename(str(frame_file)))
                     )
                 output_video_tmp_path = "{0}_mask_visualization.mp4".format(output_video_path.rsplit(".", 1)[0])
                 self._merge_processed_frames(
