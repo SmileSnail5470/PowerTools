@@ -2,37 +2,6 @@ import numpy as np
 import cv2
 
 
-def preprocess_cpu(
-    image: np.ndarray, is_bgr: bool = True
-) -> np.ndarray:
-    """
-    CPU preprocessing: replicates the CUDA kernel logic.
-
-    Args:
-        image: HWC uint8 image (height, width, 3)
-        is_bgr: True if input is BGR (OpenCV default), False if RGB
-
-    Returns:
-        CHW float32 array (1, 3, H, W) normalized by (val - 127.5) / 127.5
-    """
-    h, w = image.shape[:2]
-
-    if is_bgr:
-        b = (image[:, :, 0].astype(np.float32) - 127.5) / 127.5
-        g = (image[:, :, 1].astype(np.float32) - 127.5) / 127.5
-        r = (image[:, :, 2].astype(np.float32) - 127.5) / 127.5
-    else:
-        r = (image[:, :, 0].astype(np.float32) - 127.5) / 127.5
-        g = (image[:, :, 1].astype(np.float32) - 127.5) / 127.5
-        b = (image[:, :, 2].astype(np.float32) - 127.5) / 127.5
-
-    # CHW layout
-    output = np.stack([r, g, b], axis=0).astype(np.float32)
-    # Add batch dimension -> (1, 3, H, W)
-    output = output[np.newaxis, :, :, :]
-    return output
-
-
 def preprocess_opencv(
     image: np.ndarray, target_size: tuple = (1008, 1008)
 ) -> np.ndarray:
