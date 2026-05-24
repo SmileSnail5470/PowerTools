@@ -6,6 +6,7 @@ from PySide6.QtCore import QThreadPool, QObject, Signal
 from app.controllers.worker import Worker
 from app.controllers.task_future import TaskFuture
 from app.utils.logger.decorators import log_function_call, log_exception
+from app.ui.common.config import cfg
 
 
 class TaskManager(QObject):
@@ -134,4 +135,4 @@ class TaskManager(QObject):
             self.pool.clear()
 
 
-global_task_manager = TaskManager()
+global_task_manager = TaskManager(max_workers=int(cfg.get(cfg.taskParallelNumber)))

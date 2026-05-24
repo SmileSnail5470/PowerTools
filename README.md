@@ -59,21 +59,26 @@
 3. 按上表完成安装或解压  
 4. 在解压目录中，双击启动 PowerTools
 
-下载 [`ffmpeg`程序](https://www.ffmpeg.org/download.html)，在软件的设置页面设置【ffmpeg路径】为`ffmpeg`可执行文件所在的路径目录。例如设置`../ffmpeg/bin` 路径。
+下载 [`ffmpeg`](https://github.com/BtbN/FFmpeg-Builds/releases)，**下载包体积最大的**。在软件的设置页面设置【ffmpeg路径】为`ffmpeg`可执行文件所在的路径目录。例如设置`../ffmpeg/bin` 路径。
 
 **可选步骤（也可在设置页面开启对应功能，会自动下载模型文件，需要科学上网才可以下载）：**
 - 下载 [OCR 模型](https://drive.google.com/file/d/1PNEJ8UXyqxEbwDDq2CpnU5lTa0bUUGgo/view?usp=sharing)
 - 下载 [去水印模型](https://drive.google.com/file/d/1ulNiQo8G0XHiSP4gV7Hk-ng4XCJSvTlL/view?usp=sharing)
 - 下载 [盲水印添加模型](https://drive.google.com/file/d/1HgJzhcWxvhy2_QhbVFow6Z84yTRftgzL/view?usp=sharing)
+- 下载 [物体分割模型]()
 
 下载完解压后，启动软件，导航到设置界面，设置【AI模型依赖路径】为解压后的路径父目录。例如下面的 `../deps` 目录下的结构是
 ```bash
-.
-├── blind_watermark_addition
-├── ocr
-└── visible_watermark_removal
+├─blind_watermark_addition
+├─ocr
+├─segment
+└─visible_watermark_removal
 ```
 ![AI 模型依赖路径设置示例](docs/screenshots/models_path.png)
+
+### 配置 GPU 环境（可选）
+- 安装 [cuda 12.x 版本](https://developer.nvidia.com/cuda/toolkit) + [cudnn 9.x](https://developer.nvidia.com/cudnn) 版本
+- ***CUDA bin*** 目录 和 ***cuDNN bin*** 目录 需要添加到系统的 ***PATH*** 环境变量中
 
 ---
 

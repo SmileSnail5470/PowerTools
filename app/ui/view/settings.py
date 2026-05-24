@@ -44,7 +44,7 @@ models_deps_urls = {
         "sha256": None
     },
     "segment": {
-        "url": "",
+        "url": "1k9ik2t755Adq4j2CIQ6D8byPWBjmZE1E",
         "sha256": None
     }
 }
@@ -892,6 +892,19 @@ class Settings(QWidget):
         log_level_card.addWidget(log_level_combox, stretch=0)
         log_level_card.setSeparatorVisible(True)
         performance_settings_cards.append(log_level_card)
+
+        task_parallel_number_combox = ComboBox()
+        current_number = int(cfg.get(cfg.taskParallelNumber))
+        setFont(task_parallel_number_combox, 14)
+        task_parallel_number_combox.addItems([str(n) for n in [1, 2, 4, 8, 16]])
+        task_parallel_number_combox.currentTextChanged.connect(lambda number: setattr(cfg.taskParallelNumber, "value", int(number)))
+        index = task_parallel_number_combox.findText(str(current_number))
+        if index >= 0:
+            task_parallel_number_combox.setCurrentIndex(index)
+        task_parallel_number_card = CustomCardGroupWidget(title=self.tr("任务并行数"), content=self.tr("设置任务并行执行数量（重启软件生效）"), parent=self)
+        task_parallel_number_card.addWidget(task_parallel_number_combox, stretch=0)
+        task_parallel_number_card.setSeparatorVisible(True)
+        performance_settings_cards.append(task_parallel_number_card)
 
         for card in performance_settings_cards:
             performance_settings.addCard(card=card)
