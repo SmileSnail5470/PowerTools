@@ -32,7 +32,7 @@ from app.utils.logger.decorators import log_exception, log_function_call
 
 models_deps_urls = {
     "visible_watermark_removal": {
-        "url": "1ulNiQo8G0XHiSP4gV7Hk",
+        "url": "1ulNiQo8G0XHiSP4gV7Hk-ng4XCJSvTlL",
         "sha256": None
     },
     "blind_watermark_addition": {

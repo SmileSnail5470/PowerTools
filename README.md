@@ -65,7 +65,7 @@
 - 下载 [OCR 模型](https://drive.google.com/file/d/1PNEJ8UXyqxEbwDDq2CpnU5lTa0bUUGgo/view?usp=sharing)
 - 下载 [去水印模型](https://drive.google.com/file/d/1ulNiQo8G0XHiSP4gV7Hk-ng4XCJSvTlL/view?usp=sharing)
 - 下载 [盲水印添加模型](https://drive.google.com/file/d/1HgJzhcWxvhy2_QhbVFow6Z84yTRftgzL/view?usp=sharing)
-- 下载 [物体分割模型]()
+- 下载 [物体分割模型](https://drive.google.com/file/d/1k9ik2t755Adq4j2CIQ6D8byPWBjmZE1E/view?usp=drive_link)
 
 下载完解压后，启动软件，导航到设置界面，设置【AI模型依赖路径】为解压后的路径父目录。例如下面的 `../deps` 目录下的结构是
 ```bash
