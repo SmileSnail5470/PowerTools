@@ -1,4 +1,5 @@
 import os
+import sys
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QStackedWidget, QHBoxLayout, QLabel, QLineEdit, QFileDialog, QStackedLayout
@@ -652,7 +653,7 @@ class OutputSettingsCard(HeaderCardWidget):
             self,
             "选择文件夹",
             "",
-            QFileDialog.Option.ShowDirsOnly
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog if sys.platform == "darwin" else QFileDialog.Option(0)
         )
         if directory:
             self.save_location_line_edit.setText(directory)

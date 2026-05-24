@@ -1,4 +1,5 @@
 import os
+import sys
 from PySide6.QtCore import Signal, Qt, QSize, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QFont, QColor
 from PySide6.QtWidgets import QVBoxLayout, QLabel, QFileDialog, QHBoxLayout, QPushButton, QGraphicsDropShadowEffect, QFrame, QWidget, QSizePolicy
@@ -68,7 +69,8 @@ class FileUploadWidget(SimpleCardWidget):
             self,
             "选择文件",
             "", 
-            "图片文件 (*.png *.jpg *.jpeg *.bmp *.avif *.webp);;视频文件 (*.mp4 *.avi *.mov *.mkv);;所有文件 (*)"
+            "图片文件 (*.png *.jpg *.jpeg *.bmp *.avif *.webp);;视频文件 (*.mp4 *.avi *.mov *.mkv);;所有文件 (*)",
+            options=QFileDialog.Option.DontUseNativeDialog if sys.platform == "darwin" else QFileDialog.Option(0)
         )
         if files:
             self.file_selected.emit(files)

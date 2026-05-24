@@ -30,6 +30,7 @@ class WatermarkRemoveWork(BaseWorker):
         if file_type is None:
             raise Exception("Not support file {0}".format(input_path.split(".")[-1]))
         onnx_model_dir = os.path.join(self.deps_path, "visible_watermark_removal")
+        segment_model_dir = os.path.join(self.deps_path, "segment")
         if file_type == "image":
             params = {
                 "image_path": input_path, 
@@ -43,10 +44,17 @@ class WatermarkRemoveWork(BaseWorker):
                 "grig_onnx_path": os.path.join(onnx_model_dir, "grig_inpaint.onnx"),
                 "text_detection_onnx_path": os.path.join(onnx_model_dir, "pp_ocr_det.onnx"),
                 "yolo_detection_onnx_path": os.path.join(onnx_model_dir, "yolo.onnx"),
-                "mask_path": kwargs["mask_path"] if "mask_path" in kwargs and kwargs["mask_path"] else "",
+                "segment_onnx_dir": segment_model_dir,
+                "mask_path": kwargs["manual_watermark_mask_path"] if "manual_watermark_mask_path" in kwargs and kwargs["manual_watermark_mask_path"] else "",
                 "refine_type": kwargs["model_name"],
-                "watermark_type": "all" if "watermark_content" in kwargs and kwargs["watermark_content"] == "通用水印" else "text",
+                "watermark_type": "all" if "watermark_content" in kwargs and kwargs["watermark_content"] == "general_watermark" else "text",
+                "ai_detect_type": kwargs["watermark_detect_type"],
+                "ai_interactive_type": kwargs["watermark_ai_interactive_type"] if "watermark_ai_interactive_type" in kwargs else "semantic_detect",
+                "ai_interactive_prompt": kwargs["watermark_detect_prompt"] if "watermark_detect_prompt" in kwargs else "watermark",
+                "ai_interactive_boxes": kwargs["watermark_boxes"] if "watermark_boxes" in kwargs else [],
+                "watermark_confidence": kwargs["watermark_confidence"] if "watermark_confidence" in kwargs else 0.5,
                 "dilate_num": int(kwargs["mask_dilate"]),
+                "process_cb": progress_cb,
             }
             self.watermark_remove_image_instance.run(**params)
         else:
@@ -62,12 +70,19 @@ class WatermarkRemoveWork(BaseWorker):
                 "grig_onnx_path": os.path.join(onnx_model_dir, "grig_inpaint.onnx"),
                 "text_detection_onnx_path": os.path.join(onnx_model_dir, "pp_ocr_det.onnx"),
                 "yolo_detection_onnx_path": os.path.join(onnx_model_dir, "yolo.onnx"),
-                "mask_path": kwargs["mask_path"] if "mask_path" in kwargs and kwargs["mask_path"] else "",
+                "segment_onnx_dir": segment_model_dir,
+                "mask_path": kwargs["manual_watermark_mask_path"] if "manual_watermark_mask_path" in kwargs and kwargs["manual_watermark_mask_path"] else "",
                 "image_refine_type": kwargs["model_name"],
-                "use_cache_mask": True if "watermark_format" in kwargs and kwargs["watermark_format"] == "静态水印" else False,
-                "watermark_type": "all" if "watermark_content" in kwargs and kwargs["watermark_content"] == "通用水印" else "text",
+                "use_cache_mask": True if "watermark_format" in kwargs and kwargs["watermark_format"] == "static_watermark" else False,
+                "watermark_type": "all" if "watermark_content" in kwargs and kwargs["watermark_content"] == "general_watermark" else "text",
+                "ai_detect_type": kwargs["watermark_detect_type"],
+                "ai_interactive_type": kwargs["watermark_ai_interactive_type"] if "watermark_ai_interactive_type" in kwargs else "semantic_detect",
+                "ai_interactive_prompt": kwargs["watermark_detect_prompt"] if "watermark_detect_prompt" in kwargs else "watermark",
+                "ai_interactive_boxes": kwargs["watermark_boxes"] if "watermark_boxes" in kwargs else [],
+                "watermark_confidence": kwargs["watermark_confidence"] if "watermark_confidence" in kwargs else 0.5,
                 "dilate_num": int(kwargs["mask_dilate"]),
-                "ffmpeg_path": os.getenv("POWERTOOLS_FFMPEG_BIN")
+                "ffmpeg_path": os.getenv("POWERTOOLS_FFMPEG_BIN"),
+                "process_cb": progress_cb,
             }
             self.watermark_remove_video_instance.process_video(**params)
         return output_file

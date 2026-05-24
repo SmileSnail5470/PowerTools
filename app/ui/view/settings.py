@@ -32,7 +32,7 @@ from app.utils.logger.decorators import log_exception, log_function_call
 
 models_deps_urls = {
     "visible_watermark_removal": {
-        "url": "1ulNiQo8G0XHiSP4gV7Hk",
+        "url": "1ulNiQo8G0XHiSP4gV7Hk-ng4XCJSvTlL",
         "sha256": None
     },
     "blind_watermark_addition": {
@@ -43,6 +43,10 @@ models_deps_urls = {
         "url": "1PNEJ8UXyqxEbwDDq2CpnU5lTa0bUUGgo",
         "sha256": None
     },
+    "segment": {
+        "url": "1k9ik2t755Adq4j2CIQ6D8byPWBjmZE1E",
+        "sha256": None
+    }
 }
 
 
@@ -571,7 +575,7 @@ class SoftwareCard(QFrame):
                 self,
                 "选择文件夹",
                 "",
-                QFileDialog.Option.ShowDirsOnly
+                QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog if sys.platform == "darwin" else QFileDialog.Option(0)
             )
             if directory:
                 self.path_input.setText(directory)
@@ -580,7 +584,8 @@ class SoftwareCard(QFrame):
                 self,
                 "选择文件",
                 "", 
-                "所有文件 (*)"
+                "所有文件 (*)",
+                options=QFileDialog.Option.DontUseNativeDialog if sys.platform == "darwin" else QFileDialog.Option(0)
             )
             if files:
                 self.path_input.setText(files)
@@ -822,6 +827,28 @@ class Settings(QWidget):
         watermark_removal_card.setSeparatorVisible(True)
         ai_settings_cards.append(watermark_removal_card)
 
+        object_segmentation_switch = ToggleSwitch()
+        self.ai_toggle_switchs.append(object_segmentation_switch)
+        object_segmentation_switch.setActive(cfg.get(cfg.localObjectSegmentationEnabled))
+        object_segmentation_switch.toggled.connect(lambda flag: setattr(cfg.localObjectSegmentationEnabled, "value", flag))
+        object_segmentation_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="object_segmentation")
+        try:
+            text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{object_segmentation_status.name}_status_info"]["text"]
+            color = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{object_segmentation_status.name}_status_info"]["color"]
+            object_segmentation_status.setLabel(text=text, color=color)
+        except Exception:
+            pass
+        self._bind_ai_toggle(
+            switch=object_segmentation_switch,
+            badge=object_segmentation_status,
+            local_ai_type="segment"
+        )
+        object_segmentation_card = CustomCardGroupWidget(title=self.tr("物体分割AI能力"), content=self.tr("智能分割图像中的物体"), parent=self)
+        object_segmentation_card.addWidget(object_segmentation_status, stretch=0)
+        object_segmentation_card.addWidget(object_segmentation_switch, stretch=0)
+        object_segmentation_card.setSeparatorVisible(True)
+        ai_settings_cards.append(object_segmentation_card)
+
         ocr_switch = ToggleSwitch()
         self.ai_toggle_switchs.append(ocr_switch)
         ocr_switch.setActive(cfg.get(cfg.localOCREnabled))
@@ -866,6 +893,19 @@ class Settings(QWidget):
         log_level_card.setSeparatorVisible(True)
         performance_settings_cards.append(log_level_card)
 
+        task_parallel_number_combox = ComboBox()
+        current_number = int(cfg.get(cfg.taskParallelNumber))
+        setFont(task_parallel_number_combox, 14)
+        task_parallel_number_combox.addItems([str(n) for n in [1, 2, 4, 8, 16]])
+        task_parallel_number_combox.currentTextChanged.connect(lambda number: setattr(cfg.taskParallelNumber, "value", int(number)))
+        index = task_parallel_number_combox.findText(str(current_number))
+        if index >= 0:
+            task_parallel_number_combox.setCurrentIndex(index)
+        task_parallel_number_card = CustomCardGroupWidget(title=self.tr("任务并行数"), content=self.tr("设置任务并行执行数量（重启软件生效）"), parent=self)
+        task_parallel_number_card.addWidget(task_parallel_number_combox, stretch=0)
+        task_parallel_number_card.setSeparatorVisible(True)
+        performance_settings_cards.append(task_parallel_number_card)
+
         for card in performance_settings_cards:
             performance_settings.addCard(card=card)
 
@@ -876,7 +916,7 @@ class Settings(QWidget):
             self,
             "选择文件夹",
             "",
-            QFileDialog.Option.ShowDirsOnly
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog if sys.platform == "darwin" else QFileDialog.Option(0)
         )
         if directory:
             widget.setText(directory)

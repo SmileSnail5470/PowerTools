@@ -68,8 +68,8 @@ class MainWindow(FluentWindow):
         self.addSubInterface(self.watermarkAddInterface, Icon.WATERMARK_ADD, self.tr("水印添加"), pos, parent=None)
         self.addSubInterface(self.watermarkRemoveInterface, Icon.WATERMARK_REMOVE, self.tr("水印移除"), pos, parent=None)
 
-        self.addSubInterface(self.screenshotInterface, Icon.SCREENSHOT, self.tr("屏幕截图"), pos, parent=None)
-        self.addSubInterface(self.scrollScreenshotInterface, Icon.LONG_SCREENSHOT, self.tr("滚动截图"), pos, parent=None)
+        # self.addSubInterface(self.screenshotInterface, Icon.SCREENSHOT, self.tr("屏幕截图"), pos, parent=None)
+        # self.addSubInterface(self.scrollScreenshotInterface, Icon.LONG_SCREENSHOT, self.tr("滚动截图"), pos, parent=None)
 
         self.addSubInterface(self.OCRInterface, Icon.OCR, self.tr("文字提取"), pos, parent=None)
 

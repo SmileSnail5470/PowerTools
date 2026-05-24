@@ -66,10 +66,12 @@ class Config(QConfig):
     localAIModelDeps = ConfigItem("LocalAISettings", "LocalAIModelDeps", default_deps_path, FolderValidator())
     localBlindWatermarkEnabled = ConfigItem("LocalAISettings", "LocalBlindWatermarkEnabled", False, BoolValidator())
     localWatermarkRemovalEnabled = ConfigItem("LocalAISettings", "LocalWatermarkRemovalEnabled", False, BoolValidator())
+    localObjectSegmentationEnabled = ConfigItem("LocalAISettings", "LocalObjectSegmentationEnabled", False, BoolValidator())
     localOCREnabled = ConfigItem("LocalAISettings", "localOCREnabled", False, BoolValidator())
 
     # 高级设置
     logLevel = OptionsConfigItem("AdvancedSettings", "LogLevel", "INFO", OptionsValidator(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]))
+    taskParallelNumber = OptionsConfigItem("AdvancedSettings", "TaskParallelNumber", 8, OptionsValidator([1, 2, 4, 8, 16]), restart=True)
 
     def __init__(self):
         super().__init__()

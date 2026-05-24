@@ -325,8 +325,8 @@ class Home(QWidget):
         cards_data = [
             ("💧", "水印添加", "为您的图片添加个性化水印，保护版权，提升品牌识别度。支持多种水印样式和自定义设置。", None, "watermark-add"),
             ("🧹", "水印移除", "智能识别并移除图片中的水印，还原图片原始状态。采用先进的AI算法，确保移除效果自然。", "AI驱动", "watermark-remove"),
-            ("📸", "屏幕截图", "快速截取屏幕内容，支持多种截图模式和编辑功能。内置强大的编辑工具，让截图更加专业。", None, "screenshot"),
-            ("📜", "滚动截图", "智能滚动并截取长页面内容，完美保存完整信息。自动识别滚动区域，无需手动操作。", None, "scroll-screenshot"),
+            # ("📸", "屏幕截图", "快速截取屏幕内容，支持多种截图模式和编辑功能。内置强大的编辑工具，让截图更加专业。", None, "screenshot"),
+            # ("📜", "滚动截图", "智能滚动并截取长页面内容，完美保存完整信息。自动识别滚动区域，无需手动操作。", None, "scroll-screenshot"),
             ("📝", "文字提取", "OCR智能识别图片中的文字，支持多语言高精度识别。先进的识别引擎，确保文字提取准确率。", None, "text-extract"),
             ("🎨", "图像编辑", "专业的图像编辑工具，满足您的各种创意需求。丰富的滤镜效果和编辑功能，让图片处理更加简单。", None, "image-edit")
         ]
@@ -334,8 +334,8 @@ class Home(QWidget):
         features_map = {
             'watermark-add': ['支持文字和图片水印', '自定义位置和透明度', '批量处理功能', '支持盲水印'],
             'watermark-remove': ['AI智能识别技术', '保持图片质量', '支持多种水印类型', '一键批量处理'],
-            'screenshot': ['区域截图和窗口截图', '内置编辑工具', '快捷键支持', '云同步功能'],
-            'scroll-screenshot': ['自动滚动检测', '智能拼接算法', '支持网页和文档', '高质量输出'],
+            # 'screenshot': ['区域截图和窗口截图', '内置编辑工具', '快捷键支持', '云同步功能'],
+            # 'scroll-screenshot': ['自动滚动检测', '智能拼接算法', '支持网页和文档', '高质量输出'],
             'text-extract': ['多语言支持', '高精度识别', '可编辑和导出', '表格识别功能'],
             'image-edit': ['丰富的滤镜效果', '图层编辑功能', '批量处理支持', 'AI智能优化']
         }
@@ -345,8 +345,8 @@ class Home(QWidget):
             card = FeatureCard(icon, title, desc, badge, card_type, features_map[card_type])
             card.clicked.connect(self.handle_card_click)
             self.cards.append(card)
-            row = i // 3
-            col = i % 3
+            row = i // 2
+            col = i % 2
             cards_layout.addWidget(card, row, col)
         
         features_layout.addWidget(cards_widget)
@@ -357,10 +357,10 @@ class Home(QWidget):
         card_index = {
             'watermark-add': 2,
             'watermark-remove': 3,
-            'screenshot': 4,
-            'scroll-screenshot': 5,
-            'text-extract': 6,
-            'image-edit': 7
+            # 'screenshot': 4,
+            # 'scroll-screenshot': 5,
+            'text-extract': 4,
+            'image-edit': 5
         }
         index = card_index.get(card_type, 0)
         self.window().stackedWidget.setCurrentIndex(index)

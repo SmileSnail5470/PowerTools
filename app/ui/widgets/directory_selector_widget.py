@@ -1,4 +1,5 @@
 import os
+import sys
 from PySide6.QtCore import Signal, Qt, QSize, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QFont, QColor
 from PySide6.QtWidgets import QVBoxLayout, QLabel, QFileDialog, QPushButton, QGraphicsDropShadowEffect, QFrame, QWidget, QHBoxLayout, QSizePolicy
@@ -67,7 +68,7 @@ class DirectoryUploadWidget(SimpleCardWidget):
             self,
             "选择文件夹",
             "",
-            QFileDialog.Option.ShowDirsOnly
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog if sys.platform == "darwin" else QFileDialog.Option(0)
         )
         if directory:
             self.directory_selected.emit([directory])

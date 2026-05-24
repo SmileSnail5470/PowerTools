@@ -1,6 +1,6 @@
 import platform
 import sys
-
+import os
 import cv2
 import numpy as np
 import onnxruntime as ort
@@ -12,6 +12,14 @@ class SLBRSegment():
         self.patch_size = 256
         self.overlap = 0
 
+    def _hash_cuda_gpu(self):
+        if platform.system() != "Windows":
+            return True
+        cuda_path = r"C:\Program Files\NVIDIA Corporation"
+        if os.path.exists(cuda_path):
+            return True
+        return False
+
     def _create_predictor(self):
         session_options = ort.SessionOptions()
         session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
@@ -20,7 +28,7 @@ class SLBRSegment():
         if is_apple_silicon:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
-        elif "CUDAExecutionProvider" in available:
+        elif "CUDAExecutionProvider" in available and self._hash_cuda_gpu():
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
             provider_options = [{}, {}]
         else:

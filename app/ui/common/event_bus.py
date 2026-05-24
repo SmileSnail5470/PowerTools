@@ -10,6 +10,7 @@ class GlobalEventBus(QObject):
     # 水印移除 UI
     watermarkRemove_InputFileUpdate = Signal(str)
     watermarkRemove_TaskFinished = Signal(str, str)
+    watermarkRemove_TaskProgress = Signal(str, str, str)
     watermarkRemove_PreviewFile = Signal(str)
     watermarkRemove_ImageNavigationInit = Signal()
     watermarkRemove_ManualMaskUpdate = Signal(str)

@@ -24,11 +24,11 @@ class Worker(QRunnable):
         try:
             self.future.set_state(TaskStatus.RUNNING.value)
 
-            def progress_cb(v: int):
+            def progress_cb(v: str, msg: str):
                 """进度回调函数"""
                 if self.future.cancelled_requested():
                     raise InterruptedError("Task was cancelled.")
-                self.future.set_progress(v)
+                self.future.set_progress(v, msg)
 
             # 执行任务函数
             result = self.func(

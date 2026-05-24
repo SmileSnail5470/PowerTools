@@ -1,6 +1,6 @@
 import platform
 import sys
-
+import os
 from PIL import Image
 import cv2
 import numpy as np
@@ -173,6 +173,14 @@ class YOLODetection():
     def __init__(self):
         pass
 
+    def _hash_cuda_gpu(self):
+        if platform.system() != "Windows":
+            return True
+        cuda_path = r"C:\Program Files\NVIDIA Corporation"
+        if os.path.exists(cuda_path):
+            return True
+        return False
+
     def _create_predictor(self, onnx_path):
         session_options = ort.SessionOptions()
         session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
@@ -181,7 +189,7 @@ class YOLODetection():
         if is_apple_silicon:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
-        elif "CUDAExecutionProvider" in available:
+        elif "CUDAExecutionProvider" in available and self._hash_cuda_gpu():
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
             provider_options = [{}, {}]
         else:
