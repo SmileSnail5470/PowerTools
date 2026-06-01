@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import scipy.ndimage
 from PIL import Image
-from app.algorithms.visible_watermark_removal.video_modules.propainter.propagation_transformer.run_propagation_transformer import ProPainterPipelineORT
+from app.algorithms.visible_watermark_removal.video_modules.propainter.propagation_transformer.run_propagation_transformer import PropagationTransformerORT
 from app.algorithms.visible_watermark_removal.video_modules.propainter.raft.run_raft import RAFTBiONNX
 from app.algorithms.visible_watermark_removal.video_modules.propainter.recurrent_flow_completion.run_flow_completion import RecurrentFlowCompleteORT
 
@@ -31,7 +31,7 @@ class ProPainterInferenceORT:
 
         self.raft_model = RAFTBiONNX(onnx_paths['raft'])
         self.fix_flow_complete = RecurrentFlowCompleteORT(onnx_dir=onnx_paths["recurrent_flow_complete"])
-        self.propainter_pipeline = ProPainterPipelineORT(onnx_paths["propainter"])
+        self.propainter_pipeline = PropagationTransformerORT(onnx_paths["propainter"])
 
     def _imwrite(self, bgr_img, file_path, params=None):
         dir_name = os.path.abspath(os.path.dirname(file_path))
@@ -267,7 +267,7 @@ if __name__ == "__main__":
     masks_dir = os.path.join(r"", "inputs", "HQVI", "NegAnnotations", "480p", "house")
     output_dir = os.path.join(r"", "outputs_onnx")
 
-    pipeline = ProPainterInferenceORT(
+    pipeline = PropagationTransformerORT(
         onnx_paths=ONNX_PATHS,
         resize_ratio=1.0,
         height=-1,

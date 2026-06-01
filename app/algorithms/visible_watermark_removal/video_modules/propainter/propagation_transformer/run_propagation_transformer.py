@@ -46,7 +46,7 @@ def max_pool2d_numpy(x, kernel_size=(7, 7), stride=(3, 3), padding=(3, 3)):
     return out
 
 
-class ProPainterPipelineORT:
+class PropagationTransformerORT:
     def __init__(self, onnx_paths):
         self.depths = 8
         self.window_size = (5, 9)
