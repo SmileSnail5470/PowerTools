@@ -6,11 +6,11 @@ import numpy as np
 import onnxruntime as ort
 from app.algorithms import ORTEnvironment
 ORTEnvironment.initialize()
-from app.algorithms.visible_watermark_removal.video_modules.propainter.propagation_transformer.bidirectional_propagation import BidirectionalPropagationORT, ImgPropStepORT
-from app.algorithms.visible_watermark_removal.video_modules.propainter.propagation_transformer.decoder import DecoderORT
-from app.algorithms.visible_watermark_removal.video_modules.propainter.propagation_transformer.encoder import EncoderORT
-from app.algorithms.visible_watermark_removal.video_modules.propainter.propagation_transformer.soft_split_comp import SoftSplitORT, SoftCompORT
-from app.algorithms.visible_watermark_removal.video_modules.propainter.propagation_transformer.transformer_block import TemporalSparseTransformerBlockORT
+from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_transformer.bidirectional_propagation import BidirectionalPropagationORT, ImgPropStepORT
+from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_transformer.decoder import DecoderORT
+from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_transformer.encoder import EncoderORT
+from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_transformer.soft_split_comp import SoftSplitORT, SoftCompORT
+from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_transformer.transformer_block import TemporalSparseTransformerBlockORT
 
 
 def interpolate_numpy(x, scale_factor, mode='bilinear'):

@@ -3,12 +3,12 @@ import cv2
 import numpy as np
 import scipy.ndimage
 from PIL import Image
-from app.algorithms.visible_watermark_removal.video_modules.propainter.propagation_transformer.run_propagation_transformer import PropagationTransformerORT
-from app.algorithms.visible_watermark_removal.video_modules.propainter.raft.run_raft import RAFTBiONNX
-from app.algorithms.visible_watermark_removal.video_modules.propainter.recurrent_flow_completion.run_flow_completion import RecurrentFlowCompleteORT
+from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_transformer.run_propagation_transformer import PropagationTransformerORT
+from app.algorithms.visible_watermark_removal.video_modules.ppt.raft.run_raft import RAFTBiONNX
+from app.algorithms.visible_watermark_removal.video_modules.ppt.recurrent_flow_completion.run_flow_completion import RecurrentFlowCompleteORT
 
 
-class ProPainterInferenceORT:
+class pptInferenceORT:
     def __init__(
             self, 
             onnx_paths,
@@ -31,7 +31,7 @@ class ProPainterInferenceORT:
 
         self.raft_model = RAFTBiONNX(onnx_paths['raft'])
         self.fix_flow_complete = RecurrentFlowCompleteORT(onnx_dir=onnx_paths["recurrent_flow_complete"])
-        self.propainter_pipeline = PropagationTransformerORT(onnx_paths["propainter"])
+        self.ppt_pipeline = PropagationTransformerORT(onnx_paths["ppt"])
 
     def _imwrite(self, bgr_img, file_path, params=None):
         dir_name = os.path.abspath(os.path.dirname(file_path))
@@ -180,7 +180,7 @@ class ProPainterInferenceORT:
                 pad_len_s = max(0, f) - s_f
                 pad_len_e = e_f - min(video_length, f + subvideo_length_img_prop)
                 sub_flows_bi = (pred_flows_bi[0][:, s_f:e_f-1], pred_flows_bi[1][:, s_f:e_f-1])
-                prop_imgs_sub, updated_local_masks_sub = self.propainter_pipeline.img_propagation(
+                prop_imgs_sub, updated_local_masks_sub = self.ppt_pipeline.img_propagation(
                     masked_frames_np[:, s_f:e_f], sub_flows_bi, masks_dilated_np[:, s_f:e_f]
                 )
                 updated_frames_sub = frames_np[:, s_f:e_f] * (1.0 - masks_dilated_np[:, s_f:e_f]) + prop_imgs_sub * masks_dilated_np[:, s_f:e_f]
@@ -191,7 +191,7 @@ class ProPainterInferenceORT:
             updated_frames = np.concatenate(updated_frames_list, axis=1)
             updated_masks = np.concatenate(updated_masks_list, axis=1)
         else:
-            prop_imgs, updated_local_masks = self.propainter_pipeline.img_propagation(masked_frames_np, pred_flows_bi, masks_dilated_np)
+            prop_imgs, updated_local_masks = self.ppt_pipeline.img_propagation(masked_frames_np, pred_flows_bi, masks_dilated_np)
             updated_frames = frames_np * (1.0 - masks_dilated_np) + prop_imgs * masks_dilated_np
             updated_masks = updated_local_masks
         if debug:
@@ -209,7 +209,7 @@ class ProPainterInferenceORT:
             selected_update_masks = updated_masks[:, neighbor_ids + ref_ids, ...]
             selected_pred_flows_bi = (pred_flows_bi[0][:, neighbor_ids[:-1], ...], pred_flows_bi[1][:, neighbor_ids[:-1], ...])
             l_t = len(neighbor_ids)
-            pred_img = self.propainter_pipeline.forward(
+            pred_img = self.ppt_pipeline.forward(
                 selected_imgs, selected_pred_flows_bi[0], selected_pred_flows_bi[1],
                 selected_masks, selected_update_masks, num_local_frames=l_t
             )
@@ -239,26 +239,26 @@ if __name__ == "__main__":
     import time
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
     ONNX_PATHS = {
-        'raft': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', 'raft', 'raft_iter20.onnx'),
-        'recurrent_flow_complete': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', 'recurrent_flow_completion'),
-        "propainter":{
-            'encoder': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', "propagation_transformer", "encoder.onnx"),
-            'decoder': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', "propagation_transformer", "decoder.onnx"),
-            "image_prop_step": os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', "propagation_transformer", "img_prop_step.onnx"),
-            'ss': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', "propagation_transformer", "soft_split.onnx"),
-            'sc': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', "propagation_transformer", "soft_comp.onnx"),
-            'bp_backward_step': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', "propagation_transformer", "backward_step.onnx"),
-            'bp_forward_step': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', "propagation_transformer", "forward_step.onnx"),
-            'bp_backward_first': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', "propagation_transformer", "backward_first.onnx"),
-            'bp_forward_first': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', "propagation_transformer", "forward_first.onnx"),
-            'bp_fusion': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', "propagation_transformer", "fusion.onnx"),
+        'raft': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', 'raft', 'raft_iter20.onnx'),
+        'recurrent_flow_complete': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', 'recurrent_flow_completion'),
+        "ppt":{
+            'encoder': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "encoder.onnx"),
+            'decoder': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "decoder.onnx"),
+            "image_prop_step": os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "img_prop_step.onnx"),
+            'ss': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "soft_split.onnx"),
+            'sc': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "soft_comp.onnx"),
+            'bp_backward_step': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "backward_step.onnx"),
+            'bp_forward_step': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "forward_step.onnx"),
+            'bp_backward_first': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "backward_first.onnx"),
+            'bp_forward_first': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "forward_first.onnx"),
+            'bp_fusion': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "fusion.onnx"),
             'transformer': {
-                'core': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', 'propagation_transformer', f"attention_{i}_core.onnx") for i in range(8)],
-                'attn': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', 'propagation_transformer', f"attention_{i}_comp.onnx") for i in range(8)],
-                'proj': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', 'propagation_transformer', f"output_{i}_proj.onnx") for i in range(8)],
-                'norm1': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', 'propagation_transformer', f"norm1_{i}_comp.onnx") for i in range(8)],
-                'norm2': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', 'propagation_transformer', f"norm2_{i}_comp.onnx") for i in range(8)],
-                'mlp': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'propainter', 'propagation_transformer', f"mlp_{i}_comp.onnx") for i in range(8)],
+                'core': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', 'propagation_transformer', f"attention_{i}_core.onnx") for i in range(8)],
+                'attn': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', 'propagation_transformer', f"attention_{i}_comp.onnx") for i in range(8)],
+                'proj': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', 'propagation_transformer', f"output_{i}_proj.onnx") for i in range(8)],
+                'norm1': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', 'propagation_transformer', f"norm1_{i}_comp.onnx") for i in range(8)],
+                'norm2': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', 'propagation_transformer', f"norm2_{i}_comp.onnx") for i in range(8)],
+                'mlp': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', 'propagation_transformer', f"mlp_{i}_comp.onnx") for i in range(8)],
             }
         }
     }
@@ -267,7 +267,7 @@ if __name__ == "__main__":
     masks_dir = os.path.join(r"", "inputs", "HQVI", "NegAnnotations", "480p", "house")
     output_dir = os.path.join(r"", "outputs_onnx")
 
-    pipeline = PropagationTransformerORT(
+    pipeline = pptInferenceORT(
         onnx_paths=ONNX_PATHS,
         resize_ratio=1.0,
         height=-1,

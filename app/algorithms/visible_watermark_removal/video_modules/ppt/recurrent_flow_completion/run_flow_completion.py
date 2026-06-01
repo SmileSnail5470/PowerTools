@@ -5,9 +5,9 @@ import numpy as np
 import onnxruntime as ort
 from app.algorithms import ORTEnvironment
 ORTEnvironment.initialize()
-from app.algorithms.visible_watermark_removal.video_modules.propainter.recurrent_flow_completion.encoder import EncoderORT
-from app.algorithms.visible_watermark_removal.video_modules.propainter.recurrent_flow_completion.decoder import DecoderORT
-from app.algorithms.visible_watermark_removal.video_modules.propainter.recurrent_flow_completion.bidirectional_propagation import BidirectionalPropagationORT
+from app.algorithms.visible_watermark_removal.video_modules.ppt.recurrent_flow_completion.encoder import EncoderORT
+from app.algorithms.visible_watermark_removal.video_modules.ppt.recurrent_flow_completion.decoder import DecoderORT
+from app.algorithms.visible_watermark_removal.video_modules.ppt.recurrent_flow_completion.bidirectional_propagation import BidirectionalPropagationORT
 
 
 class RecurrentFlowCompleteORT:
