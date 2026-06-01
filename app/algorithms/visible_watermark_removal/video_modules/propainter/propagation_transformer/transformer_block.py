@@ -105,14 +105,6 @@ class TemporalSparseTransformerBlockORT:
         self.norm2_layers = None
         self.mlp_layers = None
 
-    def clear_layer_session(self, i):
-        self.core_layers[i] = None
-        self.attn_layers[i] = None
-        self.proj_layers[i] = None
-        self.norm1_layers[i] = None
-        self.norm2_layers[i] = None
-        self.mlp_layers[i] = None
-
     def _numpy_max_pool2d_and_sum(self, mask, new_h, new_w, n_wh, n_ww):
         B, T, H, W, _ = mask.shape
         pad_h = new_h - H
@@ -193,5 +185,4 @@ class TemporalSparseTransformerBlockORT:
             mlp_out = self.mlp_layers[i](norm_y.reshape(B, T * H * W, C), enc_feat)
             x = shortcut_mlp + mlp_out.reshape(B, T, H, W, C)
             del win_q, win_k, win_v, norm_x, norm_y, att_x, mlp_out
-            self.clear_layer_session(i)
         return x

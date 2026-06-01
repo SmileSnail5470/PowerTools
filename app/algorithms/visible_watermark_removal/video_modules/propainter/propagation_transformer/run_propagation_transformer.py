@@ -4,6 +4,8 @@ import sys
 import cv2
 import numpy as np
 import onnxruntime as ort
+from app.algorithms import ORTEnvironment
+ORTEnvironment.initialize()
 from app.algorithms.visible_watermark_removal.video_modules.propainter.propagation_transformer.bidirectional_propagation import BidirectionalPropagationORT, ImgPropStepORT
 from app.algorithms.visible_watermark_removal.video_modules.propainter.propagation_transformer.decoder import DecoderORT
 from app.algorithms.visible_watermark_removal.video_modules.propainter.propagation_transformer.encoder import EncoderORT
@@ -54,7 +56,8 @@ class ProPainterPipelineORT:
 
     def _get_session_options(self) -> ort.SessionOptions:
         opts = ort.SessionOptions()
-        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
+        opts.add_session_config_entry("session.use_env_allocators", "1")
+        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         return opts
 
     def _get_providers(self):

@@ -263,9 +263,9 @@ if __name__ == "__main__":
         }
     }
 
-    input_dir = os.path.join("", "inputs", "HQVI", "JPEGImages", "480p", "house")
-    masks_dir = os.path.join("", "inputs", "HQVI", "NegAnnotations", "480p", "house")
-    output_dir = os.path.join("", "outputs_onnx")
+    input_dir = os.path.join(r"", "inputs", "HQVI", "JPEGImages", "480p", "house")
+    masks_dir = os.path.join(r"", "inputs", "HQVI", "NegAnnotations", "480p", "house")
+    output_dir = os.path.join(r"", "outputs_onnx")
 
     pipeline = ProPainterInferenceORT(
         onnx_paths=ONNX_PATHS,

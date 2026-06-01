@@ -3,6 +3,8 @@ import platform
 import sys
 import numpy as np
 import onnxruntime as ort
+from app.algorithms import ORTEnvironment
+ORTEnvironment.initialize()
 
 
 class RAFTBiONNX:
@@ -13,6 +15,7 @@ class RAFTBiONNX:
 
     def _get_session_options(self):
         opts = ort.SessionOptions()
+        opts.add_session_config_entry("session.use_env_allocators", "1")
         opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         return opts
 

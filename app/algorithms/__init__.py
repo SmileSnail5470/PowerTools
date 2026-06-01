@@ -1,7 +1,19 @@
-from pathlib import Path
+import threading
+import onnxruntime as ort
 
-# 所有算法实现（含二进制/脚本/模型文件）的根目录
-ALGORITHMS_ROOT = Path(__file__).resolve().parent
 
-__all__ = ["ALGORITHMS_ROOT"]
+class ORTEnvironment:
+    _initialized = False
+    _lock = threading.Lock()
+
+    @classmethod
+    def initialize(cls):
+        if cls._initialized:
+            return
+        with cls._lock:
+            if cls._initialized:
+                return
+            info = ort.OrtMemoryInfo("Cpu", ort.OrtAllocatorType.ORT_ARENA_ALLOCATOR, 0, ort.OrtMemType.DEFAULT,)
+            ort.create_and_register_allocator(info, None)
+            cls._initialized = True
 

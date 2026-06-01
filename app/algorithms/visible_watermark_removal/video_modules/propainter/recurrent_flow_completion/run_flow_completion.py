@@ -3,6 +3,8 @@ import platform
 import sys
 import numpy as np
 import onnxruntime as ort
+from app.algorithms import ORTEnvironment
+ORTEnvironment.initialize()
 from app.algorithms.visible_watermark_removal.video_modules.propainter.recurrent_flow_completion.encoder import EncoderORT
 from app.algorithms.visible_watermark_removal.video_modules.propainter.recurrent_flow_completion.decoder import DecoderORT
 from app.algorithms.visible_watermark_removal.video_modules.propainter.recurrent_flow_completion.bidirectional_propagation import BidirectionalPropagationORT
@@ -18,6 +20,7 @@ class RecurrentFlowCompleteORT:
 
     def _get_session_options(self):
         opts = ort.SessionOptions()
+        opts.add_session_config_entry("session.use_env_allocators", "1")
         opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         return opts
 
