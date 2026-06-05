@@ -1,9 +1,9 @@
 import os
 import sys
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
 from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QLabel, QHBoxLayout, QStackedWidget, QLineEdit, QFileDialog, QStackedLayout, 
-    QSlider
+    QSlider, QButtonGroup, QPushButton
 )
 from PySide6.QtGui import QFont, QColor, QAction
 
@@ -191,58 +191,174 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
-
         self.viewLayout.setContentsMargins(10, 10, 10, 10)
         self.viewLayout.addLayout(main_layout)
 
-        self.cards: list[StyleCard] = []
+        tab_widget = QWidget()
+        tab_layout = QHBoxLayout(tab_widget)
+        tab_layout.setContentsMargins(4, 4, 4, 4)
+        tab_layout.setSpacing(4)
+        tab_widget.setStyleSheet("""
+            QWidget {
+                background-color: #f1f5f9;
+                border-radius: 8px;
+            }
+            QPushButton {
+                background-color: transparent;
+                color: #7f8c8d;
+                padding: 6px 0;
+                border-radius: 6px;
+                border: none;
+            }
+            QPushButton:hover {
+                color: #2c3e50;
+                background-color: rgba(255, 255, 255, 0.4);
+            }
+            QPushButton:checked {
+                background-color: #ffffff;
+                color: #3498db;
+                border: 1px solid rgba(0, 0, 0, 0.03);
+            }
+        """)
+        self.tab_group = QButtonGroup(self)
+        self.tab_group.setExclusive(True)
+        self.tab_image = QPushButton(self.tr("图片模型"))
+        setFont(self.tab_image, fontSize=14, weight=QFont.DemiBold)
+        self.tab_image.setCheckable(True)
+        self.tab_image.setChecked(True)
+        self.tab_video = QPushButton(self.tr("视频模型"))
+        setFont(self.tab_video, fontSize=14, weight=QFont.DemiBold)
+        self.tab_video.setCheckable(True)
+        self.tab_group.addButton(self.tab_image, 0)
+        self.tab_group.addButton(self.tab_video, 1)
+        tab_layout.addWidget(self.tab_image)
+        tab_layout.addWidget(self.tab_video)
+        main_layout.addWidget(tab_widget)
+
+        self.stacked_widget = QStackedWidget()
+        main_layout.addWidget(self.stacked_widget)
+
+        self.all_cards: list[StyleCard] = []
+
+        image_container = QWidget()
+        image_layout = QVBoxLayout(image_container)
+        image_layout.setContentsMargins(0, 6, 0, 6)
+        image_layout.setSpacing(0)
+
         patchwiper_card = StyleCard("#4facfe", self.tr("细节增强"), self.tr("智能重建细节，提升清晰度，速度慢"))
         patchwiper_card.set_name("patchwiper")
-        self.cards.append(patchwiper_card)
-        main_layout.addWidget(patchwiper_card)
-        main_layout.addWidget(CardSeparator(self))
+        image_layout.addWidget(patchwiper_card)
+        image_layout.addWidget(CardSeparator(self))
 
         emdf_card = StyleCard("#f093fb", self.tr("智能修补"), self.tr("效果稳定，可能丢失细节，速度稍慢"))
         emdf_card.set_name("emdf")
-        self.cards.append(emdf_card)
-        main_layout.addWidget(emdf_card)
-        main_layout.addWidget(CardSeparator(self))
+        image_layout.addWidget(emdf_card)
+        image_layout.addWidget(CardSeparator(self))
 
         grig_card = StyleCard("#a18cd1", self.tr("平衡修复"), self.tr("结构保持好，可能丢失细节，速度快"))
         grig_card.set_name("grig")
-        self.cards.append(grig_card)
-        main_layout.addWidget(grig_card)
-        main_layout.addWidget(CardSeparator(self))
+        image_layout.addWidget(grig_card)
+        image_layout.addWidget(CardSeparator(self))
 
         lama_card = StyleCard("#84fab0", self.tr("自然保守"), self.tr("画面衔接自然，可能丢失细节，速度适中"))
         lama_card.set_name("lama")
-        self.cards.append(lama_card)
-        main_layout.addWidget(lama_card)
-        main_layout.addWidget(CardSeparator(self))
+        image_layout.addWidget(lama_card)
+        image_layout.addWidget(CardSeparator(self))
 
         coordfill_card = StyleCard("#fbc2eb", self.tr("快速填充"), self.tr("细节表现一般，适合简单背景，速度极快"))
         coordfill_card.set_name("coordfill")
-        self.cards.append(coordfill_card)
-        main_layout.addWidget(coordfill_card)
-        main_layout.addWidget(CardSeparator(self))
+        image_layout.addWidget(coordfill_card)
+        
+        image_layout.addStretch()
+        self.stacked_widget.addWidget(image_container)
+        
+        self.image_cards = [patchwiper_card, emdf_card, grig_card, lama_card, coordfill_card]
+        self.all_cards.extend(self.image_cards)
+
+        video_container = QWidget()
+        video_layout = QVBoxLayout(video_container)
+        video_layout.setContentsMargins(0, 6, 0, 6)
+        video_layout.setSpacing(0)
+
+        video_seq_card = StyleCard("#9b59b6", self.tr("视频时序级擦除"), self.tr("跨帧追踪锁定，无闪烁，适合复杂动态视频"))
+        video_seq_card.set_name("ppt")
+        video_layout.addWidget(video_seq_card)
+        
+        video_layout.addStretch()
+        self.stacked_widget.addWidget(video_container)
+        
+        self.video_cards = [video_seq_card]
+        self.all_cards.extend(self.video_cards)
+
+        self.tab_image.toggled.connect(lambda checked: self.on_tab_changed(0, checked))
+        self.tab_video.toggled.connect(lambda checked: self.on_tab_changed(1, checked))
+
+        for card in self.all_cards:
+            card.mousePressEvent = lambda event, c=card: self.on_card_clicked(c)
 
         patchwiper_card.set_selected(True)
-        for i, card in enumerate(self.cards):
-            card.mousePressEvent = lambda event, c=card, idx=i: self.on_card_clicked(c, idx)
 
         bind_widget_to_param(self, "model_name", watermark_remove_params, "model_name", transform=None)
         self.model_name.emit("patchwiper")
 
+        global_event_bus.watermarkRemove_InputFileUpdate.connect(lambda file_path: self.update_default_models(file_path=file_path))
+
         main_layout.addStretch()
 
-    def on_card_clicked(self, card, index):
-        # 取消所有卡片的选中状态
-        for c in self.cards:
+    def on_tab_changed(self, index, checked):
+        if not checked:
+            return
+        self.stacked_widget.setCurrentIndex(index)
+        target_pool = self.image_cards if index == 0 else self.video_cards
+        if target_pool:
+            self.on_card_clicked(target_pool[0])
+        content_height = self.get_current_page_height(index)
+        extra_height = 114  # tabs + spacing + margins
+        target_height = content_height + extra_height
+        self.animate_height_change(target_height)
+
+    def on_card_clicked(self, clicked_card):
+        current_index = self.stacked_widget.currentIndex()
+        active_pool = self.image_cards if current_index == 0 else self.video_cards
+        for c in active_pool:
             c.set_selected(False)
-        
-        # 设置当前卡片为选中状态
-        card.set_selected(True)
-        self.model_name.emit(card.get_name())
+        clicked_card.set_selected(True)
+        self.model_name.emit(clicked_card.get_name())
+
+    def update_default_models(self, file_path):
+        if not file_path:
+            self.tab_image.setEnabled(True)
+            self.tab_video.setEnabled(True)
+            return
+        if os.path.isfile(file_path):
+            file_type = get_file_type(file_path)
+        else:
+            file_type = get_file_type(os.path.join(file_path, os.listdir(file_path)[0]))
+        if file_type == "image":
+            self.tab_image.setEnabled(True)
+            self.tab_video.setEnabled(False)
+            self.on_tab_changed(index=0, checked=True)
+        elif file_type == "video":
+            self.tab_image.setEnabled(True)
+            self.tab_video.setEnabled(True)
+            self.on_tab_changed(index=1, checked=True)
+        else:
+            self.tab_image.setEnabled(True)
+            self.tab_video.setEnabled(True)
+
+    def animate_height_change(self, target_height: int):
+        start_height = self.height()
+        self.height_anim = QPropertyAnimation(self, b"maximumHeight")
+        self.height_anim.setDuration(250)
+        self.height_anim.setStartValue(start_height)
+        self.height_anim.setEndValue(target_height)
+        self.height_anim.setEasingCurve(QEasingCurve.OutCubic)
+        self.height_anim.start()
+
+    def get_current_page_height(self, index: int):
+        widget = self.stacked_widget.widget(index)
+        widget.adjustSize()
+        return widget.sizeHint().height()
 
     
 class OutputSettingsCard(HeaderCardWidget):

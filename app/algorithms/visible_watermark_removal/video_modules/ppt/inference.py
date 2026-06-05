@@ -1,5 +1,6 @@
 import os
 import cv2
+import time
 import numpy as np
 import scipy.ndimage
 from PIL import Image
@@ -8,7 +9,7 @@ from app.algorithms.visible_watermark_removal.video_modules.ppt.raft.run_raft im
 from app.algorithms.visible_watermark_removal.video_modules.ppt.recurrent_flow_completion.run_flow_completion import RecurrentFlowCompleteORT
 
 
-class pptInferenceORT:
+class PPTInferenceORT:
     def __init__(
             self, 
             onnx_paths,
@@ -231,52 +232,5 @@ class pptInferenceORT:
             f = comp_frames[idx]
             f = cv2.resize(f, out_size, interpolation=cv2.INTER_CUBIC)
             f = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
-            img_save_root = os.path.join(output_dir, 'frames', str(idx).zfill(4) + '.png')
+            img_save_root = os.path.join(output_dir, 'frames', str(idx).zfill(6) + '.png')
             self._imwrite(f, img_save_root)
-
-
-if __name__ == "__main__":
-    import time
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
-    ONNX_PATHS = {
-        'raft': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', 'raft', 'raft_iter20.onnx'),
-        'recurrent_flow_complete': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', 'recurrent_flow_completion'),
-        "ppt":{
-            'encoder': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "encoder.onnx"),
-            'decoder': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "decoder.onnx"),
-            "image_prop_step": os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "img_prop_step.onnx"),
-            'ss': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "soft_split.onnx"),
-            'sc': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "soft_comp.onnx"),
-            'bp_backward_step': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "backward_step.onnx"),
-            'bp_forward_step': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "forward_step.onnx"),
-            'bp_backward_first': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "backward_first.onnx"),
-            'bp_forward_first': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "forward_first.onnx"),
-            'bp_fusion': os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', "propagation_transformer", "fusion.onnx"),
-            'transformer': {
-                'core': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', 'propagation_transformer', f"attention_{i}_core.onnx") for i in range(8)],
-                'attn': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', 'propagation_transformer', f"attention_{i}_comp.onnx") for i in range(8)],
-                'proj': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', 'propagation_transformer', f"output_{i}_proj.onnx") for i in range(8)],
-                'norm1': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', 'propagation_transformer', f"norm1_{i}_comp.onnx") for i in range(8)],
-                'norm2': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', 'propagation_transformer', f"norm2_{i}_comp.onnx") for i in range(8)],
-                'mlp': [os.path.join(project_root, 'resources', 'deps', 'video_inpainting', 'ppt', 'propagation_transformer', f"mlp_{i}_comp.onnx") for i in range(8)],
-            }
-        }
-    }
-
-    input_dir = os.path.join(r"", "inputs", "HQVI", "JPEGImages", "480p", "house")
-    masks_dir = os.path.join(r"", "inputs", "HQVI", "NegAnnotations", "480p", "house")
-    output_dir = os.path.join(r"", "outputs_onnx")
-
-    pipeline = pptInferenceORT(
-        onnx_paths=ONNX_PATHS,
-        resize_ratio=1.0,
-        height=-1,
-        width=-1,
-        mask_dilation=4,
-        ref_stride=10,
-        neighbor_length=10,
-        subvideo_length=60
-    )
-    start_time = time.time()
-    pipeline.inference(input_frames_dir=input_dir, masks_dir=masks_dir, output_dir=output_dir, debug=True)
-    print(f"ONNX Pure Inference Cost: {time.time() - start_time:.4f}s")

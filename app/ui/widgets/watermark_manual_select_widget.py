@@ -268,7 +268,10 @@ class CanvasView(QGraphicsView):
 class WatermarkMaskTool(MyMessageBoxBase):
     def __init__(self, file_path, is_video=False, parent=None):
         super().__init__(parent=parent)
-        self.file_path = file_path
+        if os.path.isfile(file_path):
+            self.file_path = file_path
+        else:
+            self.file_path = os.path.join(file_path, os.listdir(file_path)[0])
         self.is_video = is_video
         self.mask_path = os.path.join(cfg.get(cfg.cachePath), "watermark_removal", os.path.basename(file_path).split(".")[0])
         self.mask_file = ""

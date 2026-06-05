@@ -58,6 +58,7 @@ class WatermarkRemoveWork(BaseWorker):
             }
             self.watermark_remove_image_instance.run(**params)
         else:
+            ppt_onnx_basedir = os.path.join(self.deps_path, "video_inpainting", "ppt")
             params = {
                 "input_video_path": input_path, 
                 "output_video_path": output_file,
@@ -71,8 +72,9 @@ class WatermarkRemoveWork(BaseWorker):
                 "text_detection_onnx_path": os.path.join(onnx_model_dir, "pp_ocr_det.onnx"),
                 "yolo_detection_onnx_path": os.path.join(onnx_model_dir, "yolo.onnx"),
                 "segment_onnx_dir": segment_model_dir,
+                "ppt_onnx_basedir": ppt_onnx_basedir,
                 "mask_path": kwargs["manual_watermark_mask_path"] if "manual_watermark_mask_path" in kwargs and kwargs["manual_watermark_mask_path"] else "",
-                "image_refine_type": kwargs["model_name"],
+                "refine_type": kwargs["model_name"],
                 "use_cache_mask": True if "watermark_format" in kwargs and kwargs["watermark_format"] == "static_watermark" else False,
                 "watermark_type": "all" if "watermark_content" in kwargs and kwargs["watermark_content"] == "general_watermark" else "text",
                 "ai_detect_type": kwargs["watermark_detect_type"],

@@ -504,7 +504,12 @@ class WatermarkDetectSettings(QWidget):
         self.watermarkConfidence.emit(float_val)
 
     def set_file_path(self, file_path):
-        self.file_path = file_path
+        if not file_path:
+            return
+        if os.path.isfile(file_path):
+            self.file_path = file_path
+        else:
+            self.file_path = os.path.join(file_path, os.listdir(file_path)[0])
 
     def _watermark_area_selector(self):
         if not self.file_path:
