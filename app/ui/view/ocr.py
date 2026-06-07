@@ -275,8 +275,13 @@ class PreviewWidget(QWidget):
         bottom_layout.addWidget(self.image_navigation_widget, 3)
 
         # 底部状态栏
-        status_info_widget = StatusInfoWidget(ocr_task_status_model, self)
-        bottom_layout.addWidget(status_info_widget, 2)
+        self.status_info_widget = StatusInfoWidget(ocr_task_status_model, self)
+        self.status_info_widget.set_pipeline_steps([
+            {'name': self.tr('准备任务'), 'status': 'pending', 'duration': '--'},
+            {'name': self.tr('文字识别'), 'status': 'pending', 'duration': '--'},
+            {'name': self.tr('导出结果'), 'status': 'pending', 'duration': '--'},
+        ])
+        bottom_layout.addWidget(self.status_info_widget, 2)
 
         main_layout.addLayout(bottom_layout)
 
@@ -298,8 +303,10 @@ class PreviewWidget(QWidget):
             return
         if os.path.isdir(file_path):
             tmp_file_path = os.path.join(file_path, os.listdir(file_path)[0])
+            self.status_info_widget.show_batch_pipeline_widget()
         else:
             tmp_file_path = file_path
+            self.status_info_widget.show_pipeline_widget()
         file_type = get_file_type(tmp_file_path)
         ext = tmp_file_path.lower().split(".")[-1]
         if file_type == "image":

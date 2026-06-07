@@ -232,5 +232,6 @@ class PPTInferenceORT:
             f = comp_frames[idx]
             f = cv2.resize(f, out_size, interpolation=cv2.INTER_CUBIC)
             f = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
-            img_save_root = os.path.join(output_dir, 'frames', str(idx).zfill(6) + '.png')
+            img_save_root = os.path.join(output_dir, str(idx).zfill(6) + '.png')
             self._imwrite(f, img_save_root)
+        self.ppt_pipeline = None

@@ -329,6 +329,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         if not file_path:
             self.tab_image.setEnabled(True)
             self.tab_video.setEnabled(True)
+            self.tab_image.setChecked(True)
             return
         if os.path.isfile(file_path):
             file_type = get_file_type(file_path)
@@ -337,14 +338,17 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         if file_type == "image":
             self.tab_image.setEnabled(True)
             self.tab_video.setEnabled(False)
+            self.tab_image.setChecked(True)
             self.on_tab_changed(index=0, checked=True)
         elif file_type == "video":
             self.tab_image.setEnabled(True)
             self.tab_video.setEnabled(True)
+            self.tab_video.setChecked(True)
             self.on_tab_changed(index=1, checked=True)
         else:
             self.tab_image.setEnabled(True)
             self.tab_video.setEnabled(True)
+            self.tab_image.setChecked(True)
 
     def animate_height_change(self, target_height: int):
         start_height = self.height()
@@ -500,8 +504,14 @@ class PreviewWidget(QWidget):
         bottom_layout.addWidget(self.image_navigation_widget, 3)
 
         # 底部状态栏
-        status_info_widget = StatusInfoWidget(watermark_remove_task_status_model, self)
-        bottom_layout.addWidget(status_info_widget, 2)
+        self.status_info_widget = StatusInfoWidget(watermark_remove_task_status_model, self)
+        self.status_info_widget.set_pipeline_steps([
+            {'name': self.tr('准备任务'), 'status': 'pending', 'duration': '--'},
+            {'name': self.tr('检测水印'), 'status': 'pending', 'duration': '--'},
+            {'name': self.tr('去除水印'), 'status': 'pending', 'duration': '--'},
+            {'name': self.tr('导出文件'), 'status': 'pending', 'duration': '--'},
+        ])
+        bottom_layout.addWidget(self.status_info_widget, 2)
 
         main_layout.addLayout(bottom_layout)
 
@@ -527,8 +537,10 @@ class PreviewWidget(QWidget):
         self.navigation.show()
         if os.path.isdir(file_path):
             tmp_file_path = os.path.join(file_path, os.listdir(file_path)[0])
+            self.status_info_widget.show_batch_pipeline_widget()
         else:
             tmp_file_path = file_path
+            self.status_info_widget.show_pipeline_widget()
         file_type = get_file_type(tmp_file_path)
         ext = tmp_file_path.lower().split(".")[-1]
         if file_type == "image":

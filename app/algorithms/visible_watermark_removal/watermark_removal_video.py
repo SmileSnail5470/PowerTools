@@ -23,7 +23,7 @@ class VideoWatermarkRemover:
         overlay[mask] = (overlay[mask] * 0.55 + np.array([b, g, r_]) * 0.45).astype(np.uint8)
         cv2.imwrite(file_path, overlay)
 
-    def _expand_bbox_keep_center(xmin: int, ymin: int, xmax: int, ymax: int, img_w: int, img_h: int, pad: int = 120):
+    def _expand_bbox_keep_center(self, xmin: int, ymin: int, xmax: int, ymax: int, img_w: int, img_h: int, pad: int = 120):
         xmin_new = xmin - pad
         xmax_new = xmax + pad
         if xmin_new < 0:
@@ -287,7 +287,7 @@ class VideoWatermarkRemover:
                     "image_prop_step": os.path.join(ppt_onnx_basedir, "propagation_transformer", "img_prop_step.onnx"),
                     'ss': os.path.join(ppt_onnx_basedir, "propagation_transformer", "soft_split.onnx"),
                     'sc': os.path.join(ppt_onnx_basedir, "propagation_transformer", "soft_comp.onnx"),
-                    'bp_backward_step': os.path.join(ppt_onnx_basedir, 'ppt', "propagation_transformer", "backward_step.onnx"),
+                    'bp_backward_step': os.path.join(ppt_onnx_basedir, "propagation_transformer", "backward_step.onnx"),
                     'bp_forward_step': os.path.join(ppt_onnx_basedir, "propagation_transformer", "forward_step.onnx"),
                     'bp_backward_first': os.path.join(ppt_onnx_basedir, "propagation_transformer", "backward_first.onnx"),
                     'bp_forward_first': os.path.join(ppt_onnx_basedir, "propagation_transformer", "forward_first.onnx"),
@@ -305,7 +305,7 @@ class VideoWatermarkRemover:
             input_frames_dir = os.path.dirname(str(frame_files[0]))
             masks_dir = os.path.dirname(frame_mask_map[str(frame_files[0])])
             output_dir = str(processed_frames_dir)
-            cropped_out_dir = os.path.join(os.path.basename(output_dir), "{0}_cropped".format(os.path.basename(output_dir)))
+            cropped_out_dir = os.path.join(os.path.dirname(output_dir), "{0}_cropped".format(os.path.basename(output_dir)))
             bbox = self._get_roi(masks_dir)
             new_input_frames_dir, new_masks_dir = self._crop_frames_and_masks(input_frames_dir, masks_dir, bbox)
             xmin, ymin, xmax, ymax = bbox
@@ -317,7 +317,7 @@ class VideoWatermarkRemover:
                 resize_ratio = 540.0 / max(process_h, process_w)
                 subvideo_length = 80
             else:
-                resize_ratio = 720.0 / max(process_h, process_w)
+                resize_ratio = 640.0 / max(process_h, process_w)
                 subvideo_length = 60
             pipeline = PPTInferenceORT(
                 onnx_paths=ONNX_PATHS,
@@ -422,7 +422,7 @@ class VideoWatermarkRemover:
             )
             process_cb = kwargs.pop("process_cb", None)
             if process_cb is not None:
-                tmp_visualzation_path = os.path.join(str(tmp_mask_dir), "visualization")
+                tmp_visualzation_path = os.path.join(os.path.dirname(str(tmp_mask_dir)), "masks_visualization")
                 for frame_file, tmp_mask_path in frame_mask_map.items():
                     os.makedirs(tmp_visualzation_path, exist_ok=True)
                     self._save_mask_visualization(
