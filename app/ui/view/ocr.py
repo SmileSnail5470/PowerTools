@@ -22,7 +22,7 @@ from app.ui.common.event_bus import global_event_bus
 from app.controllers.task_manager import global_task_manager
 from app.ui.common.task_params import bind_widget_to_param, TaskParams
 from app.ui.common.task_status import TaskStatusModel
-from app.ui.common.utils import get_file_type
+from app.ui.common.utils import get_file_type, global_backend_info_cache
 from app.ui.common.config import cfg
 
 from app.workers.ocr_work import OCRWork
@@ -276,11 +276,7 @@ class PreviewWidget(QWidget):
 
         # 底部状态栏
         self.status_info_widget = StatusInfoWidget(ocr_task_status_model, self)
-        self.status_info_widget.set_pipeline_steps([
-            {'name': self.tr('准备任务'), 'status': 'pending', 'duration': '--'},
-            {'name': self.tr('文字识别'), 'status': 'pending', 'duration': '--'},
-            {'name': self.tr('导出结果'), 'status': 'pending', 'duration': '--'},
-        ])
+        self.status_info_widget.model.set_pipeline_steps(names=[self.tr('准备任务'), self.tr('文字识别'), self.tr('导出结果')])
         bottom_layout.addWidget(self.status_info_widget, 2)
 
         main_layout.addLayout(bottom_layout)
@@ -384,7 +380,6 @@ class HeaderWidget(QWidget):
             return
         total_tasks = []
         input_path = task_params["input_path"]
-        ocr_task_status_model.reset()
         global_event_bus.OCR_ImageNavigationInit.emit()
         if os.path.isdir(input_path):
             for one_file in os.listdir(input_path):
@@ -397,7 +392,8 @@ class HeaderWidget(QWidget):
             func, args, kwargs = task_instance.to_worker()
             total_tasks.append((func, args, kwargs))
 
-        ocr_task_status_model.set_total(len(total_tasks))
+        backend_type, gpu_name = global_backend_info_cache.get(key="backend_info")
+        ocr_task_status_model.start_batch(total=len(total_tasks), backend_type=backend_type, gpu_name=gpu_name)
 
         for func, args, kwargs in total_tasks:
             input_path = kwargs["input_path"]

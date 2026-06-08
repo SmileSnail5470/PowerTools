@@ -195,6 +195,8 @@ class MainWindow(FluentWindow):
         self.themeListener.terminate()
         self.themeListener.deleteLater()
         from app.controllers.task_manager import global_task_manager
+        from app.ui.common.utils import global_backend_info_cache
+        global_backend_info_cache.clear()
         global_task_manager.close()
 
         self.resource_monitor_widget.clear()

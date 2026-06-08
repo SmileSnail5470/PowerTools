@@ -3,40 +3,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List
 from PySide6.QtCore import QObject, Signal
-
-
-class TaskStatusModel(QObject):
-    updated = Signal(dict)
-
-    def __init__(self):
-        super().__init__()
-        self.data = {
-            "total": 0,
-            "processed": 0,
-            "success": 0,
-            "failed": 0,
-            "failures": []
-        }
-
-    def reset(self):
-        self.data = {k: 0 for k in ["total", "processed", "success", "failed"]}
-        self.data["failures"] = []
-        self.updated.emit(self.data.copy())
-
-    def set_total(self, n: int):
-        self.data["total"] = n
-        self.updated.emit(self.data.copy())
-
-    def report_success(self):
-        self.data["processed"] += 1
-        self.data["success"] += 1
-        self.updated.emit(self.data.copy())
-
-    def report_failure(self, filename, reason):
-        self.data["processed"] += 1
-        self.data["failed"] += 1
-        self.data["failures"].append((filename, reason))
-        self.updated.emit(self.data.copy())
+from app.ui.common.config import cfg
 
 
 class TaskState(Enum):
@@ -89,7 +56,7 @@ class PerformanceStatus:
 
 @dataclass
 class BackendStatus:
-    backend_type: str = "CPU"
+    backend_type: str = "CPU 运行"
     gpu_name: str = ""
     worker_count: int = 0
 
@@ -104,27 +71,34 @@ class TaskStatus:
     active_workers: List[ActiveWorker] = field(default_factory=list)
 
 
-class TmpTaskStatusModel(QObject):
-    changed = Signal(object)
+class TaskStatusModel(QObject):
+    updated = Signal(object)
 
     def __init__(self):
         super().__init__()
         self.status = TaskStatus()
 
     def notify(self):
-        self.changed.emit(self.status)
+        self.updated.emit(self.status)
 
     def reset(self):
-        self.status = TaskStatus()
+        if hasattr(self, "status") and self.status.pipeline_steps:
+            step_names = []
+            for step in self.status.pipeline_steps:
+                step_names.append(step.name)
+            self.status = TaskStatus()
+            self.status.pipeline_steps = [PipelineStep(name=n) for n in step_names]
+        else:
+            self.status = TaskStatus()
         self.notify()
 
-    def start_batch(self, total: int, backend_type: str = "CPU 运行", worker_count: int = 1, gpu_name: str = ""):
+    def start_batch(self, total: int, backend_type: str = "CPU 运行", gpu_name: str = ""):
         self.reset()
         self.status.state = TaskState.RUNNING
         self.status.batch.total = total
         self.status.performance.start_time = time.time()
         self.status.backend.backend_type = backend_type
-        self.status.backend.worker_count = worker_count
+        self.status.backend.worker_count = int(cfg.get(cfg.taskParallelNumber))
         self.status.backend.gpu_name = gpu_name
         self.notify()
 

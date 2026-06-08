@@ -688,11 +688,11 @@ class BackendInfoWidget(QWidget):
         setFont(self.time_label, 10, QFont.Bold)
 
         layout.addWidget(self.gpu_tag)
-        layout.setSpacing(4)
+        layout.setSpacing(6)
         layout.addWidget(self.time_label)
 
     def set_elapsed(self, elapsed):
-        self.time_label.setText(elapsed)
+        self.time_label.setText(self.tr("耗时: ") + elapsed)
 
     def set_gpu_type(self, gpu_type):
         self.gpu_tag.setText(gpu_type)
@@ -721,17 +721,10 @@ class StatusInfoWidget(QFrame):
         self.model.updated.connect(self.update_display)
         self.setup_ui()
         self.setup_style()
-        self._simulated_percentage = 0.0
-        self._real_percentage = 0.0
-        self._real_segment = 0.0
-        self._sim_start = 0.0
-        self._sim_end = 0.0
-        self._progress_timer = QTimer(self)
-        self._progress_timer.timeout.connect(self._increase_simulated_progress)
 
     def setup_ui(self):
         main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(0, 2, 0, 2)
+        main_layout.setContentsMargins(0, 6, 0, 6)
         main_layout.setSpacing(0)
 
         self.info_bar = QWidget()
@@ -790,6 +783,7 @@ class StatusInfoWidget(QFrame):
         info_layout.addWidget(self.task_bar)
 
         status_layout.addWidget(self.gpu_info)
+        status_layout.addStretch(1)
         status_layout.addWidget(self.progress_ring)
 
         self.failure_popup = FailurePopupWidget()
@@ -818,18 +812,6 @@ class StatusInfoWidget(QFrame):
         else:
             self.failure_popup.show_at(self.failed_card)
 
-    def set_pipeline_steps(self, steps):
-        self.pipeline_widget.set_steps(steps)
-
-    def update_pipeline_step(self, index, status, duration=None):
-        self.pipeline_widget.update_step(index, status, duration)
-
-    def update_eta(self, seconds: int):
-        self.batch_pipeline_widget.update_eta(seconds=seconds)
-
-    def update_speed(self, speed_str: str):
-        self.batch_pipeline_widget.update_speed(speed_str=speed_str)
-
     def set_backend_info(self, backend_type, elapsed):
         self.gpu_info.set_gpu_type(backend_type)
         self.gpu_info.set_elapsed(elapsed)
@@ -842,57 +824,12 @@ class StatusInfoWidget(QFrame):
         self.batch_pipeline_widget.show()
         self.pipeline_widget.hide()
 
-    def update_display(self, data):
-        total = data['total']
-        processed = data['processed']
-        self.total_card.update_value(total)
-        self.processed_card.update_value(processed)
-        self.success_card.update_value(data['success'])
-        self.failed_card.update_value(data['failed'])
-
-        if total == 0:
-            self._simulated_percentage = 0
-            self.progress_ring.set_percentage_animated(0)
-            self._progress_timer.start(1000)
-            return
-
-        self._real_segment = 100 / total
-        current_index = processed
-        sim_segment = self._real_segment * 0.9
-        self._sim_start = current_index * self._real_segment
-        self._sim_end = self._sim_start + sim_segment
-
-        if processed == total:
-            self._progress_timer.stop()
-            QTimer.singleShot(500, lambda: self.progress_ring.set_percentage_animated(100))
-            self.update_failure_list(data)
-            return
-
-        self._real_percentage = processed * self._real_segment
-        if self._simulated_percentage < self._real_percentage:
-            self._simulated_percentage = self._real_percentage
-
-        self._update_progress_display()
-        self.update_failure_list(data)
-
-    def _increase_simulated_progress(self):
-        if self._simulated_percentage < self._sim_end:
-            remaining = self._sim_end - self._simulated_percentage
-            step = max(0.1, remaining * 0.01)
-            self._simulated_percentage += step
-            self._update_progress_display()
-
-    def _update_progress_display(self):
-        display = max(self._simulated_percentage, self._real_percentage)
-        self.progress_ring.set_percentage_animated(display)
-
     def update_failure_list(self, data):
         self.failure_popup.clear_failures()
         for filename, reason in data['failures']:
             self.failure_popup.add_failure(filename, reason)
 
-
-    def update_display_tmp(self, status: TaskStatus):
+    def update_display(self, status: TaskStatus):
         batch = status.batch
         self.total_card.update_value(batch.total)
         self.processed_card.update_value(batch.processed)
@@ -911,8 +848,7 @@ class StatusInfoWidget(QFrame):
         h = elapsed // 3600
         m = (elapsed % 3600) // 60
         s = elapsed % 60
-        self.gpu_info.set_elapsed(f"{h:02}:{m:02}:{s:02}")
-        self.gpu_info.set_gpu_type(status.backend.backend_type)
+        self.set_backend_info(backend_type=status.backend.backend_type, elapsed=f"{h:02}:{m:02}:{s:02}")
         self.pipeline_widget.set_steps([
             {
                 "name": step.name,
