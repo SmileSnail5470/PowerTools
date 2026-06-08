@@ -296,6 +296,7 @@ class PreviewWidget(QWidget):
         self.media_type = "image"
         if not file_path:
             self.stack.setCurrentIndex(0)
+            ocr_task_status_model.reset()
             return
         if os.path.isdir(file_path):
             tmp_file_path = os.path.join(file_path, os.listdir(file_path)[0])
@@ -311,6 +312,7 @@ class PreviewWidget(QWidget):
         else:
             self.placeholder_widget.setText(f"不支持的文件类型: {ext}")
             self.stack.setCurrentIndex(0)
+            ocr_task_status_model.reset()
 
     def update_preview(self, input_path, ocr_result):
         self.files_preview_info[input_path] = ocr_result
@@ -382,18 +384,22 @@ class HeaderWidget(QWidget):
         input_path = task_params["input_path"]
         global_event_bus.OCR_ImageNavigationInit.emit()
         if os.path.isdir(input_path):
+            self.is_batch_task = True
             for one_file in os.listdir(input_path):
                 task_params["input_path"] = os.path.join(input_path, one_file)
                 task_instance = OCRWork(**task_params)
                 func, args, kwargs = task_instance.to_worker()
                 total_tasks.append((func, args, kwargs))
         else:
+            self.is_batch_task = False
             task_instance = OCRWork(**task_params)
             func, args, kwargs = task_instance.to_worker()
             total_tasks.append((func, args, kwargs))
 
         backend_type, gpu_name = global_backend_info_cache.get(key="backend_info")
         ocr_task_status_model.start_batch(total=len(total_tasks), backend_type=backend_type, gpu_name=gpu_name)
+        if not self.is_batch_task:
+            ocr_task_status_model.start_step(name=self.tr("准备任务"))
 
         for func, args, kwargs in total_tasks:
             input_path = kwargs["input_path"]
@@ -408,6 +414,9 @@ class HeaderWidget(QWidget):
             future.cancelled.connect(
                 lambda path=input_path: ocr_task_status_model.report_failure(path, "任务被取消")
             )
+            future.progress.connect(
+                lambda value, msg, path=input_path: self._task_progress(path, value, msg)
+            )
 
         TeachingTip.create(
             target=self.process_btn,
@@ -420,9 +429,21 @@ class HeaderWidget(QWidget):
             parent=self
         )
 
+    def _task_progress(self, input_path, value, msg):
+        if value == "OCRStart":
+            if not self.is_batch_task:
+                ocr_task_status_model.finish_step(name=self.tr("准备任务"))
+                ocr_task_status_model.start_step(name=self.tr('文字识别'))
+        elif value == "OCRCompleted":
+            if not self.is_batch_task:
+                ocr_task_status_model.finish_step(name=self.tr("文字识别"))
+                ocr_task_status_model.start_step(name=self.tr('导出结果'))
+
     def _task_finished(self, input_path, ocr_result):
         ocr_task_status_model.report_success()
         global_event_bus.OCR_TaskFinished.emit(input_path, ocr_result)
+        if not self.is_batch_task:
+            ocr_task_status_model.finish_step(name=self.tr("导出结果"))
 
     def _params_check(self, params):
         error_msg = ""

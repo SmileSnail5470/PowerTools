@@ -29,7 +29,8 @@ class OCRWork(BaseWorker):
             "drop_score": float(kwargs["drop_score"]),
             "det_onnx_path": os.path.join(onnx_model_dir, "pp_ocr_det.onnx"),
             "rec_onnx_path": os.path.join(onnx_model_dir, "pp_ocr_rec.onnx"),
-            "cls_onnx_path": os.path.join(onnx_model_dir, "pp_lcnet_x1_0_textline_ori.onnx")
+            "cls_onnx_path": os.path.join(onnx_model_dir, "pp_lcnet_x1_0_textline_ori.onnx"),
+            "progress_cb": progress_cb
         }
         self.ocr_instance.prepare(**params)
         ocr_result = self.ocr_instance.predict(image_path=input_path, use_cls=bool(kwargs["use_textline_ori"]) if "use_textline_ori" in kwargs else False)

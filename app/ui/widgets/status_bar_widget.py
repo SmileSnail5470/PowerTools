@@ -268,7 +268,7 @@ class BatchPipelineBar(QWidget):
 
     def update_eta(self, seconds: int):
         if seconds <= 0:
-            self.lbl_eta_value.setText(self.tr("已完成"))
+            self.lbl_eta_value.setText(self.tr("00:00:00"))
             self.lbl_eta_value.setStyleSheet("color: #107c10; background: transparent;")
             self.icon.rot_anim.pause()
             self.icon.scale_anim.pause()

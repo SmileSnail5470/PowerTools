@@ -363,6 +363,7 @@ class VideoWatermarkRemover:
             callback_func = None,
             **kwargs
         ):
+        progress_cb = kwargs.pop("progress_cb", None)
         if ffmpeg_path and os.path.isfile(ffmpeg_path):
             ffmpeg_path = os.path.dirname(ffmpeg_path)
         os.environ['PATH'] = ffmpeg_path + os.pathsep + os.environ['PATH']
@@ -400,6 +401,8 @@ class VideoWatermarkRemover:
             tmp_mask_dir = temp_path / 'masks'
             tmp_mask_dir.mkdir()
 
+            if progress_cb is not None:
+                progress_cb("MaskStart", "")
             frame_mask_map = {}
             self._prepare_masks(
                 tmp_mask_dir=tmp_mask_dir, 
@@ -420,8 +423,7 @@ class VideoWatermarkRemover:
                 segment_onnx_dir=segment_onnx_dir,
                 **kwargs
             )
-            process_cb = kwargs.pop("process_cb", None)
-            if process_cb is not None:
+            if progress_cb is not None:
                 tmp_visualzation_path = os.path.join(os.path.dirname(str(tmp_mask_dir)), "masks_visualization")
                 for frame_file, tmp_mask_path in frame_mask_map.items():
                     os.makedirs(tmp_visualzation_path, exist_ok=True)
@@ -438,7 +440,7 @@ class VideoWatermarkRemover:
                     input_video_path=input_video_path,
                     output_video_path=output_video_tmp_path
                 )
-                process_cb("MaskCompleted", output_video_tmp_path)
+                progress_cb("MaskCompleted", output_video_tmp_path)
             
             if refine_type not in self.video_models_name:
                 args = {
@@ -477,6 +479,8 @@ class VideoWatermarkRemover:
                     "ppt_onnx_basedir": ppt_onnx_basedir
                 }
                 self._video_model_inpainting(args)
+            if progress_cb is not None:
+                progress_cb("WaterRemoved", "")
 
             self._merge_processed_frames(
                 processed_frames_dir=processed_frames_dir,

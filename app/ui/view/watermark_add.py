@@ -795,18 +795,22 @@ class HeaderWidget(QWidget):
         input_path = task_params["input_path"]
         global_event_bus.watermarkAdd_ImageNavigationInit.emit()
         if os.path.isdir(input_path):
+            self.is_batch_task = True
             for one_file in os.listdir(input_path):
                 task_params["input_path"] = os.path.join(input_path, one_file)
                 task_instance = WatermarkAddWork(**task_params) if not is_blind_watermark_extract_task else WatermarkExtractWork(**task_params)
                 func, args, kwargs = task_instance.to_worker()
                 total_tasks.append((func, args, kwargs))
         else:
+            self.is_batch_task = False
             task_instance = WatermarkAddWork(**task_params) if not is_blind_watermark_extract_task else WatermarkExtractWork(**task_params)
             func, args, kwargs = task_instance.to_worker()
             total_tasks.append((func, args, kwargs))
 
         backend_type, gpu_name = global_backend_info_cache.get(key="backend_info")
         task_status_model.start_batch(total=len(total_tasks), backend_type=backend_type, gpu_name=gpu_name)
+        if not self.is_batch_task:
+            task_status_model.start_step(name=self.tr("准备任务"))
 
         for func, args, kwargs in total_tasks:
             input_path = kwargs["input_path"]
@@ -821,6 +825,9 @@ class HeaderWidget(QWidget):
             future.cancelled.connect(
                 lambda path=input_path: task_status_model.report_failure(path, "任务被取消")
             )
+            future.progress.connect(
+                lambda value, msg, path=input_path: self._task_progress(path, value, msg)
+            )
 
         TeachingTip.create(
             target=self.process_btn,
@@ -833,9 +840,29 @@ class HeaderWidget(QWidget):
             parent=self
         )
 
+    def _task_progress(self, input_path, value, msg):
+        if value == "VisibleWatermarkAddStart":
+            if not self.is_batch_task:
+                task_status_model.finish_step(name=self.tr("准备任务"))
+                task_status_model.start_step(name=self.tr('添加/提取水印'))
+        elif value == "VisibleWatermarkAddCompleted":
+            if not self.is_batch_task:
+                task_status_model.finish_step(name=self.tr("添加/提取水印"))
+                task_status_model.start_step(name=self.tr('导出文件'))
+        elif value == "BlindWatermarkExtractStart":
+            if not self.is_batch_task:
+                task_status_model.finish_step(name=self.tr("准备任务"))
+                task_status_model.start_step(name=self.tr('添加/提取水印'))
+        elif value == "BlindWatermarkExtractCompleted":
+            if not self.is_batch_task:
+                task_status_model.finish_step(name=self.tr("添加/提取水印"))
+                task_status_model.start_step(name=self.tr('导出文件'))
+
     def _task_finished(self, input_path, output_path):
         task_status_model.report_success()
         global_event_bus.watermarkAdd_TaskFinished.emit(input_path, output_path)
+        if not self.is_batch_task:
+            task_status_model.finish_step(name=self.tr("导出文件"))
 
     def _params_check(self, params):
         error_msg = ""
@@ -945,7 +972,7 @@ class PreviewWidget(QWidget):
 
         # 底部状态栏
         self.status_info_widget = StatusInfoWidget(task_status_model, self)
-        self.status_info_widget.model.set_pipeline_steps(names=[self.tr('准备任务'), self.tr('添加水印'), self.tr('导出文件')])
+        self.status_info_widget.model.set_pipeline_steps(names=[self.tr('准备任务'), self.tr('添加/提取水印'), self.tr('导出文件')])
         bottom_layout.addWidget(self.status_info_widget, 2)
 
         main_layout.addLayout(bottom_layout)
@@ -966,6 +993,7 @@ class PreviewWidget(QWidget):
         self.media_type = "image"
         if not file_path:
             self.stack.setCurrentIndex(0)
+            task_status_model.reset()
             return
         if os.path.isdir(file_path):
             tmp_file_path = os.path.join(file_path, os.listdir(file_path)[0])
@@ -984,6 +1012,7 @@ class PreviewWidget(QWidget):
         else:
             self.placeholder_widget.setText(f"不支持的文件类型: {ext}")
             self.stack.setCurrentIndex(0)
+            task_status_model.reset()
 
     def update_preview(self, input_path, output_path):
         self.files_preview_info[input_path] = output_path

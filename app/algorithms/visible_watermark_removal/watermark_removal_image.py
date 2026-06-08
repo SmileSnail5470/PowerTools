@@ -310,6 +310,9 @@ class ImageWatermarkRemove():
             dilate_num: int = 2,
             **kwargs
         ):
+        progress_cb = kwargs.get("progress_cb", None)
+        if progress_cb is not None:
+            progress_cb("MaskStart", "")
         if not mask_path:
             # ai 选择水印掩码
             mask = WatermarkSegment(watermark_type, ai_detect_type, ai_interactive_type, ai_interactive_prompt, ai_interactive_boxes, watermark_confidence).segment(
@@ -324,15 +327,14 @@ class ImageWatermarkRemove():
         else:
             # 读取人工标注的水印掩码
             mask = self._read_mask(mask_path=mask_path)
-        process_cb = kwargs.get("process_cb", None)
-        if process_cb is not None:
+        if progress_cb is not None:
             mask_tmp_path = "{0}_mask.png".format(output_path.rsplit(".", 1)[0])
             self._save_mask_visualization(
                 img_path=image_path,
                 mask=mask,
                 file_path=mask_tmp_path,
             )
-            process_cb("MaskCompleted", mask_tmp_path)
+            progress_cb("MaskCompleted", mask_tmp_path)
 
         image_inpainting = WatermarkInpaint(
             mask=mask,
@@ -345,3 +347,5 @@ class ImageWatermarkRemove():
             dilate_num=dilate_num,
         )
         image_inpainting.inpaint(image_path=image_path, output_path=output_path)
+        if progress_cb is not None:
+            progress_cb("WaterRemoved", "")

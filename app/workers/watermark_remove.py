@@ -54,7 +54,7 @@ class WatermarkRemoveWork(BaseWorker):
                 "ai_interactive_boxes": kwargs["watermark_boxes"] if "watermark_boxes" in kwargs else [],
                 "watermark_confidence": kwargs["watermark_confidence"] if "watermark_confidence" in kwargs else 0.5,
                 "dilate_num": int(kwargs["mask_dilate"]),
-                "process_cb": progress_cb,
+                "progress_cb": progress_cb,
             }
             self.watermark_remove_image_instance.run(**params)
         else:
@@ -84,7 +84,7 @@ class WatermarkRemoveWork(BaseWorker):
                 "watermark_confidence": kwargs["watermark_confidence"] if "watermark_confidence" in kwargs else 0.5,
                 "dilate_num": int(kwargs["mask_dilate"]),
                 "ffmpeg_path": os.getenv("POWERTOOLS_FFMPEG_BIN"),
-                "process_cb": progress_cb,
+                "progress_cb": progress_cb,
             }
             self.watermark_remove_video_instance.process_video(**params)
         return output_file

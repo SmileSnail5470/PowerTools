@@ -111,7 +111,11 @@ class WatermarkExtractWork(BaseWorker):
             self.blind_watermark_extract_image_instance.prepare(
                 onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_image_detect.onnx".format(kwargs["blind_watermark_model_name"]))
             )
+            if progress_cb is not None:
+                progress_cb("BlindWatermarkExtractStart", "")
             text = self.blind_watermark_extract_image_instance.watermark_extraction(**params)["preds"]
+            if progress_cb is not None:
+                progress_cb("BlindWatermarkExtractCompleted", "")
             output_file = self._text_to_image(input_path=input_path, text=text)
         else:
             params = {
@@ -122,6 +126,10 @@ class WatermarkExtractWork(BaseWorker):
                 onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_video_detect.onnx".format(kwargs["blind_watermark_model_name"])),
                 ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN")
             )
+            if progress_cb is not None:
+                progress_cb("BlindWatermarkExtractStart", "")
             text = self.blind_watermark_extract_video_instance.watermark_extraction(**params)["preds"]
+            if progress_cb is not None:
+                progress_cb("BlindWatermarkExtractCompleted", "")
             output_file = self._text_to_video(input_path=input_path, text=text)
         return output_file

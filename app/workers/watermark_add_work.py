@@ -41,6 +41,8 @@ class WatermarkAddWork(BaseWorker):
             raise Exception("Not support file {0}".format(input_path.split(".")[-1]))
         
         is_visible_watermark = True if kwargs["watermark_type"] == "visible" else False
+        if progress_cb is not None:
+            progress_cb("VisibleWatermarkAddStart", "")
         if is_visible_watermark and kwargs["watermark_content"] == "ImageSettings":
             if file_type == "image":
                 params = {
@@ -137,4 +139,6 @@ class WatermarkAddWork(BaseWorker):
                     ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN")
                 )
                 self.blind_watermark_addition_video_instance.watermark_addition(**params)
+        if progress_cb is not None:
+            progress_cb("VisibleWatermarkAddCompleted", "")
         return output_file

@@ -21,9 +21,11 @@ def get_file_type(input_file: str):
 def verify_gpu_environment():
     if sys.platform != "win32":
         return "CPU 运行", ""
+    if not _has_cuda_gpu():
+        return "CPU 运行", ""
     try:
         ppt_onnx_path = os.path.join(cfg.get(cfg.localAIModelDeps), "video_inpainting", "ppt", "recurrent_flow_completion", "fusion.onnx")
-        session = ort.InferenceSession(ppt_onnx_path, providers=['CPUExecutionProvider'])
+        session = ort.InferenceSession(ppt_onnx_path, providers=['GPUExecutionProvider'])
         providers = session.get_providers()
         if "CUDAExecutionProvider" in providers:
             return "GPU 运行", _get_gpu_hardware_name()
@@ -31,6 +33,14 @@ def verify_gpu_environment():
             return "CPU 运行", ""
     except Exception:
         return "CPU 运行", ""
+    
+def _has_cuda_gpu():
+    if sys.platform != "win32":
+        return False
+    cuda_path = r"C:\Program Files\NVIDIA Corporation"
+    if os.path.exists(cuda_path):
+        return True
+    return False
 
 def _get_gpu_hardware_name() -> str:
     try:
