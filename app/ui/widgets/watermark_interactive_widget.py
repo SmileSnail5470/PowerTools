@@ -93,7 +93,7 @@ class AreaSelectorDialog(QDialog):
         self.total_frames = 0
         self.fps = 30
         self.original_pixmap = QPixmap()
-        self.scale_ratio = 1.0  # 原始尺寸 / 视图尺寸
+        self.zoom_factor = 1.0
 
         self.setup_ui()
         if file_path:
@@ -108,17 +108,9 @@ class AreaSelectorDialog(QDialog):
             self.original_pixmap = QPixmap(path)
             if self.original_pixmap.isNull():
                 return
-
-            view_w, view_h = 800, 600
-            self.scale_ratio = max(self.original_pixmap.width() / view_w, self.original_pixmap.height() / view_h, 1.0)
-            scaled_pixmap = self.original_pixmap.scaled(
-                int(self.original_pixmap.width() / self.scale_ratio), int(self.original_pixmap.height() / self.scale_ratio), 
-                Qt.AspectRatioMode.KeepAspectRatio, 
-                Qt.TransformationMode.SmoothTransformation
-            )
-            self.img_item.setPixmap(scaled_pixmap)
-            self.scene.setSceneRect(0, 0, int(self.original_pixmap.width() / self.scale_ratio), int(self.original_pixmap.height() / self.scale_ratio))
-            self.view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
+            self.img_item.setPixmap(self.original_pixmap)
+            self.scene.setSceneRect(0, 0, self.original_pixmap.width(), self.original_pixmap.height())
+            self._fit_view()
         else:
             self.slider.show()
             self._load_video(path=path)
@@ -141,18 +133,15 @@ class AreaSelectorDialog(QDialog):
             rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             h, w, ch = rgb_image.shape
             qimg = QImage(rgb_image.data, w, h, ch * w, QImage.Format_RGB888)
-            vw, vh = 800, 600
-            self.scale_ratio = max(w / vw, h / vh, 1.0)
-            target_w = int(w / self.scale_ratio)
-            target_h = int(h / self.scale_ratio)
-            pixmap = QPixmap.fromImage(qimg).scaled(
-                target_w, target_h, 
-                Qt.AspectRatioMode.KeepAspectRatio, 
-                Qt.TransformationMode.SmoothTransformation
-            )
-            self.img_item.setPixmap(pixmap)
-            self.scene.setSceneRect(0, 0, target_w, target_h)
-            self.view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
+            self.original_pixmap = QPixmap.fromImage(qimg)
+            self.img_item.setPixmap(self.original_pixmap)
+            self.scene.setSceneRect(0, 0, w, h)
+            self._fit_view()
+
+    def _fit_view(self):
+        self.view.resetTransform()
+        self.view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
+        self.zoom_factor = self.view.transform().m11()
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -174,12 +163,16 @@ class AreaSelectorDialog(QDialog):
         container_layout.setContentsMargins(0, 0, 0, 0)
         self.scene = QGraphicsScene()
         self.view = QGraphicsView(self.scene)
+        self._v_scroll = ScrollBar(Qt.Vertical, self.view)
+        self._h_scroll = ScrollBar(Qt.Horizontal, self.view)
+        self.view.setVerticalScrollBar(self._v_scroll)
+        self.view.setHorizontalScrollBar(self._h_scroll)
         self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.view.viewport().setCursor(Qt.CursorShape.CrossCursor)
         self.view.setFrameShape(QFrame.Shape.NoFrame)
         self.view.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.view.setStyleSheet("border-radius: 12px; background-color: #f0f0f0;")
         
         placeholder = QPixmap(800, 600)
@@ -285,7 +278,14 @@ class AreaSelectorDialog(QDialog):
 
     def eventFilter(self, source, event):
         if source is self.view.viewport():
-            if event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+            if event.type() == QEvent.Type.Wheel:
+                delta = event.angleDelta().y()
+                factor = 1.25 if delta > 0 else 0.8
+                self.zoom_factor *= factor
+                self.view.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+                self.view.scale(factor, factor)
+                return True
+            elif event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
                 self.is_drawing = True
                 self.start_pos = self.view.mapToScene(event.position().toPoint())
                 self.active_rect_item = QGraphicsRectItem()
@@ -303,13 +303,12 @@ class AreaSelectorDialog(QDialog):
                 rect = self.active_rect_item.rect()
                 self.scene.removeItem(self.active_rect_item)
                 if rect.width() > 5:
-                    s = self.scale_ratio
                     real_box = {
                         "id": int(time.time()*1000), 
-                        "x": int(rect.x() * s), 
-                        "y": int(rect.y() * s), 
-                        "w": int(rect.width() * s), 
-                        "h": int(rect.height() * s)
+                        "x": int(rect.x()), 
+                        "y": int(rect.y()), 
+                        "w": int(rect.width()), 
+                        "h": int(rect.height())
                     }
                     self.saved_boxes.append(real_box)
                     self.render_all()
@@ -342,9 +341,8 @@ class AreaSelectorDialog(QDialog):
             empty_label.setStyleSheet(f"color: {COLOR_TEXT_DIM}; background-color: white; border-radius: 12px;")
             self.list_layout.addWidget(empty_label)
         else:
-            s = self.scale_ratio
             for i, box in enumerate(self.saved_boxes):
-                ui_rect = QRectF(box['x']/s, box['y']/s, box['w']/s, box['h']/s)
+                ui_rect = QRectF(box['x'], box['y'], box['w'], box['h'])
                 self.scene.addItem(SelectBoxItem(box['id'], ui_rect))
                 item_widget = CoordItem(i + 1, box); item_widget.signals.deleted.connect(self.delete_box)
                 self.list_layout.addWidget(item_widget)
