@@ -136,3 +136,20 @@ class TaskManager(QObject):
 
 
 global_task_manager = TaskManager(max_workers=int(cfg.get(cfg.taskParallelNumber)))
+
+
+class InternalTaskManager:
+    _instance = None
+
+    @classmethod
+    def get_pool(cls) -> QThreadPool:
+        if cls._instance is None:
+            cls._instance = QThreadPool()
+            cls._instance.setMaxThreadCount(3)
+        return cls._instance
+
+    @classmethod
+    def shutdown(cls):
+        if cls._instance is not None:
+            cls._instance.waitForDone()
+            cls._instance = None

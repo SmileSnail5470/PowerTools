@@ -1,12 +1,12 @@
 import random
-from PySide6.QtGui import QFont, QColor, QPainter, QPen, QBrush, QLinearGradient, QPixmap
+from PySide6.QtGui import QFont, QColor, QPainter, QPen, QBrush, QConicalGradient, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QFrame, QHBoxLayout, QLabel, QGraphicsDropShadowEffect, QVBoxLayout, QListWidget, 
     QListWidgetItem, QPushButton, QApplication, QSizePolicy
 )
 from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, Property, QRectF, Signal, QRect, QTimer, QSize
 from app.ui.library.qfluentwidgets import setFont
-from app.ui.common.task_status import TaskStatusModel, TaskStatus
+from app.ui.common.task_status import TaskStatusModel, TaskStatus, TaskState
 
 
 class HourglassIcon(QWidget):
@@ -127,6 +127,13 @@ class ProgressRing(QWidget):
         self._animation = QPropertyAnimation(self, b"percentage")
         self._animation.setDuration(500)
         self._animation.setEasingCurve(QEasingCurve.OutCubic)
+        self._rotation_angle = 0.0
+        self._spin_animation = QPropertyAnimation(self, b"rotation_angle")
+        self._spin_animation.setDuration(2000)
+        self._spin_animation.setStartValue(0.0)
+        self._spin_animation.setEndValue(360.0)
+        self._spin_animation.setLoopCount(-1)
+        self._spin_animation.setEasingCurve(QEasingCurve.Linear)
         self._background_pixmap = None
         if ring_size >= 80:
             self._font_size = 24
@@ -152,6 +159,25 @@ class ProgressRing(QWidget):
         self._animation.setEndValue(value)
         self._animation.start()
 
+    def get_rotation_angle(self):
+        return self._rotation_angle
+
+    def set_rotation_angle(self, value):
+        self._rotation_angle = value
+        self.update()
+
+    rotation_angle = Property(float, get_rotation_angle, set_rotation_angle)
+
+    def start_spin(self):
+        if self._spin_animation.state() != QPropertyAnimation.Running:
+            self._spin_animation.start()
+
+    def stop_spin(self):
+        if self._spin_animation.state() == QPropertyAnimation.Running:
+            self._spin_animation.stop()
+        self._rotation_angle = 0.0
+        self.update()
+
     def resizeEvent(self, event):
         pixmap = QPixmap(self.size())
         pixmap.fill(Qt.transparent)
@@ -169,20 +195,38 @@ class ProgressRing(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         if self._background_pixmap:
-            painter.drawPixmap(0, 0, self._background_pixmap)
+            painter.drawPixmap(0, 0, self._background_pixmap) 
+
+        is_running = self._spin_animation.state() == QPropertyAnimation.Running
+        if self._percentage < 0.1 and not is_running:
+            painter.setPen(QPen(QColor('#323130')))
+            setFont(painter, self._font_size, QFont.Bold)
+            painter.drawText(self.rect(), Qt.AlignCenter, "0%")
+            painter.end()
+            return
+
         center_x = self.width() // 2
         center_y = self.height() // 2
         radius = min(self.width(), self.height()) // 2 - self._pen_width
-        gradient = QLinearGradient(0, 0, self.width(), self.height())
-        gradient.setColorAt(0, QColor('#6b46c1'))
-        gradient.setColorAt(1, QColor('#9333ea'))
+        rect = QRectF(center_x - radius, center_y - radius, radius * 2, radius * 2)
+        painter.save()
+        painter.translate(center_x, center_y)
+        painter.rotate(self._rotation_angle)
+        painter.translate(-center_x, -center_y)
+        gradient = QConicalGradient(center_x, center_y, 90)
+        gradient.setColorAt(0.0, QColor('#6b46c1'))
+        gradient.setColorAt(0.5, QColor('#9333ea'))
+        gradient.setColorAt(1.0, QColor('#6b46c1'))
+        start_angle = 90
+        if self._percentage < 0.5:
+            span_angle = -18
+        else:
+            span_angle = -(self._percentage / 100) * 360
         pen = QPen(QBrush(gradient), self._pen_width)
         pen.setCapStyle(Qt.RoundCap)
         painter.setPen(pen)
-        start_angle = 90
-        span_angle = -(self._percentage / 100) * 360
-        rect = QRectF(center_x - radius, center_y - radius, radius * 2, radius * 2)
         painter.drawArc(rect, int(start_angle * 16), int(span_angle * 16))
+        painter.restore()
         painter.setPen(QPen(QColor('#323130')))
         setFont(painter, self._font_size, QFont.Bold)
         painter.drawText(self.rect(), Qt.AlignCenter, f"{int(self._percentage)}%")
@@ -837,6 +881,10 @@ class StatusInfoWidget(QFrame):
         self.failed_card.update_value(batch.failed)
 
         self.progress_ring.set_percentage_animated(self.model.progress_percent)
+        if status.state == TaskState.RUNNING:
+            self.progress_ring.start_spin()
+        else:
+            self.progress_ring.stop_spin()
         self.batch_pipeline_widget.update_eta(int(status.performance.eta_seconds))
         avg = status.performance.avg_seconds_per_file
         if avg > 60:
@@ -853,7 +901,7 @@ class StatusInfoWidget(QFrame):
             {
                 "name": step.name,
                 "status": step.state.value,
-                "duration": "--" if step.duration == 0 else f"{step.duration:.1f}s"
+                "duration": "--" if step.display_duration == 0 else f"{step.display_duration:.1f}s"
             }
             for step in status.pipeline_steps
         ])

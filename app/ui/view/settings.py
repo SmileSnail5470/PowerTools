@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tarfile
 import zipfile
-from PySide6.QtCore import Qt, Signal, QThreadPool, QRunnable, QObject, QThread
+from PySide6.QtCore import Qt, Signal, QRunnable, QObject, QThread
 from PySide6.QtWidgets import(
     QHBoxLayout, QWidget, QVBoxLayout, QLabel, QFrame, QLineEdit, QPushButton, QFileDialog,
     QSizePolicy, QDialog, QProgressBar, QTextEdit
@@ -26,6 +26,7 @@ from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget, Custo
 from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 from app.ui.library.qframelesswindow.titlebar import CloseButton
 from app.ui.common.config import cfg, Language
+from app.controllers.task_manager import InternalTaskManager
 from app.utils.logger import get_log_manager
 from app.utils.logger.decorators import log_exception, log_function_call
 
@@ -602,8 +603,6 @@ class SoftwareCard(QFrame):
         cfg.additionalParams.value.update({"SoftwareSettings": tmp})
 
 class Settings(QWidget):
-    thread_pool = QThreadPool.globalInstance()
-    
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.setObjectName("Settings")
@@ -967,7 +966,7 @@ class Settings(QWidget):
                 lambda ok, msg, switch=switch, badge=badge, progress_dialog=progress_dialog: 
                 self._on_init_finished(ok, msg, switch, badge, progress_dialog)
             )
-            self.thread_pool.start(worker)
+            InternalTaskManager.get_pool().start(worker)
         else:
             badge.setLabel(text=self.tr("未启用"), color="#eab308")
             tmp = cfg.get(cfg.additionalParams).get("LocalAISettings", {})

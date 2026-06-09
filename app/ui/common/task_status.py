@@ -2,7 +2,7 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, QTimer
 from app.ui.common.config import cfg
 
 
@@ -26,6 +26,12 @@ class PipelineStep:
     state: StepState = StepState.PENDING
     start_time: float = 0.0
     duration: float = 0.0
+
+    @property
+    def display_duration(self):
+        if self.state == StepState.RUNNING:
+            return time.time() - self.start_time
+        return self.duration
 
 
 @dataclass
@@ -78,6 +84,24 @@ class TaskStatusModel(QObject):
         super().__init__()
         self.status = TaskStatus()
 
+        self._heartbeat_timer = QTimer(self)
+        self._heartbeat_timer.timeout.connect(self._heartbeat)
+        self._heartbeat_timer.setInterval(1000)
+
+    def _heartbeat(self):
+        if self.status.state != TaskState.RUNNING:
+            return
+        self._update_realtime_status()
+        self.notify()
+
+    def _update_realtime_status(self):
+        perf = self.status.performance
+        if perf.start_time <= 0:
+            return
+        elapsed = time.time() - perf.start_time
+        perf.elapsed_seconds = elapsed
+        perf.eta_seconds = max(0, perf.eta_seconds - 1)
+
     def notify(self):
         self.updated.emit(self.status)
 
@@ -100,6 +124,7 @@ class TaskStatusModel(QObject):
         self.status.backend.backend_type = backend_type
         self.status.backend.worker_count = int(cfg.get(cfg.taskParallelNumber))
         self.status.backend.gpu_name = gpu_name
+        self._heartbeat_timer.start()
         self.notify()
 
     def set_pipeline_steps(self, names: list[str]):
@@ -170,6 +195,7 @@ class TaskStatusModel(QObject):
         if batch.total > 0 and batch.processed >= batch.total:
             self.status.state = TaskState.FINISHED
             self.status.performance.eta_seconds = 0
+            self._heartbeat_timer.stop()
 
     @property
     def progress_percent(self) -> float:

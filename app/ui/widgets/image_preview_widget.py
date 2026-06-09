@@ -5,7 +5,7 @@ import subprocess
 import platform
 from PySide6.QtCore import (
     Signal, Qt, QTimer, QRect, Property, QEasingCurve, QPropertyAnimation, 
-    QThreadPool, QRunnable, QBuffer, QIODevice
+    QRunnable, QBuffer, QIODevice
 )
 from PySide6.QtWidgets import (
     QGraphicsView, QWidget , QVBoxLayout, QGraphicsScene, QGraphicsPixmapItem, QGraphicsTextItem, 
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QPixmap, QWheelEvent, QColor, QPainter, QBrush, QPen, QLinearGradient
 from app.ui.library.qfluentwidgets import setFont, qconfig, Theme 
 from app.ui.common.event_bus import global_event_bus
+from app.controllers.task_manager import InternalTaskManager
 
 
 class ScrollBar(QScrollBar):
@@ -483,8 +484,6 @@ class LoaderWorker(QRunnable):
 
 
 class ThumbnailButton(AnimatedButton):
-    thread_pool = QThreadPool.globalInstance()
-
     def __init__(self, index, image_path, media_type="image", parent=None):
         super().__init__("", parent)
         self.media_type = media_type
@@ -493,8 +492,18 @@ class ThumbnailButton(AnimatedButton):
         self.pixmap = None
         self._is_hovered = False
         self.is_active = False
+        self._is_loading = False
         self.setFixedSize(48, 48)
         self.setCursor(Qt.PointingHandCursor)
+
+    def trigger_async_load(self):
+        if self.pixmap or self._is_loading:
+            return
+        if not self.image_path:
+            return
+        self._is_loading = True
+        worker = LoaderWorker(self.image_path, self.on_loaded, media_type=self.media_type)
+        InternalTaskManager.get_pool().start(worker)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -521,8 +530,8 @@ class ThumbnailButton(AnimatedButton):
             painter.drawRoundedRect(self.rect().adjusted(3, 3, -3, -3), 6, 6)
 
             # 异步加载
-            worker = LoaderWorker(self.image_path, self.on_loaded, media_type=self.media_type)
-            self.thread_pool.start(worker)
+            if not self._is_loading:
+                QTimer.singleShot(0, self.trigger_async_load)
 
         if self._is_hovered or self.is_active:
             overlay = QColor(255, 255, 255, 40 if self._is_hovered else 60)

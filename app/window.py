@@ -194,10 +194,11 @@ class MainWindow(FluentWindow):
         cfg.save_config()
         self.themeListener.terminate()
         self.themeListener.deleteLater()
-        from app.controllers.task_manager import global_task_manager
+        from app.controllers.task_manager import global_task_manager, InternalTaskManager
         from app.ui.common.utils import global_backend_info_cache
         global_backend_info_cache.clear()
         global_task_manager.close()
+        InternalTaskManager.shutdown()
 
         self.resource_monitor_widget.clear()
         super().closeEvent(e)
