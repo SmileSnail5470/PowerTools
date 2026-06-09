@@ -1,11 +1,11 @@
 from PySide6.QtCore import Qt, QUrl, QSizeF, QTimer, Slot, QCoreApplication
 from PySide6.QtGui import QPainter, QColor, QBrush
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
-from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QHBoxLayout, QVBoxLayout, QWidget, QGraphicsRectItem
+from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QHBoxLayout, QVBoxLayout, QWidget, QGraphicsRectItem, QGraphicsTextItem
 
 from app.ui.library.qfluentwidgets.common.style_sheet import FluentStyleSheet, isDarkTheme
 from app.ui.library.qfluentwidgets.multimedia.media_play_bar import MediaPlayer, MediaPlayerBase, VolumeButton, PlayButton
-from app.ui.library.qfluentwidgets import Slider
+from app.ui.library.qfluentwidgets import Slider, setFont
 
 
 class MediaPlayBarBase(QWidget):
@@ -142,6 +142,10 @@ class SyncVideoViewer(QWidget):
         self.divider.setPen(Qt.NoPen)
         self.scene.addItem(self.divider)
 
+        # Placeholder text items
+        self.placeholder_main = self._create_placeholder("🎬", self.tr("原视频预览区域"), self.tr("处理完成后自动显示预览"))
+        self.placeholder_sub = self._create_placeholder("🎬", self.tr("处理后视频预览区域"), self.tr("处理完成后自动显示预览"))
+
         self.view = QGraphicsView(self.scene)
         self.view.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
         self.view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -161,8 +165,40 @@ class SyncVideoViewer(QWidget):
         layout.addWidget(self.view, 1)
         layout.addWidget(self.playBar, 0)
 
+    def _create_placeholder(self, icon_text, title_text, subtitle_text):
+        """Create placeholder text items for a video area."""
+        items = []
+        icon = QGraphicsTextItem(icon_text)
+        icon.setDefaultTextColor(QColor("#cccccc"))
+        setFont(icon, 32)
+        self.scene.addItem(icon)
+        items.append(icon)
+
+        title = QGraphicsTextItem(title_text)
+        setFont(title, 16)
+        title.setDefaultTextColor(QColor("#E0E0E0"))
+        self.scene.addItem(title)
+        items.append(title)
+
+        subtitle = QGraphicsTextItem(subtitle_text)
+        setFont(subtitle, 14)
+        subtitle.setDefaultTextColor(QColor("#BDBDBD"))
+        self.scene.addItem(subtitle)
+        items.append(subtitle)
+
+        return items
+
+    def _show_placeholders(self):
+        for item in self.placeholder_main + self.placeholder_sub:
+            item.show()
+
+    def _hide_placeholders(self):
+        for item in self.placeholder_main + self.placeholder_sub:
+            item.hide()
+
     def setVideos(self, main_path: str, sub_path: str):
         self._cleanup_players()
+        self._hide_placeholders()
         self.player_main.setSource( QUrl.fromLocalFile(main_path))
         self.player_sub.setSource(QUrl.fromLocalFile(sub_path))
         self._updateVideoLayout()
@@ -172,6 +208,8 @@ class SyncVideoViewer(QWidget):
 
     def init_scene(self):
         self._cleanup_players()
+        self._show_placeholders()
+        self._updateVideoLayout()
 
     def _show_first_frame(self):
         self.player_main.pause()
@@ -192,8 +230,23 @@ class SyncVideoViewer(QWidget):
 
         self.divider.setRect(0, h - 1, w, 2)
 
+        # Position placeholders centered in each half
+        self._position_placeholder(self.placeholder_main, w, h, 0)
+        self._position_placeholder(self.placeholder_sub, w, h, h + 1)
+
         self.scene.setSceneRect(0, 0, w, h * 2)
         self.view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
+
+    def _position_placeholder(self, items, w, h, y_offset):
+        """Center placeholder items (icon, title, subtitle) within a region."""
+        icon, title, subtitle = items
+        spacing = 4
+        total_h = icon.boundingRect().height() + title.boundingRect().height() + subtitle.boundingRect().height() + spacing * 2
+        start_y = y_offset + (h - 1) / 2 - total_h / 2
+
+        icon.setPos(w / 2 - icon.boundingRect().width() / 2, start_y)
+        title.setPos(w / 2 - title.boundingRect().width() / 2, start_y + icon.boundingRect().height() + spacing)
+        subtitle.setPos(w / 2 - subtitle.boundingRect().width() / 2, start_y + icon.boundingRect().height() + title.boundingRect().height() + spacing * 2)
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
