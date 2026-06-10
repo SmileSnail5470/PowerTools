@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QGraphicsView, QWidget , QVBoxLayout, QGraphicsScene, QGraphicsPixmapItem, QGraphicsTextItem, 
     QScrollBar, QProgressBar, QPushButton, QFrame, QHBoxLayout, QScrollArea, QSizePolicy
 )
-from PySide6.QtGui import QPixmap, QWheelEvent, QColor, QPainter, QBrush, QPen, QLinearGradient
+from PySide6.QtGui import QPixmap, QWheelEvent, QColor, QPainter, QBrush, QPen, QLinearGradient, QImage
 from app.ui.library.qfluentwidgets import setFont, qconfig, Theme 
 from app.ui.common.event_bus import global_event_bus
 from app.controllers.task_manager import InternalTaskManager
@@ -270,7 +270,25 @@ class SyncGraphicsView(QGraphicsView):
             self.scale(scale_factor, scale_factor)
 
 
+class _ImageLoadWorker(QRunnable):
+    """异步加载预览大图的Worker"""
+    def __init__(self, path, callback):
+        super().__init__()
+        self._path = path
+        self._callback = callback
+
+    def run(self):
+        if not self._path or not os.path.exists(self._path):
+            return
+        image = QImage(self._path)
+        if not image.isNull():
+            self._callback(image)
+
+
 class SyncImageViewer(QWidget):
+    _img1_loaded = Signal(object)
+    _img2_loaded = Signal(object)
+
     def __init__(self, img1: str = "", img2: str = "", parent=None):
         super().__init__(parent=parent)
         layout = QVBoxLayout(self)
@@ -292,6 +310,9 @@ class SyncImageViewer(QWidget):
         self.view1.scrollChanged.connect(self.view2.sync_scroll)
         self.view2.scrollChanged.connect(self.view1.sync_scroll)
 
+        self._img1_loaded.connect(lambda img: self.view1.set_pixmap(QPixmap.fromImage(img)))
+        self._img2_loaded.connect(lambda img: self.view2.set_pixmap(QPixmap.fromImage(img)))
+
         self.setStyleSheet("""
             QWidget {
                 background-color: #f3f3f3;
@@ -305,8 +326,10 @@ class SyncImageViewer(QWidget):
         """)
 
     def set_images(self, img1: str, img2: str):
-        self.view1.set_pixmap(QPixmap(img1))
-        self.view2.set_pixmap(QPixmap(img2))
+        worker1 = _ImageLoadWorker(img1, self._img1_loaded.emit)
+        worker2 = _ImageLoadWorker(img2, self._img2_loaded.emit)
+        InternalTaskManager.get_pool().start(worker1)
+        InternalTaskManager.get_pool().start(worker2)
 
     def init_scene(self):
         self.view1._init_placeholder()
@@ -430,17 +453,17 @@ class LoaderWorker(QRunnable):
         if not os.path.exists(self.image_path):
             return
         if self.media_type == "image":
-            pix = QPixmap(self.image_path)
-            if not pix.isNull():
-                self.callback(pix)
+            img = QImage(self.image_path)
+            if not img.isNull():
+                self.callback(img)
         else:
-            pix = self._extract_video_frame(video_path=self.image_path)
-            if pix and not pix.isNull():
-                self.callback(pix)
+            img = self._extract_video_frame(video_path=self.image_path)
+            if img and not img.isNull():
+                self.callback(img)
 
     @staticmethod
     @lru_cache(maxsize=512)
-    def _extract_video_frame(video_path: str, size=(48, 48)) -> QPixmap:
+    def _extract_video_frame(video_path: str, size=(48, 48)) -> QImage:
         width, height = size
 
         ffmpeg_bin = os.getenv(
@@ -473,17 +496,19 @@ class LoaderWorker(QRunnable):
                 overwrite_output=True
             )
 
-        pixmap = QPixmap()
+        image = QImage()
         buffer = QBuffer()
         buffer.setData(out_bytes)
         buffer.open(QIODevice.ReadOnly)
-        pixmap.loadFromData(buffer.data(), "PNG")
+        image.loadFromData(buffer.data(), "PNG")
         buffer.close()
 
-        return pixmap
+        return image
 
 
 class ThumbnailButton(AnimatedButton):
+    _pixmap_ready = Signal(object)
+
     def __init__(self, index, image_path, media_type="image", parent=None):
         super().__init__("", parent)
         self.media_type = media_type
@@ -495,6 +520,7 @@ class ThumbnailButton(AnimatedButton):
         self._is_loading = False
         self.setFixedSize(48, 48)
         self.setCursor(Qt.PointingHandCursor)
+        self._pixmap_ready.connect(self._on_pixmap_ready)
 
     def trigger_async_load(self):
         if self.pixmap or self._is_loading:
@@ -502,7 +528,7 @@ class ThumbnailButton(AnimatedButton):
         if not self.image_path:
             return
         self._is_loading = True
-        worker = LoaderWorker(self.image_path, self.on_loaded, media_type=self.media_type)
+        worker = LoaderWorker(self.image_path, self._pixmap_ready.emit, media_type=self.media_type)
         InternalTaskManager.get_pool().start(worker)
 
     def paintEvent(self, event):
@@ -548,9 +574,10 @@ class ThumbnailButton(AnimatedButton):
             painter.setBrush(Qt.NoBrush)
             painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 6, 6)
 
-    def on_loaded(self, pixmap: QPixmap):
-        if not pixmap or pixmap.isNull():
+    def _on_pixmap_ready(self, image):
+        if not image or image.isNull():
             return
+        pixmap = QPixmap.fromImage(image)
         self.pixmap = pixmap.scaled(
             self.width() - 6,
             self.height() - 6,

@@ -145,7 +145,7 @@ class InternalTaskManager:
     def get_pool(cls) -> QThreadPool:
         if cls._instance is None:
             cls._instance = QThreadPool()
-            cls._instance.setMaxThreadCount(3)
+            cls._instance.setMaxThreadCount(6)
         return cls._instance
 
     @classmethod

@@ -12,12 +12,25 @@ from app.algorithms.blind_watermark_addition.blind_watermark_addition_video impo
 
 
 class WatermarkExtractWork(BaseWorker):
+    _image_instance = None
+    _video_instance = None
+
+    @classmethod
+    def _get_image_instance(cls):
+        if cls._image_instance is None:
+            cls._image_instance = ImageBlindWatermarkDetect()
+        return cls._image_instance
+
+    @classmethod
+    def _get_video_instance(cls):
+        if cls._video_instance is None:
+            cls._video_instance = VideoBlindWatermarkDetect()
+        return cls._video_instance
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.cache_path = cfg.get(cfg.cachePath)
         self.deps_path = cfg.get(cfg.localAIModelDeps)
-        self.blind_watermark_extract_image_instance = ImageBlindWatermarkDetect()
-        self.blind_watermark_extract_video_instance = VideoBlindWatermarkDetect()
 
     def _text_to_image(self, input_path, text):
         w, h = Image.open(input_path).size
@@ -108,12 +121,12 @@ class WatermarkExtractWork(BaseWorker):
             params = {
                 "input_image_path": input_path
             }
-            self.blind_watermark_extract_image_instance.prepare(
+            self._get_image_instance().prepare(
                 onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_image_detect.onnx".format(kwargs["blind_watermark_model_name"]))
             )
             if progress_cb is not None:
                 progress_cb("BlindWatermarkExtractStart", "")
-            text = self.blind_watermark_extract_image_instance.watermark_extraction(**params)["preds"]
+            text = self._get_image_instance().watermark_extraction(**params)["preds"]
             if progress_cb is not None:
                 progress_cb("BlindWatermarkExtractCompleted", "")
             output_file = self._text_to_image(input_path=input_path, text=text)
@@ -122,13 +135,13 @@ class WatermarkExtractWork(BaseWorker):
                 "input_path": input_path,
                 "chunk_size": 8
             }
-            self.blind_watermark_extract_video_instance.prepare(
+            self._get_video_instance().prepare(
                 onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_video_detect.onnx".format(kwargs["blind_watermark_model_name"])),
                 ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN")
             )
             if progress_cb is not None:
                 progress_cb("BlindWatermarkExtractStart", "")
-            text = self.blind_watermark_extract_video_instance.watermark_extraction(**params)["preds"]
+            text = self._get_video_instance().watermark_extraction(**params)["preds"]
             if progress_cb is not None:
                 progress_cb("BlindWatermarkExtractCompleted", "")
             output_file = self._text_to_video(input_path=input_path, text=text)

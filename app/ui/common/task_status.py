@@ -88,6 +88,13 @@ class TaskStatusModel(QObject):
         self._heartbeat_timer.timeout.connect(self._heartbeat)
         self._heartbeat_timer.setInterval(1000)
 
+        # 节流：最多每200ms刷新一次UI
+        self._notify_pending = False
+        self._throttle_timer = QTimer(self)
+        self._throttle_timer.setSingleShot(True)
+        self._throttle_timer.setInterval(200)
+        self._throttle_timer.timeout.connect(self._flush_notify)
+
     def _heartbeat(self):
         if self.status.state != TaskState.RUNNING:
             return
@@ -103,6 +110,19 @@ class TaskStatusModel(QObject):
         perf.eta_seconds = max(0, perf.eta_seconds - 1)
 
     def notify(self):
+        if not self._throttle_timer.isActive():
+            self._throttle_timer.start()
+        self._notify_pending = True
+
+    def _flush_notify(self):
+        if self._notify_pending:
+            self._notify_pending = False
+            self.updated.emit(self.status)
+
+    def notify_immediate(self):
+        """立即刷新，用于关键状态变化（开始/结束）"""
+        self._notify_pending = False
+        self._throttle_timer.stop()
         self.updated.emit(self.status)
 
     def reset(self):
@@ -114,7 +134,7 @@ class TaskStatusModel(QObject):
             self.status.pipeline_steps = [PipelineStep(name=n) for n in step_names]
         else:
             self.status = TaskStatus()
-        self.notify()
+        self.notify_immediate()
 
     def start_batch(self, total: int, backend_type: str = "CPU 运行", gpu_name: str = ""):
         self.reset()
@@ -125,7 +145,7 @@ class TaskStatusModel(QObject):
         self.status.backend.worker_count = int(cfg.get(cfg.taskParallelNumber))
         self.status.backend.gpu_name = gpu_name
         self._heartbeat_timer.start()
-        self.notify()
+        self.notify_immediate()
 
     def set_pipeline_steps(self, names: list[str]):
         self.status.pipeline_steps = [PipelineStep(name=n) for n in names]
@@ -166,16 +186,16 @@ class TaskStatusModel(QObject):
         self.status.batch.processed += 1
         self.status.batch.success += 1
         self._update_performance()
-        self._check_finished()
-        self.notify()
+        if not self._check_finished():
+            self.notify()
 
     def report_failure(self, filename: str, reason: str):
         self.status.batch.processed += 1
         self.status.batch.failed += 1
         self.status.batch.failures.append((filename, reason))
         self._update_performance()
-        self._check_finished()
-        self.notify()
+        if not self._check_finished():
+            self.notify()
 
     def _update_performance(self):
         perf = self.status.performance
@@ -196,6 +216,9 @@ class TaskStatusModel(QObject):
             self.status.state = TaskState.FINISHED
             self.status.performance.eta_seconds = 0
             self._heartbeat_timer.stop()
+            self.notify_immediate()
+            return True
+        return False
 
     @property
     def progress_percent(self) -> float:

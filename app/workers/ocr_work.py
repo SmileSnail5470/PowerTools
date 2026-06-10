@@ -8,10 +8,17 @@ from app.algorithms.ocr.pp_ocr import OCR
 
 
 class OCRWork(BaseWorker):
+    _ocr_instance = None
+
+    @classmethod
+    def _get_ocr_instance(cls):
+        if cls._ocr_instance is None:
+            cls._ocr_instance = OCR()
+        return cls._ocr_instance
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.deps_path = cfg.get(cfg.localAIModelDeps)
-        self.ocr_instance = OCR()
 
 
     @log_exception(logger=logging.getLogger('OCR'), reraise=True, log_args=True, log_result=True)
@@ -32,6 +39,7 @@ class OCRWork(BaseWorker):
             "cls_onnx_path": os.path.join(onnx_model_dir, "pp_lcnet_x1_0_textline_ori.onnx"),
             "progress_cb": progress_cb
         }
-        self.ocr_instance.prepare(**params)
-        ocr_result = self.ocr_instance.predict(image_path=input_path, use_cls=bool(kwargs["use_textline_ori"]) if "use_textline_ori" in kwargs else False)
+        ocr = self._get_ocr_instance()
+        ocr.prepare(**params)
+        ocr_result = ocr.predict(image_path=input_path, use_cls=bool(kwargs["use_textline_ori"]) if "use_textline_ori" in kwargs else False)
         return ocr_result

@@ -9,11 +9,24 @@ from app.algorithms.visible_watermark_removal.watermark_removal_video import Vid
 
 
 class WatermarkRemoveWork(BaseWorker):
+    _image_instance = None
+    _video_instance = None
+
+    @classmethod
+    def _get_image_instance(cls):
+        if cls._image_instance is None:
+            cls._image_instance = ImageWatermarkRemove()
+        return cls._image_instance
+
+    @classmethod
+    def _get_video_instance(cls):
+        if cls._video_instance is None:
+            cls._video_instance = VideoWatermarkRemover()
+        return cls._video_instance
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.deps_path = cfg.get(cfg.localAIModelDeps)
-        self.watermark_remove_image_instance = ImageWatermarkRemove()
-        self.watermark_remove_video_instance = VideoWatermarkRemover()
 
 
     @log_exception(logger=logging.getLogger('WatermarkRemove'), reraise=True, log_args=True, log_result=True)
@@ -56,7 +69,7 @@ class WatermarkRemoveWork(BaseWorker):
                 "dilate_num": int(kwargs["mask_dilate"]),
                 "progress_cb": progress_cb,
             }
-            self.watermark_remove_image_instance.run(**params)
+            self._get_image_instance().run(**params)
         else:
             ppt_onnx_basedir = os.path.join(self.deps_path, "video_inpainting", "ppt")
             params = {
@@ -86,5 +99,5 @@ class WatermarkRemoveWork(BaseWorker):
                 "ffmpeg_path": os.getenv("POWERTOOLS_FFMPEG_BIN"),
                 "progress_cb": progress_cb,
             }
-            self.watermark_remove_video_instance.process_video(**params)
+            self._get_video_instance().process_video(**params)
         return output_file

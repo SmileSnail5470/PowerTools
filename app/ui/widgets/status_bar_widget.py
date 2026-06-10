@@ -85,7 +85,15 @@ class SpeedTrendWidget(QWidget):
         self.target_bars = [40.0, 60.0, 55.0, 85.0, 95.0]
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_bars)
-        self.timer.start(120)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self.timer.isActive():
+            self.timer.start(120)
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self.timer.stop()
 
     def update_bars(self):
         for i in range(4):
@@ -324,7 +332,7 @@ class BatchPipelineBar(QWidget):
             if self.icon.rot_anim.state() == QPropertyAnimation.Paused:
                 self.icon.rot_anim.resume()
                 self.icon.scale_anim.resume()
-                self.trend_chart.timer.start()
+                self.trend_chart.timer.start(120)
             hrs = int(seconds) // 3600
             mins = (int(seconds) % 3600) // 60
             secs = int(seconds) % 60

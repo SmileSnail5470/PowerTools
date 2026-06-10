@@ -10,12 +10,31 @@ from app.algorithms.blind_watermark_addition.blind_watermark_addition_video impo
 
 
 class WatermarkAddWork(BaseWorker):
+    _visible_instance = None
+    _blind_image_instance = None
+    _blind_video_instance = None
+
+    @classmethod
+    def _get_visible_instance(cls):
+        if cls._visible_instance is None:
+            cls._visible_instance = VisibleWatermarkAddition()
+        return cls._visible_instance
+
+    @classmethod
+    def _get_blind_image_instance(cls):
+        if cls._blind_image_instance is None:
+            cls._blind_image_instance = ImageBlindWatermarkEmbed()
+        return cls._blind_image_instance
+
+    @classmethod
+    def _get_blind_video_instance(cls):
+        if cls._blind_video_instance is None:
+            cls._blind_video_instance = VideoBlindWatermarkEmbed()
+        return cls._blind_video_instance
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.deps_path = cfg.get(cfg.localAIModelDeps)
-        self.visible_watermark_addition_instance = VisibleWatermarkAddition()
-        self.blind_watermark_addition_image_instance = ImageBlindWatermarkEmbed()
-        self.blind_watermark_addition_video_instance = VideoBlindWatermarkEmbed()
 
     def _hex_to_rgba(self, hex_color: str, alpha: int = 255):
         hex_color = hex_color.lstrip('#')
@@ -57,7 +76,7 @@ class WatermarkAddWork(BaseWorker):
                     "relative_to": "watermark",
                     "jpeg_quality": 95,
                 }
-                self.visible_watermark_addition_instance.image_add_image_watermark(**params)
+                self._get_visible_instance().image_add_image_watermark(**params)
             else:
                 params = {
                     "input_video_path": input_path,
@@ -72,7 +91,7 @@ class WatermarkAddWork(BaseWorker):
                     "crf": 18,
                     "hardware_accel": True
                 }
-                self.visible_watermark_addition_instance.video_add_image_watermark(**params)
+                self._get_visible_instance().video_add_image_watermark(**params)
         elif is_visible_watermark and kwargs["watermark_content"] == "TextSettings":
             if file_type == "image":
                 params = {
@@ -93,7 +112,7 @@ class WatermarkAddWork(BaseWorker):
                     "shadow_offset": (2,2),
                     "jpeg_quality": 95
                 }
-                self.visible_watermark_addition_instance.image_add_text_watermark(**params)
+                self._get_visible_instance().image_add_text_watermark(**params)
             else:
                 params = {
                     "input_video_path": input_path,
@@ -112,7 +131,7 @@ class WatermarkAddWork(BaseWorker):
                     "codec": "libx264",
                     "crf": 18
                 }
-                self.visible_watermark_addition_instance.video_add_text_watermark(**params)
+                self._get_visible_instance().video_add_text_watermark(**params)
 
         elif not is_visible_watermark:
             custom_characters = kwargs["custom_characters"] if "custom_characters" in kwargs else list("ABCDEFGHIJKLMNOPQRSTUVWXYZ,1234")
@@ -123,10 +142,10 @@ class WatermarkAddWork(BaseWorker):
                     "output_file": output_file,
                     "message": kwargs["watermark_text"]
                 }
-                self.blind_watermark_addition_image_instance.prepare(
+                self._get_blind_image_instance().prepare(
                     onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_image_embed.onnx".format(kwargs["blind_watermark_model_name"]))
                 )
-                self.blind_watermark_addition_image_instance.watermark_addition(**params)
+                self._get_blind_image_instance().watermark_addition(**params)
             else:
                 params = {
                     "input_path": input_path,
@@ -134,11 +153,11 @@ class WatermarkAddWork(BaseWorker):
                     "message": kwargs["watermark_text"],
                     "chunk_size": 8
                 }
-                self.blind_watermark_addition_video_instance.prepare(
+                self._get_blind_video_instance().prepare(
                     onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_video_embed.onnx".format(kwargs["blind_watermark_model_name"])),
                     ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN")
                 )
-                self.blind_watermark_addition_video_instance.watermark_addition(**params)
+                self._get_blind_video_instance().watermark_addition(**params)
         if progress_cb is not None:
             progress_cb("VisibleWatermarkAddCompleted", "")
         return output_file
