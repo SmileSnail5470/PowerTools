@@ -19,7 +19,7 @@ import urllib.request
 
 from app.ui.library.qfluentwidgets import(
     setFont, ScrollArea, TeachingTip, InfoBarIcon, TeachingTipTailPosition, FluentIcon,
-    ComboBox, Theme
+    ComboBox, Theme, MessageBox
 )
 from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget, CustomGroupBox
@@ -579,6 +579,9 @@ class SoftwareCard(QFrame):
                 QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog if sys.platform == "darwin" else QFileDialog.Option(0)
             )
             if directory:
+                if isinstance(directory, str) and not directory.isascii():
+                    MessageBox(title=self.tr("提醒"), content="不支持非英文路径", parent=self.window()).exec()
+                    return
                 self.path_input.setText(directory)
         else:
             files, _ = QFileDialog.getOpenFileNames(
@@ -589,6 +592,9 @@ class SoftwareCard(QFrame):
                 options=QFileDialog.Option.DontUseNativeDialog if sys.platform == "darwin" else QFileDialog.Option(0)
             )
             if files:
+                if isinstance(files, str) and not files.isascii():
+                    MessageBox(title=self.tr("提醒"), content="不支持非英文路径", parent=self.window()).exec()
+                    return
                 self.path_input.setText(files)
 
     def _update_global_config(self, path: str):
@@ -918,6 +924,9 @@ class Settings(QWidget):
             QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog if sys.platform == "darwin" else QFileDialog.Option(0)
         )
         if directory:
+            if isinstance(directory, str) and not directory.isascii():
+                    MessageBox(title=self.tr("提醒"), content="不支持非英文路径", parent=self.window()).exec()
+                    return
             widget.setText(directory)
 
     def _btn_style(self, bg, hover, color="#374151"):

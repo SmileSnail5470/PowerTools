@@ -732,6 +732,8 @@ class HeaderWidget(QWidget):
             error_msg = self.tr("请选择要处理的文件或目录且文件名不能有空格")
             return error_msg, task_params
         else:
+            if isinstance(params["input_path"], str) and not params["input_path"].isascii():
+                return self.tr("输入路径: 不支持非英文路径"), task_params
             task_params["input_path"] = params["input_path"]
 
         if get_file_type(params["input_path"]) == "video" and cfg.get(cfg.additionalParams)["SoftwareSettings"]["FFmpeg_status_info"]["text"] != "OK":
@@ -764,6 +766,8 @@ class HeaderWidget(QWidget):
             error_msg = self.tr("请设置文件保存位置")
             return error_msg, task_params
         else:
+            if isinstance(params["output_path"], str) and not params["output_path"].isascii():
+                return self.tr("输出路径: 不支持非英文路径"), task_params
             task_params["output_path"] = params["output_path"]
             task_params["output_format"] = params["output_format"]
 
@@ -775,8 +779,14 @@ class HeaderWidget(QWidget):
             task_params["watermark_format"] = params["watermark_format"]
             task_params["watermark_confidence"] = params["watermark_confidence"]
             if task_params["watermark_ai_interactive_type"] == "semantic_detect":
+                if not params["watermark_detect_prompt"]:
+                    error_msg = self.tr("请框输入水印语义检测提示词")
+                    return error_msg, task_params
                 task_params["watermark_detect_prompt"] = params["watermark_detect_prompt"]
             if task_params["watermark_ai_interactive_type"] == "space_detect":
+                if not params["watermark_boxes"]:
+                    error_msg = self.tr("请框选水印位置")
+                    return error_msg, task_params
                 task_params["watermark_boxes"] = params["watermark_boxes"]
         if params["watermark_detect_type"] == "manual_detect":
             task_params["manual_watermark_mask_path"] = params["manual_watermark_mask_path"]

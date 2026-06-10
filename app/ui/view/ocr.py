@@ -459,6 +459,8 @@ class HeaderWidget(QWidget):
             error_msg = self.tr("请选择要处理的文件或目录且文件名不能有空格")
             return error_msg, task_params
         else:
+            if isinstance(params["input_path"], str) and not params["input_path"].isascii():
+                return self.tr("输入路径: 不支持非英文路径"), task_params
             task_params["input_path"] = params["input_path"]
 
         if "model_name" not in params or not params["model_name"]:

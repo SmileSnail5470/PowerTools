@@ -1,4 +1,5 @@
 import os
+import gc
 import cv2
 import time
 import numpy as np
@@ -33,6 +34,18 @@ class PPTInferenceORT:
         self.raft_model = RAFTBiONNX(onnx_paths['raft'])
         self.fix_flow_complete = RecurrentFlowCompleteORT(onnx_dir=onnx_paths["recurrent_flow_complete"])
         self.ppt_pipeline = PropagationTransformerORT(onnx_paths["ppt"])
+
+    def release(self):
+        if self.raft_model is not None:
+            del self.raft_model
+            self.raft_model = None
+        if self.fix_flow_complete is not None:
+            del self.fix_flow_complete
+            self.fix_flow_complete = None
+        if self.ppt_pipeline is not None:
+            del self.ppt_pipeline
+            self.ppt_pipeline = None
+        gc.collect()
 
     def _imwrite(self, bgr_img, file_path, params=None):
         dir_name = os.path.abspath(os.path.dirname(file_path))
@@ -137,7 +150,9 @@ class PPTInferenceORT:
             gt_flows_bi = (gt_flows_f, gt_flows_b)
         else:
             gt_flows_bi = self.raft_model.forward(frames_np)
+        del self.raft_model
         self.raft_model = None
+        gc.collect()
         if debug:
             print(f'RAFT ONNX Inference Cost: {time.time() - start_time:.4f}s')
             start_time = time.time()
@@ -165,7 +180,9 @@ class PPTInferenceORT:
         else:
             pred_flows_f, pred_flows_b = self.fix_flow_complete.forward_bidirect_flow(gt_flows_bi[0], gt_flows_bi[1], flow_masks_np)
             pred_flows_bi = self.fix_flow_complete.combine_flow(gt_flows_bi, (pred_flows_f, pred_flows_b), flow_masks_np)
+        del self.fix_flow_complete
         self.fix_flow_complete = None
+        gc.collect()
         if debug:
             print(f'Flow Completion ONNX Inference Cost: {time.time() - start_time:.4f}s')
             start_time = time.time()
@@ -234,4 +251,6 @@ class PPTInferenceORT:
             f = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
             img_save_root = os.path.join(output_dir, str(idx).zfill(6) + '.png')
             self._imwrite(f, img_save_root)
+        del self.ppt_pipeline
         self.ppt_pipeline = None
+        gc.collect()

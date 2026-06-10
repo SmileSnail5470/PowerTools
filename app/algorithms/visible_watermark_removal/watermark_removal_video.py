@@ -330,6 +330,8 @@ class VideoWatermarkRemover:
                 subvideo_length=subvideo_length
             )
             pipeline.inference(input_frames_dir=new_input_frames_dir, masks_dir=new_masks_dir, output_dir=cropped_out_dir)
+            pipeline.release()
+            del pipeline
             self._past_frames_back(input_frames_dir, cropped_out_dir, output_dir, bbox)
         else:
             raise ValueError(f"Unsupported video inpainting model: {refine_type}")
