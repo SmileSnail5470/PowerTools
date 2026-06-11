@@ -161,6 +161,7 @@ class TaskInfoMessageBox(MessageBoxBase):
                 "manual_detect": "手工标注",
                 "general_watermark": "通用水印",
                 "text_watermark": "文本水印",
+                "subtitle": "字幕",
                 "static_watermark": "静态",
                 "dynamic_watermark": "动态",
                 "semantic_detect": "语义检测",

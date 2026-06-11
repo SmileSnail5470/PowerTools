@@ -96,6 +96,18 @@ class WatermarkSegment():
                     yolo_mask = np.clip(yolo_mask, 0.0, 1.0)
                     yolo_mask = (yolo_mask * 255.0).astype(np.uint8)
                     mask = self._merge_text_yolo_masks(mask, yolo_mask)
+            elif self.watermark_type == "subtitle":
+                mask = detect_text_watermarks(
+                    input_path=image_path,
+                    limit_side_len = kwargs.get("limit_side_len", 960),
+                    limit_type = kwargs.get("limit_type", "max"),
+                    det_thresh = kwargs.get("det_thresh", 0.3),
+                    det_box_thresh = kwargs.get("det_box_thresh", 0.6),
+                    unclip_ratio = kwargs.get("unclip_ratio", 1.5),
+                    score_mode = kwargs.get("score_mode", "fast"),
+                    det_box_type = kwargs.get("det_box_type", "quad"),
+                    onnx_path = text_detection_onnx_path
+                )
             else:
                 slbr_segment = SLBRSegment()
                 slbr_segment.prepare(onnx_path=sr_onnx_path)

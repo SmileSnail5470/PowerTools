@@ -1,5 +1,6 @@
 from PySide6.QtCore import Qt, QUrl, QSizeF, QTimer, Slot, QCoreApplication
 from PySide6.QtGui import QPainter, QColor, QBrush
+from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QHBoxLayout, QVBoxLayout, QWidget, QGraphicsRectItem, QGraphicsTextItem
 
@@ -199,7 +200,7 @@ class SyncVideoViewer(QWidget):
     def setVideos(self, main_path: str, sub_path: str):
         self._cleanup_players()
         self._hide_placeholders()
-        self.player_main.setSource( QUrl.fromLocalFile(main_path))
+        self.player_main.setSource(QUrl.fromLocalFile(main_path))
         self.player_sub.setSource(QUrl.fromLocalFile(sub_path))
         self._updateVideoLayout()
 

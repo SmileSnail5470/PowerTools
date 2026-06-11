@@ -245,7 +245,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         image_layout.setContentsMargins(0, 6, 0, 6)
         image_layout.setSpacing(0)
 
-        patchwiper_card = StyleCard("#4facfe", self.tr("细节增强"), self.tr("智能重建细节，提升清晰度，速度慢"))
+        patchwiper_card = StyleCard("#4facfe", self.tr("细节增强"), self.tr("智能重建细节，提升清晰度，速度慢(不适合字幕)"))
         patchwiper_card.set_name("patchwiper")
         image_layout.addWidget(patchwiper_card)
         image_layout.addWidget(CardSeparator(self))
@@ -361,8 +361,8 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
     def get_current_page_height(self, index: int):
         widget = self.stacked_widget.widget(index)
-        widget.adjustSize()
-        return widget.sizeHint().height()
+        widget.layout().activate()
+        return widget.layout().sizeHint().height()
 
     
 class OutputSettingsCard(HeaderCardWidget):
