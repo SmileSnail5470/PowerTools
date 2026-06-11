@@ -22,7 +22,7 @@ class OptionCard(QFrame):
         layout = QVBoxLayout(self)
         self.title_label = QLabel(title)
         self.title_label.setObjectName("optTitle")
-        setFont(self.title_label, 13, QFont.DemiBold)
+        setFont(self.title_label, 13, QFont.Medium)
         self.desc_label = QLabel(desc)
         self.desc_label.setObjectName("optDesc")
         self.desc_label.setWordWrap(True)
@@ -40,6 +40,8 @@ class OptionCard(QFrame):
         self.setProperty("selected", self.selected)
         self.style().unpolish(self)
         self.style().polish(self)
+        self.title_label.style().unpolish(self.title_label)
+        self.title_label.style().polish(self.title_label)
 
     def mousePressEvent(self, event):
         if self.parent():
