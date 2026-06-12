@@ -67,7 +67,7 @@ class VideoWatermarkRemover:
                 global_ymax = max(global_ymax, y.max())
         if global_xmin == float('inf'):
             return None
-        return self._expand_bbox_keep_center(int(global_xmin), int(global_ymin), int(global_xmax)+1, int(global_ymax)+1, mask.shape[-2], mask.shape[-1])
+        return self._expand_bbox_keep_center(int(global_xmin), int(global_ymin), int(global_xmax)+1, int(global_ymax)+1, mask.shape[1], mask.shape[0])
 
     def _crop_frames_and_masks(self, input_frames_dir: str, masks_dir: str, bbox: tuple) -> tuple:
         new_input_dir = os.path.join(os.path.dirname(input_frames_dir), "{0}_cropped".format(os.path.basename(input_frames_dir)))
