@@ -159,6 +159,13 @@ class SyncVideoViewer(QWidget):
 
         self.sync_timer = QTimer(self)
         self.sync_timer.timeout.connect(self._sync_videos)
+        # flags tracking whether media is loaded
+        self._main_loaded = False
+        self._sub_loaded = False
+        self._waiting_for_media = False
+
+        self.player_main.mediaStatusChanged.connect(self._on_main_media_status)
+        self.player_sub.mediaStatusChanged.connect(self._on_sub_media_status)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -200,12 +207,14 @@ class SyncVideoViewer(QWidget):
     def setVideos(self, main_path: str, sub_path: str):
         self._cleanup_players()
         self._hide_placeholders()
+        # reset ready flags
+        self._main_loaded = False
+        self._sub_loaded = False
+        self._waiting_for_media = True
+
         self.player_main.setSource(QUrl.fromLocalFile(main_path))
         self.player_sub.setSource(QUrl.fromLocalFile(sub_path))
         self._updateVideoLayout()
-
-        self._show_first_frame()
-        self.sync_timer.start(self.sync_interval)
 
     def init_scene(self):
         self._cleanup_players()
@@ -217,6 +226,35 @@ class SyncVideoViewer(QWidget):
         self.player_sub.pause()
         self.player_main.setPosition(0)
         self.player_sub.setPosition(0)
+
+    def _on_main_media_status(self, status):
+        if not self._waiting_for_media:
+            return
+        if status in (QMediaPlayer.LoadedMedia, QMediaPlayer.BufferedMedia):
+            self._main_loaded = True
+        if status == QMediaPlayer.InvalidMedia:
+            self._main_loaded = False
+            self._waiting_for_media = False
+            self._show_placeholders()
+        if self._main_loaded and self._sub_loaded:
+            self._on_both_media_ready()
+
+    def _on_sub_media_status(self, status):
+        if not self._waiting_for_media:
+            return
+        if status in (QMediaPlayer.LoadedMedia, QMediaPlayer.BufferedMedia):
+            self._sub_loaded = True
+        if status == QMediaPlayer.InvalidMedia:
+            self._sub_loaded = False
+            self._waiting_for_media = False
+            self._show_placeholders()
+        if self._main_loaded and self._sub_loaded:
+            self._on_both_media_ready()
+
+    def _on_both_media_ready(self):
+        self._waiting_for_media = False
+        self._show_first_frame()
+        self.sync_timer.start(self.sync_interval)
 
     def _updateVideoLayout(self):
         w, h = self.view.width(), self.view.height() / 2

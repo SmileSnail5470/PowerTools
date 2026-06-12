@@ -16,7 +16,7 @@ class TaskManager(QObject):
 
     def __init__(self, max_workers: int = 8, parent=None):
         super().__init__(parent)
-        self.pool = QThreadPool.globalInstance()
+        self.pool = QThreadPool()
         self.pool.setMaxThreadCount(max_workers)
         self._tasks: Dict[str, TaskFuture] = {}
         self._lock = threading.Lock()
