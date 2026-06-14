@@ -16,11 +16,13 @@ from app.ui.view.screenshot import Screenshot
 from app.ui.view.scroll_screenshot import ScrollScreenshot
 from app.ui.view.watermark_add import WatermarkAdd
 from app.ui.view.watermark_remove import WatermarkRemove
+from app.ui.view.license_view import LicenseView
 from app.ui.widgets.resources_monitor_widget import ResourcesMonitorWidget
 
 from app.ui.common.config import cfg
 from app.ui.common.icon import Icon
 from app.ui.resources import resource
+from app.license.globals import license_manager
 
 
 class MainWindow(FluentWindow):
@@ -34,9 +36,13 @@ class MainWindow(FluentWindow):
         # create system theme listener
         self.themeListener = SystemThemeListener(self)
 
+        # Initialize license manager
+        self.license_manager = license_manager
+
         # create sub interface
         self.homeInterface = Home(self)
         self.settingInterface = Settings(self)
+        self.licenseInterface = LicenseView(self.license_manager, self)
         self.watermarkRemoveInterface = WatermarkRemove(self)
         self.watermarkAddInterface = WatermarkAdd(self)
         self.screenshotInterface = Screenshot(self)
@@ -62,6 +68,7 @@ class MainWindow(FluentWindow):
         # add navigation items
         self.addSubInterface(self.homeInterface, FIF.HOME, self.tr('主页'))
         self.addSubInterface(self.settingInterface, FIF.SETTING, self.tr("常规"))
+        self.addSubInterface(self.licenseInterface, FIF.CERTIFICATE, self.tr("授权"))
         self.navigationInterface.addSeparator()
 
         pos = NavigationItemPosition.SCROLL

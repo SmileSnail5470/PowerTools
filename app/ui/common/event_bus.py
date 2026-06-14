@@ -1,6 +1,8 @@
 from PySide6.QtCore import QObject, Signal
 
 class GlobalEventBus(QObject):
+    # 许可信息更新
+    License_update = Signal()
     # 水印添加 UI
     watermarkAdd_InputFileUpdate = Signal(str)
     watermarkAdd_TaskFinished = Signal(str, str)

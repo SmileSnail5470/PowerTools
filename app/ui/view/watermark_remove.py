@@ -318,6 +318,9 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         self.animate_height_change(target_height)
 
     def on_card_clicked(self, clicked_card):
+        # 如果卡片不可交互，则不响应点击
+        if not clicked_card.is_interactive():
+            return
         current_index = self.stacked_widget.currentIndex()
         active_pool = self.image_cards if current_index == 0 else self.video_cards
         for c in active_pool:

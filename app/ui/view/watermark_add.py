@@ -301,12 +301,15 @@ class BlindWatermarkModelCard(HeaderCardWidget):
         self.hide()
 
     def on_card_clicked(self, card: tuple, index):
+        card_instance, model_name = card
+        # 如果卡片不可交互，则不响应点击
+        if not card_instance.is_interactive():
+            return
         # 取消所有卡片的选中状态
         for c, _ in self.cards:
             c.set_selected(False)
         
         # 设置当前卡片为选中状态
-        card_instance, model_name = card
         card_instance.set_selected(True)
         self.blind_watermark_model_name.emit(model_name)
 

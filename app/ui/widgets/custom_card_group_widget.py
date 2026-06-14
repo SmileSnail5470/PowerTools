@@ -2,6 +2,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFrame, QLabel, QSizePolicy
 from PySide6.QtGui import QPainter, QColor, QFont
 from app.ui.library.qfluentwidgets import isDarkTheme, BodyLabel, CaptionLabel, setFont
+from app.license.globals import license_manager, feature_gate
+from app.ui.common.event_bus import global_event_bus
 
 
 class CardSeparator(QWidget):
@@ -131,8 +133,16 @@ class StyleCard(QFrame):
         "#fbc2eb": "🪣",   # CoordFill：快速填充
     }
 
-    def __init__(self, icon_color, title, subtitle, parent=None):
+    MODEL_FREE = "free"
+    MODEL_PRO = "pro"
+
+    def __init__(self, icon_color, title, subtitle, parent=None, model_type="free", is_authorized=False, remaining_uses=0):
         super().__init__(parent)
+        self._model_type = model_type
+        self._is_authorized = is_authorized
+        self._remaining_uses = remaining_uses
+        self._is_interactive = True  # Whether the card can be clicked/selected
+
         self.setStyleSheet("""
             StyleCard {
                 background-color: white;
@@ -175,23 +185,184 @@ class StyleCard(QFrame):
         setFont(self.subtitle_label, 12)
         self.subtitle_label.setStyleSheet("color: #7f8c8d;")
         self.subtitle_label.setWordWrap(True)
-        
+
+        status_row_layout = QHBoxLayout()
+        status_row_layout.setSpacing(8)
+        status_row_layout.setContentsMargins(0, 2, 0, 0)
+
+        self.auth_label = QLabel(self)
+        self.remaining_label = QLabel(self)
+
+        status_row_layout.addWidget(self.auth_label)
+        status_row_layout.addWidget(self.remaining_label)
+        status_row_layout.addStretch(1)
+
         text_layout.addWidget(self.title_label)
         text_layout.addWidget(self.subtitle_label)
+        text_layout.addLayout(status_row_layout)
         
         main_layout.addWidget(self.icon_label)
         main_layout.addLayout(text_layout)
         
         self.is_selected = False
         self.name = ""
+        
+        self._update_license_state()
+        global_event_bus.License_update.connect(self.update_license_info)
+
+    def update_license_info(self):
+        if license_manager.is_licensed and license_manager.tier == "free":
+            feature_name = None
+            for one_feature in license_manager.license_data.features:
+                feature_name = one_feature[0]
+                if self.get_name() not in feature_name:
+                    continue
+                self._model_type = one_feature[1]
+                self._remaining_uses = one_feature[3]
+                feature_name = feature_name
+                break
+            self._remaining_uses = feature_gate.get_remaining_uses(feature_name=feature_name)
+        self.refresh_license_state()
+
+    def refresh_license_state(self):
+        self._update_license_state()
+        if self.is_selected and not self._is_interactive:
+            self.set_selected(False)
+
+    def _update_license_state(self):
+        if not license_manager.is_licensed:
+            self._is_authorized = False
+            self._remaining_uses = 0
+            self._is_interactive = False
+        elif license_manager.tier == "pro":
+            self._is_authorized = True
+            self._remaining_uses = -1
+            self._is_interactive = True
+        else:
+            if self._model_type == self.MODEL_PRO:
+                self._is_authorized = False
+                self._remaining_uses = 0
+                self._is_interactive = False
+            else:
+                self._is_interactive = self._remaining_uses != 0
+
+        self._update_auth_label()
+        self._update_remaining_label()
+        self._update_interactive_style()
+
+    def _update_interactive_style(self):
+        if not self._is_interactive:
+            self.setStyleSheet("""
+                StyleCard {
+                    background-color: #f5f5f5;
+                    border: 2px solid transparent;
+                    border-radius: 12px;
+                    margin: 2px;
+                    opacity: 0.6;
+                }
+            """)
+            self.setCursor(Qt.ForbiddenCursor)
+        else:
+            self.setStyleSheet("""
+                StyleCard {
+                    background-color: white;
+                    border: 2px solid transparent;
+                    border-radius: 12px;
+                    margin: 2px;
+                }
+                StyleCard:hover {
+                    background-color: #f8f9fa;
+                }
+            """)
+            self.setCursor(Qt.PointingHandCursor)
+
+    def _update_auth_label(self):
+        if self._is_authorized:
+            self.auth_label.setText("● 已授权")
+            self.auth_label.setStyleSheet("""
+                QLabel {
+                    color: #27ae60;
+                    font-size: 11px;
+                }
+            """)
+        else:
+            self.auth_label.setText("● 未授权")
+            self.auth_label.setStyleSheet("""
+                QLabel {
+                    color: #e74c3c;
+                    font-size: 11px;
+                }
+            """)
+
+    def _update_remaining_label(self):
+        if self._remaining_uses < 0:
+            self.remaining_label.setText("剩余次数: 无限制")
+            self.remaining_label.setStyleSheet("""
+                QLabel {
+                    color: #7f8c8d;
+                    font-size: 11px;
+                }
+            """)
+        elif self._remaining_uses == 0:
+            self.remaining_label.setText("剩余: 0 次")
+            self.remaining_label.setStyleSheet("""
+                QLabel {
+                    color: #e74c3c;
+                    font-size: 11px;
+                    font-weight: bold;
+                }
+            """)
+        else:
+            self.remaining_label.setText(f"剩余: {self._remaining_uses} 次")
+            self.remaining_label.setStyleSheet("""
+                QLabel {
+                    color: #7f8c8d;
+                    font-size: 11px;
+                }
+            """)
+
+    def get_model_type(self) -> str:
+        return self._model_type
+
+    def set_model_type(self, model_type: str):
+        self._model_type = model_type
+        self._update_license_state()
+
+    def set_authorized(self, is_authorized: bool):
+        self._is_authorized = is_authorized
+        self._update_auth_label()
+
+    def is_authorized(self) -> bool:
+        return self._is_authorized
+
+    def is_interactive(self) -> bool:
+        return self._is_interactive
+
+    def set_remaining_uses(self, count: int):
+        self._remaining_uses = count
+        self._update_remaining_label()
+        if not license_manager.is_licensed:
+            self._is_interactive = False
+        elif license_manager.tier == "pro":
+            self._is_interactive = True
+        elif self._model_type == self.MODEL_PRO:
+            self._is_interactive = False
+        else:
+            self._is_interactive = count != 0
+        self._update_interactive_style()
+
+    def get_remaining_uses(self) -> int:
+        return self._remaining_uses
 
     def set_name(self, name):
         self.name = name
 
     def get_name(self):
         return self.name
-        
+
     def set_selected(self, selected):
+        if selected and not self._is_interactive:
+            return
         self.is_selected = selected
         if selected:
             self.setStyleSheet("""
@@ -206,14 +377,17 @@ class StyleCard(QFrame):
                 }
             """)
         else:
-            self.setStyleSheet("""
-                StyleCard {
-                    background-color: white;
-                    border: 2px solid transparent;
-                    border-radius: 12px;
-                    margin: 2px;
-                }
-                StyleCard:hover {
-                    background-color: #f8f9fa;
-                }
-            """)
+            if self._is_interactive:
+                self.setStyleSheet("""
+                    StyleCard {
+                        background-color: white;
+                        border: 2px solid transparent;
+                        border-radius: 12px;
+                        margin: 2px;
+                    }
+                    StyleCard:hover {
+                        background-color: #f8f9fa;
+                    }
+                """)
+            else:
+                self._update_interactive_style()

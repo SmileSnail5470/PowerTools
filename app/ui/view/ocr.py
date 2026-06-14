@@ -103,6 +103,9 @@ class ModelStyleCard(HeaderCardWidget):
         main_layout.addStretch()
 
     def on_card_clicked(self, card, index):
+        # 如果卡片不可交互，则不响应点击
+        if not card.is_interactive():
+            return
         # 取消所有卡片的选中状态
         for c in self.cards:
             c.set_selected(False)
