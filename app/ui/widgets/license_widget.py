@@ -1,3 +1,4 @@
+import sys
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFileDialog, QFrame, QApplication
@@ -150,7 +151,7 @@ class MachineIdCard(QFrame):
 
         self.machine_id_label = QLabel(get_machine_id_display())
         setFont(self.machine_id_label, 11)
-        self.machine_id_label.setStyleSheet("color: #6b7280; font-family: 'Consolas', 'Courier New', monospace;")
+        self.machine_id_label.setStyleSheet("color: #6b7280;")
         self.machine_id_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         info_layout.addWidget(self.machine_id_label)
 
@@ -346,6 +347,7 @@ class LicenseWidget(QWidget):
             self.tr("选择许可证文件"),
             "",
             self.tr("许可证文件 (*.lic);;所有文件 (*)"),
+            options=QFileDialog.Option.DontUseNativeDialog if sys.platform == "darwin" else QFileDialog.Option(0)
         )
         if file_path:
             self._activate_license(file_path)

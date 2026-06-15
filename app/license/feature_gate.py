@@ -24,6 +24,9 @@ class FeatureGate:
         self._daily_usage: dict = {}  # {feature_name: count}
         self._last_reset_day: Optional[str] = None
         self._features: dict[str, Feature] = {}
+        self._update_features()
+
+    def _update_features(self):
         if self._license_manager.is_licensed and self._license_manager.tier == "free":
             for one_feature in self._license_manager.license_data.features:
                 feature_name = one_feature[0]
@@ -36,20 +39,22 @@ class FeatureGate:
     def current_tier(self) -> FeatureTier:
         if self._license_manager.is_licensed:
             tier_str = self._license_manager.tier
-            try:
-                return FeatureTier(tier_str)
-            except ValueError:
-                return FeatureTier.FREE
-        return FeatureTier.FREE
+            return FeatureTier(tier_str)
+        else:
+            raise FeatureNotLicensedError("软件没有授权，请先授权软件许可")
 
     @property
     def is_pro(self) -> bool:
         return self.current_tier == FeatureTier.PRO
 
     def can_use(self, feature_name: str) -> bool:
+        if not self._license_manager.is_licensed:
+            raise FeatureNotLicensedError("软件没有授权，请先授权软件许可")
+
         if self.is_pro:
             return True
         
+        self._update_features()
         feature = self._features[feature_name]
         if feature.required_tier == "pro":
             return False
@@ -62,17 +67,28 @@ class FeatureGate:
         return current_usage < feature.free_limit
 
     def use_feature(self, feature_name: str) -> bool:
-        feature = self._features[feature_name]
+        if not self._license_manager.is_licensed:
+            raise FeatureNotLicensedError("软件没有授权，请先授权软件许可")
+
         if not self.can_use(feature_name):
+            self._update_features()
+            feature = self._features[feature_name]
             raise FeatureNotLicensedError(f"功能「{feature.description}」需要 Pro 授权才能使用")
-        if not self.is_pro and feature.free_limit > 0:
-            self._maybe_reset_daily_usage()
-            self._daily_usage[feature.name] = self._daily_usage.get(feature.name, 0) + 1
+        if not self.is_pro:
+            self._update_features()
+            feature = self._features[feature_name]
+            if feature.free_limit > 0:
+                self._maybe_reset_daily_usage()
+                self._daily_usage[feature.name] = self._daily_usage.get(feature.name, 0) + 1
 
     def get_remaining_uses(self, feature_name: str) -> int:
+        if not self._license_manager.is_licensed:
+            raise FeatureNotLicensedError("软件没有授权，请先授权软件许可")
+
         if self.is_pro:
             return -1
 
+        self._update_features()
         feature = self._features[feature_name]
         if feature.required_tier == "pro":
             return 0
@@ -84,13 +100,11 @@ class FeatureGate:
         return max(0, feature.free_limit - used)
 
     def get_feature_status(self, feature_name: str) -> dict:
-        feature = self._features[feature_name]
+        if not self._license_manager.is_licensed:
+            raise FeatureNotLicensedError("软件没有授权，请先授权软件许可")
         return {
             "available": self.can_use(feature_name),
-            "tier_required": feature.required_tier,
             "remaining": self.get_remaining_uses(feature_name),
-            "description": feature.description,
-            "is_pro_feature": feature.required_tier == "pro",
         }
 
     def _maybe_reset_daily_usage(self):

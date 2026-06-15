@@ -136,13 +136,8 @@ class StyleCard(QFrame):
     MODEL_FREE = "free"
     MODEL_PRO = "pro"
 
-    def __init__(self, icon_color, title, subtitle, parent=None, model_type="free", is_authorized=False, remaining_uses=0):
+    def __init__(self, icon_color, title, subtitle, parent=None):
         super().__init__(parent)
-        self._model_type = model_type
-        self._is_authorized = is_authorized
-        self._remaining_uses = remaining_uses
-        self._is_interactive = True  # Whether the card can be clicked/selected
-
         self.setStyleSheet("""
             StyleCard {
                 background-color: white;
@@ -206,8 +201,10 @@ class StyleCard(QFrame):
         
         self.is_selected = False
         self.name = ""
-        
-        self._update_license_state()
+        self._model_type = "pro"
+        self._is_authorized = False
+        self._remaining_uses = 0
+        self._is_interactive = True
         global_event_bus.License_update.connect(self.update_license_info)
 
     def update_license_info(self):
@@ -215,7 +212,7 @@ class StyleCard(QFrame):
             feature_name = None
             for one_feature in license_manager.license_data.features:
                 feature_name = one_feature[0]
-                if self.get_name() not in feature_name:
+                if self.get_name() and self.get_name() not in feature_name:
                     continue
                 self._model_type = one_feature[1]
                 self._remaining_uses = one_feature[3]
@@ -244,7 +241,8 @@ class StyleCard(QFrame):
                 self._remaining_uses = 0
                 self._is_interactive = False
             else:
-                self._is_interactive = self._remaining_uses != 0
+                self._is_interactive = self._remaining_uses > 0
+                self._is_authorized = True
 
         self._update_auth_label()
         self._update_remaining_label()
@@ -295,6 +293,11 @@ class StyleCard(QFrame):
             """)
 
     def _update_remaining_label(self):
+        if not self._is_authorized:
+            self.remaining_label.hide()
+            return
+        
+        self.remaining_label.show()
         if self._remaining_uses < 0:
             self.remaining_label.setText("剩余次数: 无限制")
             self.remaining_label.setStyleSheet("""
@@ -321,41 +324,15 @@ class StyleCard(QFrame):
                 }
             """)
 
-    def get_model_type(self) -> str:
-        return self._model_type
-
-    def set_model_type(self, model_type: str):
-        self._model_type = model_type
-        self._update_license_state()
-
-    def set_authorized(self, is_authorized: bool):
-        self._is_authorized = is_authorized
-        self._update_auth_label()
-
-    def is_authorized(self) -> bool:
-        return self._is_authorized
-
     def is_interactive(self) -> bool:
         return self._is_interactive
-
-    def set_remaining_uses(self, count: int):
-        self._remaining_uses = count
-        self._update_remaining_label()
-        if not license_manager.is_licensed:
-            self._is_interactive = False
-        elif license_manager.tier == "pro":
-            self._is_interactive = True
-        elif self._model_type == self.MODEL_PRO:
-            self._is_interactive = False
-        else:
-            self._is_interactive = count != 0
-        self._update_interactive_style()
 
     def get_remaining_uses(self) -> int:
         return self._remaining_uses
 
     def set_name(self, name):
         self.name = name
+        self.update_license_info()
 
     def get_name(self):
         return self.name

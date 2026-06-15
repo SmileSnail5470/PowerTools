@@ -281,11 +281,13 @@ class BlindWatermarkModelCard(HeaderCardWidget):
 
         self.cards: list[(StyleCard, str)] = []
         stable_card = StyleCard("#fa709a", self.tr("稳定可靠"), self.tr("添加盲水印后，建议提取验证，验证失败尝试更换算法"))
+        stable_card.set_name("videoseal")
         self.cards.append((stable_card, "videoseal"))
         main_layout.addWidget(stable_card)
         main_layout.addWidget(CardSeparator(self))
 
         high_quality_card = StyleCard("#84fab0", self.tr("追求质量"), self.tr("添加盲水印后，建议提取验证，验证失败尝试更换算法"))
+        high_quality_card.set_name("pixelseal")
         self.cards.append((high_quality_card, "pixelseal"))
         main_layout.addWidget(high_quality_card)
         main_layout.addWidget(CardSeparator(self))
