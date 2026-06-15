@@ -3,7 +3,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFileDialog, QFrame, QApplication
 from app.ui.library.qfluentwidgets import setFont, TeachingTip, InfoBarIcon, TeachingTipTailPosition, MessageBox
-from app.license.machine_id import get_machine_id, get_machine_id_display
+import app.library._machine_id as machine_id
 from app.license.license_manager import LicenseManager
 from app.license.exceptions import LicenseError
 
@@ -106,7 +106,7 @@ class LicenseStatusCard(QFrame):
             self.status_icon.setText("🔒")
             self.status_title.setText(self.tr("未激活"))
             self.status_title.setStyleSheet("color: #6b7280;")
-            self.tier_badge.setText(" FREE ")
+            self.tier_badge.setText(" LOCK ")
             self.tier_badge.setStyleSheet("""
                 QLabel {
                     background: #f3f4f6;
@@ -121,7 +121,7 @@ class LicenseStatusCard(QFrame):
                 self.details_label.setText(self.tr(f"状态：{error_msg}"))
                 self.details_label.setStyleSheet("color: #dc2626;")
             else:
-                self.details_label.setText(self.tr("当前使用免费版，部分高级功能不可用"))
+                self.details_label.setText(self.tr("当前未授权，大部分功能不可用，请授权"))
                 self.details_label.setStyleSheet("color: #6b7280;")
             self.expiry_label.setText(self.tr("导入许可证文件以激活 Pro 版功能"))
             self.expiry_label.setStyleSheet("color: #9ca3af;")
@@ -149,7 +149,7 @@ class MachineIdCard(QFrame):
         title_label.setStyleSheet("color: #374151;")
         info_layout.addWidget(title_label)
 
-        self.machine_id_label = QLabel(get_machine_id_display())
+        self.machine_id_label = QLabel(machine_id.get_machine_id_display())
         setFont(self.machine_id_label, 11)
         self.machine_id_label.setStyleSheet("color: #6b7280;")
         self.machine_id_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -188,7 +188,7 @@ class MachineIdCard(QFrame):
 
     def _copy_machine_id(self):
         clipboard = QApplication.clipboard()
-        clipboard.setText(get_machine_id())
+        clipboard.setText(machine_id.get_machine_id())
         TeachingTip.create(
             target=self,
             icon=InfoBarIcon.SUCCESS,

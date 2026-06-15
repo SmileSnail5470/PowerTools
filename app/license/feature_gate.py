@@ -5,10 +5,10 @@ import json
 import logging
 import os
 import pathlib
+import app.library._machine_id as machine_id
 from enum import Enum
 from typing import Optional
 from app.license.license_manager import LicenseManager
-from app.license.machine_id import get_machine_id
 from app.license.exceptions import FeatureNotLicensedError
 
 logger = logging.getLogger("FeatureGate")
@@ -35,7 +35,7 @@ class FeatureGate:
         self._daily_usage: dict = {}  # {feature_name: count}
         self._last_reset_day: Optional[str] = None
         self._features: dict[str, Feature] = {}
-        self._hmac_key = get_machine_id().encode()
+        self._hmac_key = machine_id.get_machine_id().encode()
         self._load_usage()
         self._update_features()
 

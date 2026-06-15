@@ -5,6 +5,8 @@ import pathlib
 import shutil
 import time
 import app.library._license_checker as license_checker
+import app.library._time_verify as time_verify
+import app.library._machine_id as machine_id
 from datetime import datetime
 from typing import Optional
 from app.license.exceptions import (
@@ -15,8 +17,6 @@ from app.license.exceptions import (
     LicenseCorruptedError,
     TimeRollbackDetectedError,
 )
-from app.license.machine_id import get_machine_id
-from app.license.time_verify import verify_system_time
 
 
 logger = logging.getLogger("License")
@@ -83,6 +83,7 @@ class LicenseManager:
         self._is_valid = False
         self._error_message = ""
 
+        self._copy_free_license()
         os.makedirs(self._license_dir, exist_ok=True)
         self._try_load_license()
 
@@ -109,6 +110,14 @@ class LicenseManager:
         if self._is_valid and self._license_data:
             return self._license_data.days_remaining
         return 0
+    
+    def _copy_free_license(self):
+        default_free_license_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "license_free.lic")
+        if not os.path.exists(default_free_license_path):
+            return
+        if os.path.exists(self._license_file):
+            return
+        shutil.copy2(default_free_license_path, self._license_file)
 
     def activate(self, license_file_path: str) -> bool:
         try:
@@ -157,7 +166,7 @@ class LicenseManager:
             self._update_state()
         except LicenseExpiredError:
             self._is_valid = False
-            self._error_message = "许可证已过期"
+            self._error_message = "许可证已过期、请联系作者续费 或 取消激活并重启软件使用免费版"
         except MachineMismatchError:
             self._is_valid = False
             self._error_message = "许可证与当前设备不匹配"
@@ -176,11 +185,13 @@ class LicenseManager:
                 raw_data = json.load(f)
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             raise LicenseCorruptedError(f"许可证文件格式错误: {e}")
-        current_machine_id = get_machine_id()
-        validate_result = license_checker.validate_license(license_json=json.dumps(raw_data), machine_id=current_machine_id)
+        current_machine_id = machine_id.get_machine_id()
+        validate_result = license_checker.validate_license(license_json=json.dumps(raw_data))
         if not validate_result["valid"]:
             if validate_result["error"] == "runtime_environment_invalid":
                 msg = "运行环境有风险，软件被尝试破解"
+            elif validate_result["error"] == "system_time_tampered":
+                msg = "许可验证失败，系统时间异常"
             elif validate_result["error"] in ["missing_signature", "invalid_signature", "invalid_expiry_format"]:
                 msg = "许可证签名无效，请联系作者"
             elif validate_result["error"] == "license_expired":
@@ -199,7 +210,7 @@ class LicenseManager:
         return license_data
 
     def _check_time_integrity(self):
-        is_valid, check_source = verify_system_time()
+        is_valid, check_source = time_verify.verify_system_time()
         if not is_valid:
             raise TimeRollbackDetectedError(f"系统时间异常，请检查系统时间设置。检测来源: {check_source}")
         state = self._load_state()
