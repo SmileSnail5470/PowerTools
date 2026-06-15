@@ -1,8 +1,17 @@
 import datetime
+import hashlib
+import hmac
+import json
+import logging
+import os
+import pathlib
 from enum import Enum
 from typing import Optional
 from app.license.license_manager import LicenseManager
+from app.license.machine_id import get_machine_id
 from app.license.exceptions import FeatureNotLicensedError
+
+logger = logging.getLogger("FeatureGate")
 
 
 class FeatureTier(Enum):
@@ -19,11 +28,15 @@ class Feature:
 
 
 class FeatureGate:
+    _USAGE_FILE = os.path.join(pathlib.Path.home(), ".PowerTools", "license", ".usage")
+
     def __init__(self, license_manager: LicenseManager):
         self._license_manager = license_manager
         self._daily_usage: dict = {}  # {feature_name: count}
         self._last_reset_day: Optional[str] = None
         self._features: dict[str, Feature] = {}
+        self._hmac_key = get_machine_id().encode()
+        self._load_usage()
         self._update_features()
 
     def _update_features(self):
@@ -80,6 +93,7 @@ class FeatureGate:
             if feature.free_limit > 0:
                 self._maybe_reset_daily_usage()
                 self._daily_usage[feature.name] = self._daily_usage.get(feature.name, 0) + 1
+                self._save_usage()
 
     def get_feature_name(self, model_name: str) -> str:
         if not self._license_manager.is_licensed:
@@ -124,3 +138,38 @@ class FeatureGate:
         if self._last_reset_day != today:
             self._daily_usage = {}
             self._last_reset_day = today
+            self._save_usage()
+
+    def _compute_hmac(self, data: bytes) -> str:
+        return hmac.new(self._hmac_key, data, hashlib.sha256).hexdigest()
+
+    def _load_usage(self):
+        if not os.path.exists(self._USAGE_FILE):
+            return
+        try:
+            with open(self._USAGE_FILE, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            payload = json.dumps(raw.get("data", {}), sort_keys=True).encode()
+            if not hmac.compare_digest(self._compute_hmac(payload), raw.get("sig", "")):
+                logger.warning("Usage file HMAC mismatch, resetting usage data")
+                self._daily_usage = {}
+                self._last_reset_day = None
+                return
+            data = raw["data"]
+            self._last_reset_day = data.get("day")
+            self._daily_usage = data.get("usage", {})
+        except Exception:
+            logger.warning("Failed to load usage file, resetting")
+            self._daily_usage = {}
+            self._last_reset_day = None
+
+    def _save_usage(self):
+        data = {"day": self._last_reset_day, "usage": self._daily_usage}
+        payload = json.dumps(data, sort_keys=True).encode()
+        content = {"data": data, "sig": self._compute_hmac(payload)}
+        try:
+            os.makedirs(os.path.dirname(self._USAGE_FILE), exist_ok=True)
+            with open(self._USAGE_FILE, "w", encoding="utf-8") as f:
+                json.dump(content, f)
+        except Exception as e:
+            logger.error(f"Failed to save usage file: {e}")
