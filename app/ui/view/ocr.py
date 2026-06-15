@@ -27,6 +27,8 @@ from app.ui.common.config import cfg
 
 from app.workers.ocr_work import OCRWork
 
+from app.license.globals import feature_gate
+
 
 ocr_params = TaskParams()
 ocr_task_status_model = TaskStatusModel()
@@ -93,14 +95,24 @@ class ModelStyleCard(HeaderCardWidget):
         main_layout.addWidget(pp_ocr_card)
         main_layout.addWidget(CardSeparator(self))
 
-        pp_ocr_card.set_selected(True)
         for i, card in enumerate(self.cards):
             card.mousePressEvent = lambda event, c=card, idx=i: self.on_card_clicked(c, idx)
 
         bind_widget_to_param(self, "model_name", ocr_params, "model_name", transform=None)
-        self.model_name.emit("pp_ocr")
-
+        self.select_first_interactive()
+        global_event_bus.License_update.connect(self.select_first_interactive)
+        global_event_bus.OCR_TaskFinishedByModel.connect(self.update_model_card_info)
         main_layout.addStretch()
+
+    def update_model_card_info(self, model_name):
+        for one_card in self.cards:
+            if one_card.get_name() != model_name:
+                continue
+            one_card.UpdateLicenseInfo.emit()
+            if not one_card.is_interactive():
+                self.model_name.emit("")
+                self.select_first_interactive()
+            break
 
     def on_card_clicked(self, card, index):
         # 如果卡片不可交互，则不响应点击
@@ -114,6 +126,14 @@ class ModelStyleCard(HeaderCardWidget):
         card.set_selected(True)
         self.model_name.emit(card.get_name())
 
+    def select_first_interactive(self):
+        if any(c.is_selected for c in self.cards):
+            return
+        for card in self.cards:
+            if card.is_interactive():
+                card.set_selected(True)
+                self.model_name.emit(card.get_name())
+                return
 
 class SettingsCard(HeaderCardWidget):
     language_map = {
@@ -443,6 +463,9 @@ class HeaderWidget(QWidget):
                 ocr_task_status_model.start_step(name=self.tr('导出结果'))
 
     def _task_finished(self, input_path, ocr_result):
+        if not feature_gate.is_pro:
+            feature_gate.use_feature(feature_name=feature_gate.get_feature_name(ocr_params.to_dict()["model_name"]))
+            global_event_bus.OCR_TaskFinishedByModel.emit(ocr_params.to_dict()["model_name"])
         ocr_task_status_model.report_success()
         global_event_bus.OCR_TaskFinished.emit(input_path, ocr_result)
         if not self.is_batch_task:

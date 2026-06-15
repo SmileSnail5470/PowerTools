@@ -81,6 +81,17 @@ class FeatureGate:
                 self._maybe_reset_daily_usage()
                 self._daily_usage[feature.name] = self._daily_usage.get(feature.name, 0) + 1
 
+    def get_feature_name(self, model_name: str) -> str:
+        if not self._license_manager.is_licensed:
+            raise FeatureNotLicensedError("软件没有授权，请先授权软件许可")
+        if self.is_pro:
+            return ""
+        for one_feature in self._license_manager.license_data.features:
+            if model_name not in one_feature[0]:
+                continue
+            return one_feature[0]
+        raise Exception(f"Not found {model_name} in {self._license_manager.license_data.features}")
+
     def get_remaining_uses(self, feature_name: str) -> int:
         if not self._license_manager.is_licensed:
             raise FeatureNotLicensedError("软件没有授权，请先授权软件许可")

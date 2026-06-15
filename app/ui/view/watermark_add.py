@@ -36,6 +36,8 @@ from app.controllers.task_manager import global_task_manager
 from app.workers.watermark_add_work import WatermarkAddWork
 from app.workers.watermark_extract_work import WatermarkExtractWork
 
+from app.license.globals import feature_gate
+
 
 watermark_add_params = TaskParams()
 task_status_model = TaskStatusModel()
@@ -292,15 +294,26 @@ class BlindWatermarkModelCard(HeaderCardWidget):
         main_layout.addWidget(high_quality_card)
         main_layout.addWidget(CardSeparator(self))
 
-        stable_card.set_selected(True)
         for i, card in enumerate(self.cards):
             card_instance, _ = card
             card_instance.mousePressEvent = lambda event, c=card, idx=i: self.on_card_clicked(c, idx)
 
         main_layout.addStretch()
         bind_widget_to_param(self, "blind_watermark_model_name", watermark_add_params, "blind_watermark_model_name", transform=None)
-        self.blind_watermark_model_name.emit("videoseal")
+        self.select_first_interactive()
+        global_event_bus.License_update.connect(self.select_first_interactive)
+        global_event_bus.watermarkAdd_TaskFinishedByModel.connect(self.update_model_card_info)
         self.hide()
+
+    def update_model_card_info(self, model_name):
+        for one_card, _ in self.cards:
+            if one_card.get_name() != model_name:
+                continue
+            one_card.UpdateLicenseInfo.emit()
+            if not one_card.is_interactive():
+                self.blind_watermark_model_name.emit("")
+                self.select_first_interactive()
+            break
 
     def on_card_clicked(self, card: tuple, index):
         card_instance, model_name = card
@@ -314,6 +327,15 @@ class BlindWatermarkModelCard(HeaderCardWidget):
         # 设置当前卡片为选中状态
         card_instance.set_selected(True)
         self.blind_watermark_model_name.emit(model_name)
+
+    def select_first_interactive(self):
+        if any(c.is_selected for c, _ in self.cards):
+            return
+        for card_instance, model_name in self.cards:
+            if card_instance.is_interactive():
+                card_instance.set_selected(True)
+                self.blind_watermark_model_name.emit(model_name)
+                return
 
     def set_watermark_type(self, type_name: str):
         if type_name == "blind":
@@ -864,6 +886,9 @@ class HeaderWidget(QWidget):
                 task_status_model.start_step(name=self.tr('导出文件'))
 
     def _task_finished(self, input_path, output_path):
+        if not feature_gate.is_pro:
+            feature_gate.use_feature(feature_name=feature_gate.get_feature_name(watermark_add_params.to_dict()["blind_watermark_model_name"]))
+            global_event_bus.watermarkAdd_TaskFinishedByModel.emit(watermark_add_params.to_dict()["blind_watermark_model_name"])
         task_status_model.report_success()
         global_event_bus.watermarkAdd_TaskFinished.emit(input_path, output_path)
         if not self.is_batch_task:

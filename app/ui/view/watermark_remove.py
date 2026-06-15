@@ -33,6 +33,8 @@ from app.ui.common.config import cfg
 
 from app.workers.watermark_remove import WatermarkRemoveWork
 
+from app.license.globals import feature_gate
+
 
 watermark_remove_params = TaskParams()
 watermark_remove_task_status_model = TaskStatusModel()
@@ -296,14 +298,24 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         for card in self.all_cards:
             card.mousePressEvent = lambda event, c=card: self.on_card_clicked(c)
 
-        patchwiper_card.set_selected(True)
-
         bind_widget_to_param(self, "model_name", watermark_remove_params, "model_name", transform=None)
-        self.model_name.emit("patchwiper")
-
+        self.select_first_interactive()
         global_event_bus.watermarkRemove_InputFileUpdate.connect(lambda file_path: self.update_default_models(file_path=file_path))
-
+        global_event_bus.License_update.connect(self.select_first_interactive)
+        global_event_bus.watermarkRemove_TaskFinishedByModel.connect(self.update_model_card_info)
         main_layout.addStretch()
+
+    def update_model_card_info(self, model_name):
+        current_index = self.stacked_widget.currentIndex()
+        active_pool = self.image_cards if current_index == 0 else self.video_cards
+        for one_card in active_pool:
+            if one_card.get_name() != model_name:
+                continue
+            one_card.UpdateLicenseInfo.emit()
+            if not one_card.is_interactive():
+                self.model_name.emit("")
+                self.select_first_interactive()
+            break
 
     def on_tab_changed(self, index, checked):
         if not checked:
@@ -327,6 +339,17 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
             c.set_selected(False)
         clicked_card.set_selected(True)
         self.model_name.emit(clicked_card.get_name())
+
+    def select_first_interactive(self):
+        current_index = self.stacked_widget.currentIndex()
+        active_pool = self.image_cards if current_index == 0 else self.video_cards
+        if any(c.is_selected for c in active_pool):
+            return
+        for card in active_pool:
+            if card.is_interactive():
+                card.set_selected(True)
+                self.model_name.emit(card.get_name())
+                return
 
     def update_default_models(self, file_path):
         if not file_path:
@@ -716,6 +739,9 @@ class HeaderWidget(QWidget):
                 watermark_remove_task_status_model.start_step(self.tr('导出文件'))
 
     def _task_finished(self, input_path, output_path):
+        if not feature_gate.is_pro:
+            feature_gate.use_feature(feature_name=feature_gate.get_feature_name(watermark_remove_params.to_dict()["model_name"]))
+            global_event_bus.watermarkRemove_TaskFinishedByModel.emit(watermark_remove_params.to_dict()["model_name"])
         watermark_remove_task_status_model.report_success()
         global_event_bus.watermarkRemove_TaskFinished.emit(input_path, output_path)
         if not self.is_batch_task:

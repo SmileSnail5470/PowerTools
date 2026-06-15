@@ -1,5 +1,5 @@
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFrame, QLabel, QSizePolicy
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFrame, QLabel, QSizePolicy, QGraphicsOpacityEffect
 from PySide6.QtGui import QPainter, QColor, QFont
 from app.ui.library.qfluentwidgets import isDarkTheme, BodyLabel, CaptionLabel, setFont
 from app.license.globals import license_manager, feature_gate
@@ -125,6 +125,8 @@ class CustomGroupBox(QWidget):
 
 
 class StyleCard(QFrame):
+    UpdateLicenseInfo = Signal()
+
     ICON_MAP = {
         "#4facfe": "✏️",   # PatchWiper：细节增强 / 手工修补感
         "#f093fb": "🧠",   # EMDF：智能修补 / 自适应
@@ -138,6 +140,7 @@ class StyleCard(QFrame):
 
     def __init__(self, icon_color, title, subtitle, parent=None):
         super().__init__(parent)
+        self.effect = QGraphicsOpacityEffect(self)
         self.setStyleSheet("""
             StyleCard {
                 background-color: white;
@@ -206,6 +209,7 @@ class StyleCard(QFrame):
         self._remaining_uses = 0
         self._is_interactive = True
         global_event_bus.License_update.connect(self.update_license_info)
+        self.UpdateLicenseInfo.connect(self.update_license_info)
 
     def update_license_info(self):
         if license_manager.is_licensed and license_manager.tier == "free":
@@ -241,8 +245,8 @@ class StyleCard(QFrame):
                 self._remaining_uses = 0
                 self._is_interactive = False
             else:
-                self._is_interactive = self._remaining_uses > 0
-                self._is_authorized = True
+                self._is_interactive = self._remaining_uses != 0
+                self._is_authorized = self._remaining_uses != 0
 
         self._update_auth_label()
         self._update_remaining_label()
@@ -256,22 +260,38 @@ class StyleCard(QFrame):
                     border: 2px solid transparent;
                     border-radius: 12px;
                     margin: 2px;
-                    opacity: 0.6;
                 }
             """)
+            self.effect.setOpacity(0.45)
+            self.setGraphicsEffect(self.effect)
             self.setCursor(Qt.ForbiddenCursor)
         else:
-            self.setStyleSheet("""
-                StyleCard {
-                    background-color: white;
-                    border: 2px solid transparent;
-                    border-radius: 12px;
-                    margin: 2px;
-                }
-                StyleCard:hover {
-                    background-color: #f8f9fa;
-                }
-            """)
+            if self.is_selected:
+                self.setStyleSheet("""
+                    StyleCard {
+                        background-color: white;
+                        border: 2px solid #667eea;
+                        border-radius: 12px;
+                        margin: 2px;
+                    }
+                    StyleCard:hover {
+                        background-color: #f8f9fa;
+                    }
+                """)
+            else:
+                self.setStyleSheet("""
+                    StyleCard {
+                        background-color: white;
+                        border: 2px solid transparent;
+                        border-radius: 12px;
+                        margin: 2px;
+                    }
+                    StyleCard:hover {
+                        background-color: #f8f9fa;
+                    }
+                """)
+            self.effect.setOpacity(1)
+            self.setGraphicsEffect(self.effect)
             self.setCursor(Qt.PointingHandCursor)
 
     def _update_auth_label(self):
