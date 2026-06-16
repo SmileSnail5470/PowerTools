@@ -28,7 +28,8 @@ def general_inference_session(model_path: str, sess_options, providers, provider
     with open(lic_path, "r", encoding="utf-8") as f:
         raw_data = json.load(f)
     license_json = json.dumps(raw_data)
-    print(model_name, model_path)
+    old_cwd = os.getcwd()
+    os.chdir(os.path.dirname(model_path))
     sess = model_loader.load_model_auto(
         model_path,
         model_name, 
@@ -37,5 +38,6 @@ def general_inference_session(model_path: str, sess_options, providers, provider
         providers=providers, 
         provider_options=provider_options
     )
+    os.chdir(old_cwd)
     return sess
 
