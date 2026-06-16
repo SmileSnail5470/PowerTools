@@ -271,9 +271,9 @@ if __name__ == "__main__":
     import os
     image_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assess", "test1.jpg")
     output_file = "./out.png"
-    det_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resources", "deps", "ocr", "pp_ocr_det.onnx")
-    rec_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resources", "deps", "ocr", "pp_ocr_rec.onnx")
-    cls_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resources", "deps", "ocr", "pp_lcnet_x1_0_textline_ori.onnx")
+    det_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resources", "deps", "ocr", "pp_ocr_det.encmodel")
+    rec_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resources", "deps", "ocr", "pp_ocr_rec.encmodel")
+    cls_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resources", "deps", "ocr", "pp_lcnet_x1_0_textline_ori.encmodel")
 
     ocr = OCR()
     ocr.prepare(det_onnx_path=det_onnx_path, rec_onnx_path=rec_onnx_path, cls_onnx_path=cls_onnx_path)

@@ -124,7 +124,7 @@ class WatermarkExtractWork(BaseWorker):
                 "input_image_path": input_path
             }
             self._get_image_instance().prepare(
-                onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_image_detect.onnx".format(kwargs["blind_watermark_model_name"]))
+                onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_image_detect.encmodel".format(kwargs["blind_watermark_model_name"]))
             )
             if progress_cb is not None:
                 progress_cb("BlindWatermarkExtractStart", "")
@@ -138,7 +138,7 @@ class WatermarkExtractWork(BaseWorker):
                 "chunk_size": 8
             }
             self._get_video_instance().prepare(
-                onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_video_detect.onnx".format(kwargs["blind_watermark_model_name"])),
+                onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_video_detect.encmodel".format(kwargs["blind_watermark_model_name"])),
                 ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN")
             )
             if progress_cb is not None:

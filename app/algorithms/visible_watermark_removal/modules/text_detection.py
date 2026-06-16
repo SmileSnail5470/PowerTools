@@ -692,7 +692,7 @@ def detect_text_watermarks(input_path: str, **kwargs):
 
 if __name__ == "__main__":
     image_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assess", "image.jpg")
-    onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "pp_ocr_det.onnx")
+    onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "pp_ocr_det.encmodel")
     
     mask = detect_text_watermarks(input_path=image_file, onnx_path=onnx_path)
     from PIL import Image

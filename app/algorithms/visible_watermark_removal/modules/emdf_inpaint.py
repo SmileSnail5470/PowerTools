@@ -340,7 +340,7 @@ if __name__ == "__main__":
     input_image = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assess", "image.jpg")
     mask_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assess", "mask.png")
     inpaint = EMDFInpaint()
-    inpaint.prepare(onnx_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "emdf_inpaint.onnx"))
+    inpaint.prepare(onnx_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "emdf_inpaint.encmodel"))
 
     mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
     if mask.ndim == 3 and mask.shape[2] == 1:

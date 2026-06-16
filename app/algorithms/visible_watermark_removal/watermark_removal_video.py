@@ -279,26 +279,26 @@ class VideoWatermarkRemover:
         if refine_type == "ppt":
             ppt_onnx_basedir = args.get("ppt_onnx_basedir")
             ONNX_PATHS = {
-                "raft": os.path.join(ppt_onnx_basedir, "raft", "raft_iter40.onnx"),
+                "raft": os.path.join(ppt_onnx_basedir, "raft", "raft_iter40.encmodel"),
                 "recurrent_flow_complete": os.path.join(ppt_onnx_basedir, "recurrent_flow_completion"),
                 "ppt": {
-                    'encoder': os.path.join(ppt_onnx_basedir, "propagation_transformer", "encoder.onnx"),
-                    'decoder': os.path.join(ppt_onnx_basedir, "propagation_transformer", "decoder.onnx"),
-                    "image_prop_step": os.path.join(ppt_onnx_basedir, "propagation_transformer", "img_prop_step.onnx"),
-                    'ss': os.path.join(ppt_onnx_basedir, "propagation_transformer", "soft_split.onnx"),
-                    'sc': os.path.join(ppt_onnx_basedir, "propagation_transformer", "soft_comp.onnx"),
-                    'bp_backward_step': os.path.join(ppt_onnx_basedir, "propagation_transformer", "backward_step.onnx"),
-                    'bp_forward_step': os.path.join(ppt_onnx_basedir, "propagation_transformer", "forward_step.onnx"),
-                    'bp_backward_first': os.path.join(ppt_onnx_basedir, "propagation_transformer", "backward_first.onnx"),
-                    'bp_forward_first': os.path.join(ppt_onnx_basedir, "propagation_transformer", "forward_first.onnx"),
-                    'bp_fusion': os.path.join(ppt_onnx_basedir, "propagation_transformer", "fusion.onnx"),
+                    'encoder': os.path.join(ppt_onnx_basedir, "propagation_transformer", "encoder.encmodel"),
+                    'decoder': os.path.join(ppt_onnx_basedir, "propagation_transformer", "decoder.encmodel"),
+                    "image_prop_step": os.path.join(ppt_onnx_basedir, "propagation_transformer", "img_prop_step.encmodel"),
+                    'ss': os.path.join(ppt_onnx_basedir, "propagation_transformer", "soft_split.encmodel"),
+                    'sc': os.path.join(ppt_onnx_basedir, "propagation_transformer", "soft_comp.encmodel"),
+                    'bp_backward_step': os.path.join(ppt_onnx_basedir, "propagation_transformer", "backward_step.encmodel"),
+                    'bp_forward_step': os.path.join(ppt_onnx_basedir, "propagation_transformer", "forward_step.encmodel"),
+                    'bp_backward_first': os.path.join(ppt_onnx_basedir, "propagation_transformer", "backward_first.encmodel"),
+                    'bp_forward_first': os.path.join(ppt_onnx_basedir, "propagation_transformer", "forward_first.encmodel"),
+                    'bp_fusion': os.path.join(ppt_onnx_basedir, "propagation_transformer", "fusion.encmodel"),
                     'transformer': {
-                        'core': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"attention_{i}_core.onnx") for i in range(8)],
-                        'attn': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"attention_{i}_comp.onnx") for i in range(8)],
-                        'proj': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"output_{i}_proj.onnx") for i in range(8)],
-                        'norm1': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"norm1_{i}_comp.onnx") for i in range(8)],
-                        'norm2': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"norm2_{i}_comp.onnx") for i in range(8)],
-                        'mlp': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"mlp_{i}_comp.onnx") for i in range(8)],
+                        'core': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"attention_{i}_core.encmodel") for i in range(8)],
+                        'attn': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"attention_{i}_comp.encmodel") for i in range(8)],
+                        'proj': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"output_{i}_proj.encmodel") for i in range(8)],
+                        'norm1': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"norm1_{i}_comp.encmodel") for i in range(8)],
+                        'norm2': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"norm2_{i}_comp.encmodel") for i in range(8)],
+                        'mlp': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"mlp_{i}_comp.encmodel") for i in range(8)],
                     }
                 }
             }

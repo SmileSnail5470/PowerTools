@@ -381,7 +381,7 @@ if __name__ == "__main__":
     input_image = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assess", "image.jpg")
     mask_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assess", "mask.png")
     inpaint = LamaInpaint()
-    inpaint.prepare(onnx_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "lama_fp32.onnx"))
+    inpaint.prepare(onnx_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "lama_fp32.encmodel"))
 
     mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
     mask = ((mask > 0) * 255).astype(np.uint8)

@@ -60,19 +60,19 @@ class RecurrentFlowCompleteORT:
         sess_options = self._get_session_options()
         providers, provider_options = self._get_providers()
         run_options = ort.RunOptions()
-        self.encoder_ort = EncoderORT(os.path.join(self.onnx_dir, 'encoder.onnx'), providers=providers, provider_options=provider_options, sess_options=sess_options, run_options=run_options)
+        self.encoder_ort = EncoderORT(os.path.join(self.onnx_dir, 'encoder.encmodel'), providers=providers, provider_options=provider_options, sess_options=sess_options, run_options=run_options)
         self.prop_ort = BidirectionalPropagationORT(
-            backward_onnx_path = os.path.join(self.onnx_dir, 'backward_step.onnx'),
-            forward_onnx_path = os.path.join(self.onnx_dir, 'forward_step.onnx'),
-            backward_backbone_onnx_path = os.path.join(self.onnx_dir, 'backward_backbone.onnx'),
-            forward_backbone_onnx_path = os.path.join(self.onnx_dir, 'forward_backbone.onnx'),
-            fusion_onnx_path = os.path.join(self.onnx_dir, 'fusion.onnx'),
+            backward_onnx_path = os.path.join(self.onnx_dir, 'backward_step.encmodel'),
+            forward_onnx_path = os.path.join(self.onnx_dir, 'forward_step.encmodel'),
+            backward_backbone_onnx_path = os.path.join(self.onnx_dir, 'backward_backbone.encmodel'),
+            forward_backbone_onnx_path = os.path.join(self.onnx_dir, 'forward_backbone.encmodel'),
+            fusion_onnx_path = os.path.join(self.onnx_dir, 'fusion.encmodel'),
             providers=providers,
             provider_options=provider_options,
             sess_options=sess_options,
             run_options=run_options
         )
-        self.decoder_ort = DecoderORT(os.path.join(self.onnx_dir, 'decoder.onnx'), providers=providers, provider_options=provider_options, sess_options=sess_options, run_options=run_options)
+        self.decoder_ort = DecoderORT(os.path.join(self.onnx_dir, 'decoder.encmodel'), providers=providers, provider_options=provider_options, sess_options=sess_options, run_options=run_options)
 
     def forward_bidirect_flow(self, masked_flows_f: np.ndarray, masked_flows_b: np.ndarray, masks: np.ndarray) -> tuple:
         b, t_flow, _, h, w = masked_flows_f.shape

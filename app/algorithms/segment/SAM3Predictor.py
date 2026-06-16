@@ -52,19 +52,19 @@ class SAM3Predictor:
         providers, provider_options = self._get_providers()
 
         self._g_encoder_session = general_inference_session(
-            os.path.join(self.model_dir, "sam3_grounding_encoder.onnx"),
+            os.path.join(self.model_dir, "sam3_grounding_encoder.encmodel"),
             opts,
             providers=providers,
             provider_options=provider_options,
         )
         self._lang_session = general_inference_session(
-            os.path.join(self.model_dir, "sam3_language_encoder.onnx"),
+            os.path.join(self.model_dir, "sam3_language_encoder.encmodel"),
             opts,
             providers=providers,
             provider_options=provider_options,
         )
         self._g_decoder_session = general_inference_session(
-            os.path.join(self.model_dir, "sam3_grounding_decoder.onnx"),
+            os.path.join(self.model_dir, "sam3_grounding_decoder.encmodel"),
             opts,
             providers=providers,
             provider_options=provider_options,
@@ -77,13 +77,13 @@ class SAM3Predictor:
         providers, provider_options = self._get_providers()
 
         self._i_encoder_session = general_inference_session(
-            os.path.join(self.model_dir, "sam3_encoder.onnx"),
+            os.path.join(self.model_dir, "sam3_encoder.encmodel"),
             opts,
             providers=providers,
             provider_options=provider_options,
         )
         self._i_decoder_session = general_inference_session(
-            os.path.join(self.model_dir, "sam3_decoder.onnx"),
+            os.path.join(self.model_dir, "sam3_decoder.encmodel"),
             opts,
             providers=providers,
             provider_options=provider_options,

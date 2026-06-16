@@ -354,7 +354,7 @@ if __name__ == "__main__":
     input_image = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assess", "1.png")
     mask_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assess", "1_mask.png")
     inpaint = PatchWiperInpaint()
-    inpaint.prepare(onnx_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "pt_inpaint.onnx"))
+    inpaint.prepare(onnx_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "pt_inpaint.encmodel"))
 
     mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
     if mask.ndim == 3 and mask.shape[2] == 1:

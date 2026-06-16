@@ -132,7 +132,7 @@ if __name__ == "__main__":
     from PIL import Image
     input_image = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assess", "image.jpg")
     detection = SLBRSegment()
-    detection.prepare(onnx_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "sr_segment.onnx"))
+    detection.prepare(onnx_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "sr_segment.encmodel"))
 
     result = detection.watermark_segment(input_image)
 

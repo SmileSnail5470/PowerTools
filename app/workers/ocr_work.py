@@ -36,9 +36,9 @@ class OCRWork(BaseWorker):
             "score_mode": "fast",
             "det_box_type": "quad",
             "drop_score": float(kwargs["drop_score"]),
-            "det_onnx_path": os.path.join(onnx_model_dir, "pp_ocr_det.onnx"),
-            "rec_onnx_path": os.path.join(onnx_model_dir, "pp_ocr_rec.onnx"),
-            "cls_onnx_path": os.path.join(onnx_model_dir, "pp_lcnet_x1_0_textline_ori.onnx"),
+            "det_onnx_path": os.path.join(onnx_model_dir, "pp_ocr_det.encmodel"),
+            "rec_onnx_path": os.path.join(onnx_model_dir, "pp_ocr_rec.encmodel"),
+            "cls_onnx_path": os.path.join(onnx_model_dir, "pp_lcnet_x1_0_textline_ori.encmodel"),
             "progress_cb": progress_cb
         }
         ocr = self._get_ocr_instance()

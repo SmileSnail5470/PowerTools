@@ -336,7 +336,7 @@ if __name__ == "__main__":
     import os
     input_image = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assess", "image.jpg")
     detection = YOLODetection()
-    detection.prepare(onnx_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "yolo.onnx"))
+    detection.prepare(onnx_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "yolo.encmodel"))
     
     output_images, output_masks, combined_info = detection.detect_watermarks(
         image_path=input_image,
