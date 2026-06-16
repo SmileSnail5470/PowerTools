@@ -1,5 +1,6 @@
 import numpy as np
 import onnxruntime as ort
+from app.algorithms import general_inference_session
 
 class BidirectionalPropagationORT:
     def __init__(
@@ -14,11 +15,11 @@ class BidirectionalPropagationORT:
         sess_options=None, 
         run_options=None
     ):
-        self.backward_step = ort.InferenceSession(backward_step_path, providers=providers, sess_options=sess_options, provider_options=provider_options)
-        self.forward_step = ort.InferenceSession(forward_step_path, providers=providers, sess_options=sess_options, provider_options=provider_options)
-        self.backward_first = ort.InferenceSession(backward_first_path, providers=providers, sess_options=sess_options, provider_options=provider_options)
-        self.forward_first = ort.InferenceSession(forward_first_path, providers=providers, sess_options=sess_options, provider_options=provider_options)
-        self.fusion_sess = ort.InferenceSession(fusion_path, providers=providers, sess_options=sess_options, provider_options=provider_options)
+        self.backward_step = general_inference_session(backward_step_path, providers=providers, sess_options=sess_options, provider_options=provider_options)
+        self.forward_step = general_inference_session(forward_step_path, providers=providers, sess_options=sess_options, provider_options=provider_options)
+        self.backward_first = general_inference_session(backward_first_path, providers=providers, sess_options=sess_options, provider_options=provider_options)
+        self.forward_first = general_inference_session(forward_first_path, providers=providers, sess_options=sess_options, provider_options=provider_options)
+        self.fusion_sess = general_inference_session(fusion_path, providers=providers, sess_options=sess_options, provider_options=provider_options)
         self.run_options = run_options
 
     def _run_backward_step(self, feat_current, feat_prop_prev, flow_prop, flow_check, mask_current):
@@ -161,7 +162,7 @@ class BidirectionalPropagationORT:
 
 class ImgPropStepORT:
     def __init__(self, onnx_path, providers, provider_options=None, sess_options=None, run_options=None):
-        self.session = ort.InferenceSession(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
+        self.session = general_inference_session(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
         self.input_names = [inp.name for inp in self.session.get_inputs()]
         self.run_options = run_options
 

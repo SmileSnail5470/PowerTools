@@ -74,6 +74,7 @@ class LicenseManager:
             license_dir = os.path.join(pathlib.Path.home(), ".PowerTools", "license")
         self._license_dir = license_dir
         self._license_file = os.path.join(self._license_dir, "license.lic")
+        self._license_file_for_model_validate_license = os.path.join(os.path.join(pathlib.Path.home(), ".PowerTools", "license"), "license.lic")
         self._state_file = os.path.join(self._license_dir, ".state")
         self._license_data: Optional[LicenseData] = None
         self._is_valid = False
@@ -82,6 +83,7 @@ class LicenseManager:
         self._copy_free_license()
         os.makedirs(self._license_dir, exist_ok=True)
         self._try_load_license()
+        os.makedirs(os.path.dirname(self._license_file_for_model_validate_license), exist_ok=True)
 
     @property
     def is_licensed(self) -> bool:
@@ -119,6 +121,8 @@ class LicenseManager:
         try:
             license_data = self._load_and_verify(license_file_path)
             shutil.copy2(license_file_path, self._license_file)
+            if not os.path.exists(self._license_file_for_model_validate_license):
+                shutil.copy2(self._license_file, self._license_file_for_model_validate_license)
             self._license_data = license_data
             self._is_valid = True
             self._error_message = ""
@@ -139,6 +143,8 @@ class LicenseManager:
         self._error_message = ""
         if os.path.exists(self._license_file):
             os.remove(self._license_file)
+        if os.path.exists(self._license_file_for_model_validate_license):
+            os.remove(self._license_file_for_model_validate_license)
         if os.path.exists(self._state_file):
             os.remove(self._state_file)
         logger.info("License deactivated")

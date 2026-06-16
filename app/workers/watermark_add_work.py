@@ -134,6 +134,8 @@ class WatermarkAddWork(BaseWorker):
                 self._get_visible_instance().video_add_text_watermark(**params)
 
         elif not is_visible_watermark:
+            if "_feature_name_" in kwargs:
+                os.environ["_feature_name_"] = kwargs["_feature_name_"]
             custom_characters = kwargs["custom_characters"] if "custom_characters" in kwargs else list("ABCDEFGHIJKLMNOPQRSTUVWXYZ,1234")
             os.environ["BLIND_WATERMARK_CHARSET"] = "".join(custom_characters) + "`"
             if file_type == "image":

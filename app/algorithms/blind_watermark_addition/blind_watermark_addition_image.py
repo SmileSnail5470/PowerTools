@@ -5,6 +5,7 @@ import numpy as np
 import onnxruntime as ort
 ort.preload_dlls(directory="")
 from PIL import Image
+from app.algorithms import general_inference_session
 from app.algorithms.blind_watermark_addition.ecc_utils import HammingECC
 
 
@@ -34,7 +35,7 @@ class ImageBlindWatermarkEmbed():
         else:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
-        self.session = ort.InferenceSession(
+        self.session = general_inference_session(
             self.onnx_path,
             providers=providers,
             provider_options=provider_options,
@@ -110,7 +111,7 @@ class ImageBlindWatermarkDetect():
         else:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
-        self.session = ort.InferenceSession(
+        self.session = general_inference_session(
             self.onnx_path,
             providers=providers,
             provider_options=provider_options,

@@ -1,5 +1,6 @@
 import numpy as np
 import onnxruntime as ort
+from app.algorithms import general_inference_session
 
 
 class BidirectionalPropagationORT:
@@ -15,31 +16,31 @@ class BidirectionalPropagationORT:
         sess_options=None, 
         run_options=None
     ):
-        self.backward_session = ort.InferenceSession(
+        self.backward_session = general_inference_session(
             backward_onnx_path,
             providers=providers,
             provider_options=provider_options,
             sess_options=sess_options,
         )
-        self.forward_session = ort.InferenceSession(
+        self.forward_session = general_inference_session(
             forward_onnx_path,
             providers=providers,
             provider_options=provider_options,
             sess_options=sess_options,
         )
-        self.backward_backbone_session = ort.InferenceSession(
+        self.backward_backbone_session = general_inference_session(
             backward_backbone_onnx_path,
             providers=providers,
             provider_options=provider_options,
             sess_options=sess_options,
         )
-        self.forward_backbone_session = ort.InferenceSession(
+        self.forward_backbone_session = general_inference_session(
             forward_backbone_onnx_path,
             providers=providers,
             provider_options=provider_options,
             sess_options=sess_options,
         )
-        self.fusion_session = ort.InferenceSession(
+        self.fusion_session = general_inference_session(
             fusion_onnx_path,
             providers=providers,
             provider_options=provider_options,

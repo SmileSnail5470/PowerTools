@@ -25,6 +25,8 @@ class OCRWork(BaseWorker):
     def run_algorithm(self, progress_cb, cancel_requested, *args, **kwargs):
         input_path = kwargs["input_path"]
         onnx_model_dir = os.path.join(self.deps_path, "ocr")
+        if "_feature_name_" in kwargs:
+            os.environ["_feature_name_"] = kwargs["_feature_name_"]
         params = {
             "limit_side_len": 960,
             "limit_type": "max",

@@ -10,6 +10,7 @@ import onnxruntime as ort
 from app.algorithms.segment.SimpleTokenizer import SimpleTokenizer
 from app.algorithms.segment.preprocessing import preprocess_opencv
 ort.preload_dlls(directory="")
+from app.algorithms import general_inference_session
 
 
 @dataclass
@@ -50,19 +51,19 @@ class SAM3Predictor:
         opts = self._get_session_options()
         providers, provider_options = self._get_providers()
 
-        self._g_encoder_session = ort.InferenceSession(
+        self._g_encoder_session = general_inference_session(
             os.path.join(self.model_dir, "sam3_grounding_encoder.onnx"),
             opts,
             providers=providers,
             provider_options=provider_options,
         )
-        self._lang_session = ort.InferenceSession(
+        self._lang_session = general_inference_session(
             os.path.join(self.model_dir, "sam3_language_encoder.onnx"),
             opts,
             providers=providers,
             provider_options=provider_options,
         )
-        self._g_decoder_session = ort.InferenceSession(
+        self._g_decoder_session = general_inference_session(
             os.path.join(self.model_dir, "sam3_grounding_decoder.onnx"),
             opts,
             providers=providers,
@@ -75,13 +76,13 @@ class SAM3Predictor:
         opts = self._get_session_options()
         providers, provider_options = self._get_providers()
 
-        self._i_encoder_session = ort.InferenceSession(
+        self._i_encoder_session = general_inference_session(
             os.path.join(self.model_dir, "sam3_encoder.onnx"),
             opts,
             providers=providers,
             provider_options=provider_options,
         )
-        self._i_decoder_session = ort.InferenceSession(
+        self._i_decoder_session = general_inference_session(
             os.path.join(self.model_dir, "sam3_decoder.onnx"),
             opts,
             providers=providers,

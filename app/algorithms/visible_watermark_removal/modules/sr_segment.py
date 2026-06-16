@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import onnxruntime as ort
 ort.preload_dlls(directory="")
+from app.algorithms import general_inference_session
 
 
 class SLBRSegment():
@@ -34,7 +35,7 @@ class SLBRSegment():
         else:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
-        self.session = ort.InferenceSession(
+        self.session = general_inference_session(
             self.onnx_path,
             providers=providers,
             provider_options=provider_options,

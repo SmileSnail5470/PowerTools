@@ -1,8 +1,9 @@
 import onnxruntime as ort
+from app.algorithms import general_inference_session
 
 class DecoderORT:
     def __init__(self, onnx_path, providers, provider_options=None, sess_options=None, run_options=None):
-        self.session = ort.InferenceSession(onnx_path, providers=providers, sess_options=sess_options, provider_options=provider_options)
+        self.session = general_inference_session(onnx_path, providers=providers, sess_options=sess_options, provider_options=provider_options)
         self.input_names = [inp.name for inp in self.session.get_inputs()]
         self.run_options = run_options
 

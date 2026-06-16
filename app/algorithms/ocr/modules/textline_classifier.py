@@ -10,6 +10,7 @@ import math
 import time
 import onnxruntime as ort
 ort.preload_dlls(directory="")
+from app.algorithms import general_inference_session
 
 
 class ClsPostProcess(object):
@@ -59,7 +60,7 @@ def create_predictor(onnx_path):
     else:
         providers = ["CPUExecutionProvider"]
         provider_options = [{}]
-    sess = ort.InferenceSession(
+    sess = general_inference_session(
         onnx_path,
         providers=providers,
         provider_options=provider_options,

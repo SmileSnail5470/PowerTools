@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import onnxruntime as ort
 ort.preload_dlls(directory="")
+from app.algorithms import general_inference_session
 
 
 def prepare_input(img, size):
@@ -195,7 +196,7 @@ class YOLODetection():
         else:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
-        sess = ort.InferenceSession(
+        sess = general_inference_session(
             onnx_path,
             providers=providers,
             provider_options=provider_options,

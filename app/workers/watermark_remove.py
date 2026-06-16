@@ -44,6 +44,8 @@ class WatermarkRemoveWork(BaseWorker):
             raise Exception("Not support file {0}".format(input_path.split(".")[-1]))
         onnx_model_dir = os.path.join(self.deps_path, "visible_watermark_removal")
         segment_model_dir = os.path.join(self.deps_path, "segment")
+        if "_feature_name_" in kwargs:
+            os.environ["_feature_name_"] = kwargs["_feature_name_"]
         if file_type == "image":
             params = {
                 "image_path": input_path, 
@@ -60,7 +62,7 @@ class WatermarkRemoveWork(BaseWorker):
                 "segment_onnx_dir": segment_model_dir,
                 "mask_path": kwargs["manual_watermark_mask_path"] if "manual_watermark_mask_path" in kwargs and kwargs["manual_watermark_mask_path"] else "",
                 "refine_type": kwargs["model_name"],
-                "watermark_type": "text" if kwargs["watermark_content"] == "text_watermark" else "subtitle" if kwargs["watermark_content"] == "subtitle" else "all",
+                "watermark_type": "text" if "watermark_content" in kwargs and kwargs["watermark_content"] == "text_watermark" else "subtitle" if "watermark_content" in kwargs and kwargs["watermark_content"] == "subtitle" else "all",
                 "ai_detect_type": kwargs["watermark_detect_type"],
                 "ai_interactive_type": kwargs["watermark_ai_interactive_type"] if "watermark_ai_interactive_type" in kwargs else "semantic_detect",
                 "ai_interactive_prompt": kwargs["watermark_detect_prompt"] if "watermark_detect_prompt" in kwargs else "watermark",
@@ -89,7 +91,7 @@ class WatermarkRemoveWork(BaseWorker):
                 "mask_path": kwargs["manual_watermark_mask_path"] if "manual_watermark_mask_path" in kwargs and kwargs["manual_watermark_mask_path"] else "",
                 "refine_type": kwargs["model_name"],
                 "use_cache_mask": True if "watermark_format" in kwargs and kwargs["watermark_format"] == "static_watermark" else False,
-                "watermark_type": "text" if kwargs["watermark_content"] == "text_watermark" else "subtitle" if kwargs["watermark_content"] == "subtitle" else "all",
+                "watermark_type": "text" if "watermark_content" in kwargs and kwargs["watermark_content"] == "text_watermark" else "subtitle" if "watermark_content" in kwargs and kwargs["watermark_content"] == "subtitle" else "all",
                 "ai_detect_type": kwargs["watermark_detect_type"],
                 "ai_interactive_type": kwargs["watermark_ai_interactive_type"] if "watermark_ai_interactive_type" in kwargs else "semantic_detect",
                 "ai_interactive_prompt": kwargs["watermark_detect_prompt"] if "watermark_detect_prompt" in kwargs else "watermark",

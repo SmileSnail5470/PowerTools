@@ -5,6 +5,7 @@ import numpy as np
 import onnxruntime as ort
 from app.algorithms import ORTEnvironment
 ORTEnvironment.initialize()
+from app.algorithms import general_inference_session
 
 
 class RAFTBiONNX:
@@ -52,7 +53,7 @@ class RAFTBiONNX:
         sess_options = self._get_session_options()
         providers, provider_options = self._get_providers()
         self.run_options = ort.RunOptions()
-        self.session = ort.InferenceSession(self.model_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
+        self.session = general_inference_session(self.model_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
         self.input_name_1 = self.session.get_inputs()[0].name
         self.input_name_2 = self.session.get_inputs()[1].name
         self.output_name = self.session.get_outputs()[0].name

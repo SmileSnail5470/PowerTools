@@ -6,6 +6,7 @@ import onnxruntime as ort
 ort.preload_dlls(directory="")
 from app.algorithms.blind_watermark_addition.ecc_utils import HammingECC
 import app.utils.ffmpeg as ffmpeg
+from app.algorithms import general_inference_session
 
 
 class VideoBlindWatermarkEmbed():
@@ -34,7 +35,7 @@ class VideoBlindWatermarkEmbed():
         else:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
-        self.session = ort.InferenceSession(
+        self.session = general_inference_session(
             self.onnx_path,
             providers=providers,
             provider_options=provider_options,
@@ -200,7 +201,7 @@ class VideoBlindWatermarkDetect():
         else:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
-        self.session = ort.InferenceSession(
+        self.session = general_inference_session(
             self.onnx_path,
             providers=providers,
             provider_options=provider_options,

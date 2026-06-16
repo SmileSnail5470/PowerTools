@@ -117,6 +117,8 @@ class WatermarkExtractWork(BaseWorker):
             raise Exception("Error watermark type value, watermark type must be blind")
         if "blind_watermark_task_type" not in kwargs or kwargs["blind_watermark_task_type"] != "extract_blind_watermark":
             raise Exception("Error blind watermark task type, must be extract_blind_watermark")
+        if "_feature_name_" in kwargs:
+            os.environ["_feature_name_"] = kwargs["_feature_name_"]
         if file_type == "image":
             params = {
                 "input_image_path": input_path

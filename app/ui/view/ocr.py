@@ -408,6 +408,7 @@ class HeaderWidget(QWidget):
         if not allowed_use:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
+        task_params["_feature_name_"] = feature_gate.get_feature_name(ocr_params.to_dict()["model_name"])
 
         total_tasks = []
         input_path = task_params["input_path"]

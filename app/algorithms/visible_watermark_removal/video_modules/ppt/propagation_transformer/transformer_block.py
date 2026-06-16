@@ -1,9 +1,10 @@
 import numpy as np
 import onnxruntime as ort
+from app.algorithms import general_inference_session
 
 class SparseAttentionCoreORT:
     def __init__(self, onnx_path, providers, provider_options=None, sess_options=None, run_options=None):
-        self.session = ort.InferenceSession(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
+        self.session = general_inference_session(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
         self.input_names = [inp.name for inp in self.session.get_inputs()]
         self.run_options = run_options
 
@@ -17,7 +18,7 @@ class SparseAttentionCoreORT:
 
 class AttentionComputationORT:
     def __init__(self, onnx_path, providers, provider_options=None, sess_options=None, run_options=None):
-        self.session = ort.InferenceSession(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
+        self.session = general_inference_session(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
         self.input_names = [inp.name for inp in self.session.get_inputs()]
         self.run_options = run_options
 
@@ -36,7 +37,7 @@ class AttentionComputationORT:
 
 class MLPComputationORT:
     def __init__(self, onnx_path, providers, provider_options=None, sess_options=None, run_options=None):
-        self.session = ort.InferenceSession(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
+        self.session = general_inference_session(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
         self.input_names = [inp.name for inp in self.session.get_inputs()]
         self.run_options = run_options
 
@@ -54,7 +55,7 @@ class MLPComputationORT:
 
 class OutputProjectionORT:
     def __init__(self, onnx_path, providers, provider_options=None, sess_options=None, run_options=None):
-        self.session = ort.InferenceSession(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
+        self.session = general_inference_session(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
         self.input_names = [inp.name for inp in self.session.get_inputs()]
         self.run_options = run_options
 
@@ -72,7 +73,7 @@ class OutputProjectionORT:
 
 class NormComputationORT:
     def __init__(self, onnx_path, providers, provider_options=None, sess_options=None, run_options=None):
-        self.session = ort.InferenceSession(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
+        self.session = general_inference_session(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
         self.input_names = [inp.name for inp in self.session.get_inputs()]
         self.run_options = run_options
 
