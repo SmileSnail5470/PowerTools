@@ -21,10 +21,6 @@ from app.license.exceptions import (
 
 logger = logging.getLogger("License")
 
-
-PUBLIC_KEY_B64 = "AXgCTTXpc0PPNs2pPdaliBV8fnDzhtuoMs+cnZNIiUo="
-
-
 class LicenseData:
     def __init__(self, data: dict):
         self.license_id: str = data.get("license_id", "")
