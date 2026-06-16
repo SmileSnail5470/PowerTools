@@ -403,6 +403,12 @@ class HeaderWidget(QWidget):
         w = TaskInfoMessageBox(task_params, "ocr-rec", self.window())
         if not w.exec():
             return
+        
+        allowed_use, error_msg = feature_gate.can_use(feature_name=feature_gate.get_feature_name(ocr_params.to_dict()["model_name"]), return_errmsg=True)
+        if not allowed_use:
+            MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
+            return
+
         total_tasks = []
         input_path = task_params["input_path"]
         global_event_bus.OCR_ImageNavigationInit.emit()
@@ -464,7 +470,10 @@ class HeaderWidget(QWidget):
 
     def _task_finished(self, input_path, ocr_result):
         if not feature_gate.is_pro:
-            feature_gate.use_feature(feature_name=feature_gate.get_feature_name(ocr_params.to_dict()["model_name"]))
+            try:
+                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(ocr_params.to_dict()["model_name"]))
+            except Exception:
+                pass
             global_event_bus.OCR_TaskFinishedByModel.emit(ocr_params.to_dict()["model_name"])
         ocr_task_status_model.report_success()
         global_event_bus.OCR_TaskFinished.emit(input_path, ocr_result)

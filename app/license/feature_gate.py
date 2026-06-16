@@ -60,35 +60,37 @@ class FeatureGate:
     def is_pro(self) -> bool:
         return self.current_tier == FeatureTier.PRO
 
-    def can_use(self, feature_name: str) -> bool:
+    def can_use(self, feature_name: str, return_errmsg: bool = False) -> bool:
         if not self._license_manager.is_licensed:
             raise FeatureNotLicensedError("软件没有授权，请先授权软件许可")
 
         if self.is_pro:
-            return True
+            return True if not return_errmsg else True, ""
         
         self._update_features()
         feature = self._features[feature_name]
         if feature.required_tier == "pro":
-            return False
+            return False if not return_errmsg else False, f"功能「{feature.description}」需要 Pro 授权才能使用"
         if feature.free_limit == -1:
-            return True
+            return True if not return_errmsg else True, ""
         if feature.free_limit == 0:
-            return False
+            return False if not return_errmsg else False, f"功能「{feature.description}」禁止使用"
         self._maybe_reset_daily_usage()
         current_usage = self._daily_usage.get(feature.name, 0)
-        return current_usage < feature.free_limit
+        check_can_use = current_usage < feature.free_limit
+        if check_can_use:
+            return True if not return_errmsg else True, ""
+        else:
+            return False if not return_errmsg else False, "当天次数已用完，请等明天刷新"
 
     def use_feature(self, feature_name: str) -> bool:
         if not self._license_manager.is_licensed:
             raise FeatureNotLicensedError("软件没有授权，请先授权软件许可")
 
-        if not self.can_use(feature_name):
-            self._update_features()
-            feature = self._features[feature_name]
-            raise FeatureNotLicensedError(f"功能「{feature.description}」需要 Pro 授权才能使用")
+        allowed_use, error_msg = self.can_use(feature_name=feature_name, return_errmsg=True)
+        if not allowed_use:
+            raise FeatureNotLicensedError(error_msg)
         if not self.is_pro:
-            self._update_features()
             feature = self._features[feature_name]
             if feature.free_limit > 0:
                 self._maybe_reset_daily_usage()
@@ -154,6 +156,7 @@ class FeatureGate:
                 logger.warning("Usage file HMAC mismatch, resetting usage data")
                 self._daily_usage = {}
                 self._last_reset_day = None
+                os.remove(self._USAGE_FILE)
                 return
             data = raw["data"]
             self._last_reset_day = data.get("day")

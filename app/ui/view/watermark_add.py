@@ -818,6 +818,11 @@ class HeaderWidget(QWidget):
         if not w.exec():
             return
         
+        allowed_use, error_msg = feature_gate.can_use(feature_name=feature_gate.get_feature_name(watermark_add_params.to_dict()["blind_watermark_model_name"]), return_errmsg=True)
+        if not allowed_use:
+            MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
+            return
+        
         total_tasks = []
         input_path = task_params["input_path"]
         global_event_bus.watermarkAdd_ImageNavigationInit.emit()
@@ -887,7 +892,10 @@ class HeaderWidget(QWidget):
 
     def _task_finished(self, input_path, output_path):
         if not feature_gate.is_pro:
-            feature_gate.use_feature(feature_name=feature_gate.get_feature_name(watermark_add_params.to_dict()["blind_watermark_model_name"]))
+            try:
+                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(watermark_add_params.to_dict()["blind_watermark_model_name"]))
+            except Exception:
+                pass
             global_event_bus.watermarkAdd_TaskFinishedByModel.emit(watermark_add_params.to_dict()["blind_watermark_model_name"])
         task_status_model.report_success()
         global_event_bus.watermarkAdd_TaskFinished.emit(input_path, output_path)

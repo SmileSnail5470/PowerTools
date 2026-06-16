@@ -246,7 +246,7 @@ class StyleCard(QFrame):
                 self._is_interactive = False
             else:
                 self._is_interactive = self._remaining_uses != 0
-                self._is_authorized = self._remaining_uses != 0
+                self._is_authorized = True
 
         self._update_auth_label()
         self._update_remaining_label()
