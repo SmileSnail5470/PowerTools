@@ -206,7 +206,7 @@ class LicenseManager:
         license_data = LicenseData(raw_data)
         if license_data.is_expired:
             raise LicenseExpiredError(f"许可证已于 {license_data.expires_at} 过期")
-        if license_data.machine_id != current_machine_id:
+        if license_data.is_pro and license_data.machine_id != current_machine_id:
             raise MachineMismatchError(f"许可证绑定的设备ID与当前设备不匹配")
         license_data = LicenseData(raw_data)
         return license_data
