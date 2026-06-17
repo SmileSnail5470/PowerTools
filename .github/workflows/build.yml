@@ -47,6 +47,20 @@ jobs:
           brew remove --force --ignore-dependencies openssl@3
           brew cleanup openssl@3
 
+      - name: Download core-extensions from release
+        run: |
+          if [ "${{ runner.os }}" == "macOS" ]; then
+            ASSET_NAME="core-extensions-macos-arm64.zip"
+          else
+            ASSET_NAME="core-extensions-windows-x86_64.zip"
+          fi
+          gh release download license_core-v0.0.1 --pattern "$ASSET_NAME" --dir .
+          unzip -o "$ASSET_NAME" -d app/library
+          rm -f "$ASSET_NAME"
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Generate Qt resources
         run: |
           pyside6-rcc app/ui/library/qfluentwidgets/_rc/resource.qrc -o app/ui/library/qfluentwidgets/_rc/resource.py

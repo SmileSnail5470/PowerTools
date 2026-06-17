@@ -12,6 +12,7 @@ import numpy as np
 import onnxruntime as ort
 ort.preload_dlls(directory="")
 from shapely.geometry import Polygon
+from app.algorithms import general_inference_session
 
 
 class DBPostProcess(object):
@@ -467,7 +468,7 @@ def create_predictor(onnx_path):
     else:
         providers = ["CPUExecutionProvider"]
         provider_options = [{}]
-    sess = ort.InferenceSession(
+    sess = general_inference_session(
         onnx_path,
         providers=providers,
         provider_options=provider_options,
@@ -691,7 +692,7 @@ def detect_text_watermarks(input_path: str, **kwargs):
 
 if __name__ == "__main__":
     image_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assess", "image.jpg")
-    onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "pp_ocr_det.onnx")
+    onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "pp_ocr_det.encmodel")
     
     mask = detect_text_watermarks(input_path=image_file, onnx_path=onnx_path)
     from PIL import Image

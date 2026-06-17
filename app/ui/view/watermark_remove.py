@@ -1,9 +1,9 @@
 import os
 import sys
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
 from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QLabel, QHBoxLayout, QStackedWidget, QLineEdit, QFileDialog, QStackedLayout, 
-    QSlider
+    QSlider, QButtonGroup, QPushButton
 )
 from PySide6.QtGui import QFont, QColor, QAction
 
@@ -28,10 +28,12 @@ from app.ui.common.event_bus import global_event_bus
 from app.controllers.task_manager import global_task_manager
 from app.ui.common.task_params import bind_widget_to_param, TaskParams
 from app.ui.common.task_status import TaskStatusModel
-from app.ui.common.utils import get_file_type
+from app.ui.common.utils import get_file_type, global_backend_info_cache
 from app.ui.common.config import cfg
 
 from app.workers.watermark_remove import WatermarkRemoveWork
+
+from app.license.globals import feature_gate
 
 
 watermark_remove_params = TaskParams()
@@ -191,58 +193,202 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
-
         self.viewLayout.setContentsMargins(10, 10, 10, 10)
         self.viewLayout.addLayout(main_layout)
 
-        self.cards: list[StyleCard] = []
-        patchwiper_card = StyleCard("#4facfe", self.tr("细节增强"), self.tr("智能重建细节，提升清晰度，速度慢"))
+        tab_widget = QWidget()
+        tab_layout = QHBoxLayout(tab_widget)
+        tab_layout.setContentsMargins(4, 4, 4, 4)
+        tab_layout.setSpacing(4)
+        tab_widget.setStyleSheet("""
+            QWidget {
+                background-color: #f1f5f9;
+                border-radius: 8px;
+            }
+            QPushButton {
+                background-color: transparent;
+                color: #7f8c8d;
+                padding: 6px 0;
+                border-radius: 6px;
+                border: none;
+            }
+            QPushButton:hover {
+                color: #2c3e50;
+                background-color: rgba(255, 255, 255, 0.4);
+            }
+            QPushButton:checked {
+                background-color: #ffffff;
+                color: #3498db;
+                border: 1px solid rgba(0, 0, 0, 0.03);
+            }
+        """)
+        self.tab_group = QButtonGroup(self)
+        self.tab_group.setExclusive(True)
+        self.tab_image = QPushButton(self.tr("图片模型"))
+        setFont(self.tab_image, fontSize=14, weight=QFont.DemiBold)
+        self.tab_image.setCheckable(True)
+        self.tab_image.setChecked(True)
+        self.tab_video = QPushButton(self.tr("视频模型"))
+        setFont(self.tab_video, fontSize=14, weight=QFont.DemiBold)
+        self.tab_video.setCheckable(True)
+        self.tab_group.addButton(self.tab_image, 0)
+        self.tab_group.addButton(self.tab_video, 1)
+        tab_layout.addWidget(self.tab_image)
+        tab_layout.addWidget(self.tab_video)
+        main_layout.addWidget(tab_widget)
+
+        self.stacked_widget = QStackedWidget()
+        main_layout.addWidget(self.stacked_widget)
+
+        self.all_cards: list[StyleCard] = []
+
+        image_container = QWidget()
+        image_layout = QVBoxLayout(image_container)
+        image_layout.setContentsMargins(0, 6, 0, 6)
+        image_layout.setSpacing(0)
+
+        patchwiper_card = StyleCard("#4facfe", self.tr("细节增强"), self.tr("智能重建细节，提升清晰度，速度慢(不适合字幕)"))
         patchwiper_card.set_name("patchwiper")
-        self.cards.append(patchwiper_card)
-        main_layout.addWidget(patchwiper_card)
-        main_layout.addWidget(CardSeparator(self))
+        image_layout.addWidget(patchwiper_card)
+        image_layout.addWidget(CardSeparator(self))
 
         emdf_card = StyleCard("#f093fb", self.tr("智能修补"), self.tr("效果稳定，可能丢失细节，速度稍慢"))
         emdf_card.set_name("emdf")
-        self.cards.append(emdf_card)
-        main_layout.addWidget(emdf_card)
-        main_layout.addWidget(CardSeparator(self))
+        image_layout.addWidget(emdf_card)
+        image_layout.addWidget(CardSeparator(self))
 
         grig_card = StyleCard("#a18cd1", self.tr("平衡修复"), self.tr("结构保持好，可能丢失细节，速度快"))
         grig_card.set_name("grig")
-        self.cards.append(grig_card)
-        main_layout.addWidget(grig_card)
-        main_layout.addWidget(CardSeparator(self))
+        image_layout.addWidget(grig_card)
+        image_layout.addWidget(CardSeparator(self))
 
         lama_card = StyleCard("#84fab0", self.tr("自然保守"), self.tr("画面衔接自然，可能丢失细节，速度适中"))
         lama_card.set_name("lama")
-        self.cards.append(lama_card)
-        main_layout.addWidget(lama_card)
-        main_layout.addWidget(CardSeparator(self))
+        image_layout.addWidget(lama_card)
+        image_layout.addWidget(CardSeparator(self))
 
         coordfill_card = StyleCard("#fbc2eb", self.tr("快速填充"), self.tr("细节表现一般，适合简单背景，速度极快"))
         coordfill_card.set_name("coordfill")
-        self.cards.append(coordfill_card)
-        main_layout.addWidget(coordfill_card)
-        main_layout.addWidget(CardSeparator(self))
+        image_layout.addWidget(coordfill_card)
+        
+        image_layout.addStretch()
+        self.stacked_widget.addWidget(image_container)
+        
+        self.image_cards = [patchwiper_card, emdf_card, grig_card, lama_card, coordfill_card]
+        self.all_cards.extend(self.image_cards)
 
-        patchwiper_card.set_selected(True)
-        for i, card in enumerate(self.cards):
-            card.mousePressEvent = lambda event, c=card, idx=i: self.on_card_clicked(c, idx)
+        video_container = QWidget()
+        video_layout = QVBoxLayout(video_container)
+        video_layout.setContentsMargins(0, 6, 0, 6)
+        video_layout.setSpacing(0)
+
+        video_seq_card = StyleCard("#9b59b6", self.tr("视频时序级擦除"), self.tr("跨帧追踪锁定，无闪烁，适合复杂动态视频"))
+        video_seq_card.set_name("ppt")
+        video_layout.addWidget(video_seq_card)
+        
+        video_layout.addStretch()
+        self.stacked_widget.addWidget(video_container)
+        
+        self.video_cards = [video_seq_card]
+        self.all_cards.extend(self.video_cards)
+
+        self.tab_image.toggled.connect(lambda checked: self.on_tab_changed(0, checked))
+        self.tab_video.toggled.connect(lambda checked: self.on_tab_changed(1, checked))
+
+        for card in self.all_cards:
+            card.mousePressEvent = lambda event, c=card: self.on_card_clicked(c)
 
         bind_widget_to_param(self, "model_name", watermark_remove_params, "model_name", transform=None)
-        self.model_name.emit("patchwiper")
-
+        self.select_first_interactive()
+        global_event_bus.watermarkRemove_InputFileUpdate.connect(lambda file_path: self.update_default_models(file_path=file_path))
+        global_event_bus.License_update.connect(self.select_first_interactive)
+        global_event_bus.watermarkRemove_TaskFinishedByModel.connect(self.update_model_card_info)
         main_layout.addStretch()
 
-    def on_card_clicked(self, card, index):
-        # 取消所有卡片的选中状态
-        for c in self.cards:
+    def update_model_card_info(self, model_name):
+        current_index = self.stacked_widget.currentIndex()
+        active_pool = self.image_cards if current_index == 0 else self.video_cards
+        for one_card in active_pool:
+            if one_card.get_name() != model_name:
+                continue
+            one_card.UpdateLicenseInfo.emit()
+            if not one_card.is_interactive():
+                self.model_name.emit("")
+                self.select_first_interactive()
+            break
+
+    def on_tab_changed(self, index, checked):
+        if not checked:
+            return
+        self.stacked_widget.setCurrentIndex(index)
+        target_pool = self.image_cards if index == 0 else self.video_cards
+        if target_pool:
+            self.on_card_clicked(target_pool[0])
+        content_height = self.get_current_page_height(index)
+        extra_height = 114  # tabs + spacing + margins
+        target_height = content_height + extra_height
+        self.animate_height_change(target_height)
+
+    def on_card_clicked(self, clicked_card):
+        # 如果卡片不可交互，则不响应点击
+        if not clicked_card.is_interactive():
+            return
+        current_index = self.stacked_widget.currentIndex()
+        active_pool = self.image_cards if current_index == 0 else self.video_cards
+        for c in active_pool:
             c.set_selected(False)
-        
-        # 设置当前卡片为选中状态
-        card.set_selected(True)
-        self.model_name.emit(card.get_name())
+        clicked_card.set_selected(True)
+        self.model_name.emit(clicked_card.get_name())
+
+    def select_first_interactive(self):
+        current_index = self.stacked_widget.currentIndex()
+        active_pool = self.image_cards if current_index == 0 else self.video_cards
+        if any(c.is_selected for c in active_pool):
+            return
+        for card in active_pool:
+            if card.is_interactive():
+                card.set_selected(True)
+                self.model_name.emit(card.get_name())
+                return
+
+    def update_default_models(self, file_path):
+        if not file_path:
+            self.tab_image.setEnabled(True)
+            self.tab_video.setEnabled(True)
+            self.tab_image.setChecked(True)
+            return
+        if os.path.isfile(file_path):
+            file_type = get_file_type(file_path)
+        else:
+            file_type = get_file_type(os.path.join(file_path, os.listdir(file_path)[0]))
+        if file_type == "image":
+            self.tab_image.setEnabled(True)
+            self.tab_video.setEnabled(False)
+            self.tab_image.setChecked(True)
+            self.on_tab_changed(index=0, checked=True)
+        elif file_type == "video":
+            self.tab_image.setEnabled(True)
+            self.tab_video.setEnabled(True)
+            self.tab_video.setChecked(True)
+            self.on_tab_changed(index=1, checked=True)
+        else:
+            self.tab_image.setEnabled(True)
+            self.tab_video.setEnabled(True)
+            self.tab_image.setChecked(True)
+
+    def animate_height_change(self, target_height: int):
+        start_height = self.height()
+        self.height_anim = QPropertyAnimation(self, b"maximumHeight")
+        self.height_anim.setDuration(250)
+        self.height_anim.setStartValue(start_height)
+        self.height_anim.setEndValue(target_height)
+        self.height_anim.setEasingCurve(QEasingCurve.OutCubic)
+        self.height_anim.start()
+
+    def get_current_page_height(self, index: int):
+        widget = self.stacked_widget.widget(index)
+        widget.layout().activate()
+        return widget.layout().sizeHint().height()
 
     
 class OutputSettingsCard(HeaderCardWidget):
@@ -384,8 +530,9 @@ class PreviewWidget(QWidget):
         bottom_layout.addWidget(self.image_navigation_widget, 3)
 
         # 底部状态栏
-        status_info_widget = StatusInfoWidget(watermark_remove_task_status_model, self)
-        bottom_layout.addWidget(status_info_widget, 2)
+        self.status_info_widget = StatusInfoWidget(watermark_remove_task_status_model, self)
+        self.status_info_widget.model.set_pipeline_steps(names=[self.tr('准备任务'), self.tr('检测水印'), self.tr('去除水印'), self.tr('导出文件')])
+        bottom_layout.addWidget(self.status_info_widget, 2)
 
         main_layout.addLayout(bottom_layout)
 
@@ -407,12 +554,15 @@ class PreviewWidget(QWidget):
         if not file_path:
             self.navigation.hide()
             self.stack.setCurrentIndex(0)
+            watermark_remove_task_status_model.reset()
             return
         self.navigation.show()
         if os.path.isdir(file_path):
             tmp_file_path = os.path.join(file_path, os.listdir(file_path)[0])
+            self.status_info_widget.show_batch_pipeline_widget()
         else:
             tmp_file_path = file_path
+            self.status_info_widget.show_pipeline_widget()
         file_type = get_file_type(tmp_file_path)
         ext = tmp_file_path.lower().split(".")[-1]
         if file_type == "image":
@@ -425,6 +575,7 @@ class PreviewWidget(QWidget):
             self.navigation.hide()
             self.placeholder_widget.setText(f"不支持的文件类型: {ext}")
             self.stack.setCurrentIndex(0)
+            watermark_remove_task_status_model.reset()
 
     def update_preview(self, input_path, output_path):
         preview_mode = "ResultCompared"
@@ -524,22 +675,33 @@ class HeaderWidget(QWidget):
         w = TaskInfoMessageBox(task_params, "watermark-remove", self.window())
         if not w.exec():
             return
+        
+        allowed_use, error_msg = feature_gate.can_use(feature_name=feature_gate.get_feature_name(watermark_remove_params.to_dict()["model_name"]), return_errmsg=True)
+        if not allowed_use:
+            MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
+            return
+        task_params["_feature_name_"] = feature_gate.get_feature_name(watermark_remove_params.to_dict()["model_name"])
+
         total_tasks = []
         input_path = task_params["input_path"]
-        watermark_remove_task_status_model.reset()
         global_event_bus.watermarkRemove_ImageNavigationInit.emit()
         if os.path.isdir(input_path):
+            self.is_batch_task = True
             for one_file in os.listdir(input_path):
                 task_params["input_path"] = os.path.join(input_path, one_file)
                 task_instance = WatermarkRemoveWork(**task_params)
                 func, args, kwargs = task_instance.to_worker()
                 total_tasks.append((func, args, kwargs))
         else:
+            self.is_batch_task = False
             task_instance = WatermarkRemoveWork(**task_params)
             func, args, kwargs = task_instance.to_worker()
             total_tasks.append((func, args, kwargs))
 
-        watermark_remove_task_status_model.set_total(len(total_tasks))
+        backend_type, gpu_name = global_backend_info_cache.get(key="backend_info")
+        watermark_remove_task_status_model.start_batch(total=len(total_tasks), backend_type=backend_type, gpu_name=gpu_name)
+        if not self.is_batch_task:
+            watermark_remove_task_status_model.start_step(name=self.tr("准备任务"))
 
         for func, args, kwargs in total_tasks:
             input_path = kwargs["input_path"]
@@ -557,7 +719,6 @@ class HeaderWidget(QWidget):
             future.progress.connect(
                 lambda value, msg, path=input_path: self._task_progress(path, value, msg)
             )
-
         TeachingTip.create(
             target=self.process_btn,
             icon=InfoBarIcon.SUCCESS,
@@ -570,11 +731,31 @@ class HeaderWidget(QWidget):
         )
 
     def _task_progress(self, input_path, value, msg):
-        global_event_bus.watermarkRemove_TaskProgress.emit(input_path, value, msg)
+        if value == "MaskCompleted":
+            global_event_bus.watermarkRemove_TaskProgress.emit(input_path, value, msg)
+            if not self.is_batch_task:
+                watermark_remove_task_status_model.finish_step(self.tr('检测水印'))
+                watermark_remove_task_status_model.start_step(self.tr('去除水印'))
+        elif value == "MaskStart":
+            if not self.is_batch_task:
+                watermark_remove_task_status_model.finish_step(self.tr("准备任务"))
+                watermark_remove_task_status_model.start_step(self.tr('检测水印'))
+        elif value == "WaterRemoved":
+            if not self.is_batch_task:
+                watermark_remove_task_status_model.finish_step(self.tr("去除水印"))
+                watermark_remove_task_status_model.start_step(self.tr('导出文件'))
 
     def _task_finished(self, input_path, output_path):
+        if not feature_gate.is_pro:
+            try:
+                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(watermark_remove_params.to_dict()["model_name"]))
+            except Exception:
+                pass
+            global_event_bus.watermarkRemove_TaskFinishedByModel.emit(watermark_remove_params.to_dict()["model_name"])
         watermark_remove_task_status_model.report_success()
         global_event_bus.watermarkRemove_TaskFinished.emit(input_path, output_path)
+        if not self.is_batch_task:
+            watermark_remove_task_status_model.finish_step(name=self.tr("导出文件"))
 
     def _params_check(self, params):
         error_msg = ""
@@ -587,9 +768,11 @@ class HeaderWidget(QWidget):
             return error_msg, task_params
         
         if "input_path" not in params or not params["input_path"] or " " in params["input_path"]:
-            error_msg = self.tr("请选择要处理的文件或目录且文件名不能有空格")
+            error_msg = self.tr("请选择要处理的文件或目录且路径不能有空格")
             return error_msg, task_params
         else:
+            if isinstance(params["input_path"], str) and not params["input_path"].isascii():
+                return self.tr("输入路径: 不支持非英文路径"), task_params
             task_params["input_path"] = params["input_path"]
 
         if get_file_type(params["input_path"]) == "video" and cfg.get(cfg.additionalParams)["SoftwareSettings"]["FFmpeg_status_info"]["text"] != "OK":
@@ -618,10 +801,16 @@ class HeaderWidget(QWidget):
         else:
             task_params["model_name"] = params["model_name"]
 
+        if task_params["model_name"] in ["ppt"] and not cfg.get(cfg.localVideoInpaintingEnabled):
+            error_msg = self.tr("请在设置页面打开 '视频修复AI能力' 开关")
+            return error_msg, task_params
+
         if "output_path" not in params or not params["output_path"]:
             error_msg = self.tr("请设置文件保存位置")
             return error_msg, task_params
         else:
+            if isinstance(params["output_path"], str) and not params["output_path"].isascii():
+                return self.tr("输出路径: 不支持非英文路径"), task_params
             task_params["output_path"] = params["output_path"]
             task_params["output_format"] = params["output_format"]
 
@@ -633,8 +822,14 @@ class HeaderWidget(QWidget):
             task_params["watermark_format"] = params["watermark_format"]
             task_params["watermark_confidence"] = params["watermark_confidence"]
             if task_params["watermark_ai_interactive_type"] == "semantic_detect":
+                if not params["watermark_detect_prompt"]:
+                    error_msg = self.tr("请框输入水印语义检测提示词")
+                    return error_msg, task_params
                 task_params["watermark_detect_prompt"] = params["watermark_detect_prompt"]
             if task_params["watermark_ai_interactive_type"] == "space_detect":
+                if not params["watermark_boxes"]:
+                    error_msg = self.tr("请框选水印位置")
+                    return error_msg, task_params
                 task_params["watermark_boxes"] = params["watermark_boxes"]
         if params["watermark_detect_type"] == "manual_detect":
             task_params["manual_watermark_mask_path"] = params["manual_watermark_mask_path"]

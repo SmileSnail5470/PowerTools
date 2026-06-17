@@ -27,11 +27,11 @@
 ## 开发进度与更新计划
 ### 🛠 进行中
 - **图片/视频盲水印去除**
-- **优化视频去水印效果**
-- **视频支持字幕提取和去除**
 
 ### 📌 未来计划
 ✅ 支持 GPU 加速，提升处理速度
+✅ 优化视频去水印效果
+✅ 视频支持字幕提取和去除
 
 ### ✅ 已完成
 | 功能 | 状态 | 说明 |
@@ -62,17 +62,19 @@
 下载 [`ffmpeg`](https://github.com/BtbN/FFmpeg-Builds/releases)，**下载包体积最大的**。在软件的设置页面设置【ffmpeg路径】为`ffmpeg`可执行文件所在的路径目录。例如设置`../ffmpeg/bin` 路径。
 
 **可选步骤（也可在设置页面开启对应功能，会自动下载模型文件，需要科学上网才可以下载）：**
-- 下载 [OCR 模型](https://drive.google.com/file/d/1PNEJ8UXyqxEbwDDq2CpnU5lTa0bUUGgo/view?usp=sharing)
-- 下载 [去水印模型](https://drive.google.com/file/d/1ulNiQo8G0XHiSP4gV7Hk-ng4XCJSvTlL/view?usp=sharing)
-- 下载 [盲水印添加模型](https://drive.google.com/file/d/1HgJzhcWxvhy2_QhbVFow6Z84yTRftgzL/view?usp=sharing)
-- 下载 [物体分割模型](https://drive.google.com/file/d/1k9ik2t755Adq4j2CIQ6D8byPWBjmZE1E/view?usp=drive_link)
+- 下载 【[OCR 模型-夸克网盘](https://pan.quark.cn/s/bd72574ee585)】   【[OCR 模型-谷歌云盘](https://drive.google.com/file/d/16BNBEEbuIazFIp2jCrkVQgJCnL2Bx_k7/view?usp=sharing)】
+- 下载 【[去水印模型-夸克网盘](https://pan.quark.cn/s/6317944f90f4)】   【[去水印模型-谷歌云盘](https://drive.google.com/file/d/11_MWFIk8tgKXOjRszVm8_GYnyaDJPYyx/view?usp=sharing)】
+- 下载 【[盲水印添加模型-夸克网盘](https://pan.quark.cn/s/047c6e883771)】   【[盲水印添加模型-谷歌云盘](https://drive.google.com/file/d/1K0TUa76B-EYQm8pdiyVVZvXhLT7jJUoc/view?usp=sharing)】
+- 下载 【[物体分割模型-夸克网盘](https://pan.quark.cn/s/a7ddd03cbd13)】   【[物体分割模型-谷歌云盘](https://drive.google.com/file/d/19-WHk4g9BCIAukQntt8lnI0n9cgh042g/view?usp=sharing)】
+- 下载 【[视频修复模型-夸克网盘](https://pan.quark.cn/s/d77a2957ce9d)】   【[视频修复模型-谷歌云盘](https://drive.google.com/file/d/1dwEBhZ465TcNXUBiSfCDsRSzRIpNKYqA/view?usp=sharing)】
 
 下载完解压后，启动软件，导航到设置界面，设置【AI模型依赖路径】为解压后的路径父目录。例如下面的 `../deps` 目录下的结构是
 ```bash
-├─blind_watermark_addition
-├─ocr
-├─segment
-└─visible_watermark_removal
+├── blind_watermark_addition
+├── ocr
+├── segment
+├── video_inpainting
+└── visible_watermark_removal
 ```
 ![AI 模型依赖路径设置示例](docs/screenshots/models_path.png)
 

@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QGraphicsScene, QVBoxLayout, QLabel, QFrame, QHBoxLayout, QGraphicsItem, QGraphicsView,
     QGraphicsPixmapItem
 )
-from PySide6.QtCore import Qt, QSize, QPointF, QRectF
+from PySide6.QtCore import Qt, QSize, QPointF, QRectF, QThread, Signal
 from PySide6.QtGui import QPainter, QMouseEvent, QColor, QFont, QImage, QPen, QPixmap
 
 from app.ui.library.qfluentwidgets import(
@@ -265,10 +265,38 @@ class CanvasView(QGraphicsView):
         return QSize(1000, 600)
 
 
+class VideoExtractThread(QThread):
+    finished_signal = Signal(int, list) 
+
+    def __init__(self, file_path, frames_dir):
+        super().__init__()
+        self.file_path = file_path
+        self.frames_dir = frames_dir
+
+    def run(self):
+        try:
+            (
+                ffmpeg
+                .input(self.file_path)
+                .output(os.path.join(self.frames_dir, "%06d.png"), start_number=0, vsync="passthrough")
+                .overwrite_output()
+                .global_args("-hide_banner", "-loglevel", "error")
+                .run(cmd=os.path.join(os.getenv("POWERTOOLS_FFMPEG_BIN", ""), "ffmpeg.exe" if platform.system().lower() == "windows" else "ffmpeg"))
+            )
+            frame_files = sorted([os.path.join(self.frames_dir, f) for f in os.listdir(self.frames_dir) if f.split(".")[-1] == 'png'])
+            self.finished_signal.emit(len(frame_files), frame_files)
+        except Exception as e:
+            self.finished_signal.emit(0, [])
+            raise Exception(f"FFmpeg extraction error: {e}")
+
+
 class WatermarkMaskTool(MyMessageBoxBase):
     def __init__(self, file_path, is_video=False, parent=None):
         super().__init__(parent=parent)
-        self.file_path = file_path
+        if os.path.isfile(file_path):
+            self.file_path = file_path
+        else:
+            self.file_path = os.path.join(file_path, os.listdir(file_path)[0])
         self.is_video = is_video
         self.mask_path = os.path.join(cfg.get(cfg.cachePath), "watermark_removal", os.path.basename(file_path).split(".")[0])
         self.mask_file = ""
@@ -288,25 +316,27 @@ class WatermarkMaskTool(MyMessageBoxBase):
         else:
             temp_dir = tempfile.TemporaryDirectory()
             frames_dir = os.path.join(temp_dir.name, "frames")
-            os.makedirs(frames_dir, exist_ok=True)
-            # 提取所有帧
-            (
-                ffmpeg
-                .input(self.file_path)
-                .output(os.path.join(frames_dir, "%06d.png"), start_number=0, vsync="passthrough")
-                .overwrite_output()
-                .global_args("-hide_banner", "-loglevel", "error")
-                .run(cmd=os.path.join(os.getenv("POWERTOOLS_FFMPEG_BIN"), "ffmpeg.exe" if platform.system().lower() == "windows" else "ffmpeg"))
-            )
-            frame_files = sorted([os.path.join(frames_dir, f) for f in os.listdir(frames_dir) if f.split(".")[-1] == 'png'])
-            total_frames = len(frame_files)
-            self.frame_control_widget.set_total_frames(total=total_frames)
-            self.frame_control_widget.frameChanged.connect(lambda index: self._load_image(frame_files[index-1]))
-            if total_frames > 0:
-                self.frame_control_widget.frameChanged.emit(1)
             self.temp_dir = temp_dir
+            os.makedirs(frames_dir, exist_ok=True)
+
+            self.frame_control_widget.setEnabled(False)
+            self.titleLabel.setText(self.tr("水印 Mask 标注 (正在提取视频帧，请稍候...)"))
+            self.extract_thread = VideoExtractThread(self.file_path, frames_dir)
+            self.extract_thread.finished_signal.connect(self.on_frames_extracted)
+            self.extract_thread.start()
+
+    def on_frames_extracted(self, total_frames, frame_files):
+        self.titleLabel.setText(self.tr("水印 Mask 标注"))
+        self.frame_control_widget.setEnabled(True)
+        self.frame_control_widget.set_total_frames(total=total_frames)
+        self.frame_control_widget.frameChanged.connect(lambda index: self._load_image(frame_files[index-1]))
+        if total_frames > 0:
+            self.frame_control_widget.frameChanged.emit(1)
 
     def clear(self):
+        if hasattr(self, 'extract_thread') and self.extract_thread.isRunning():
+            self.extract_thread.terminate()
+            self.extract_thread.wait()
         if self.temp_dir:
             self.temp_dir.cleanup()
         if self.frame_control_widget.current_frame() < self.frame_control_widget.total_frames():

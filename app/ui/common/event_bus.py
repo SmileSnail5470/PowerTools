@@ -1,11 +1,14 @@
 from PySide6.QtCore import QObject, Signal
 
 class GlobalEventBus(QObject):
+    # 许可信息更新
+    License_update = Signal()
     # 水印添加 UI
     watermarkAdd_InputFileUpdate = Signal(str)
     watermarkAdd_TaskFinished = Signal(str, str)
     watermarkAdd_PreviewFile = Signal(str)
     watermarkAdd_ImageNavigationInit = Signal()
+    watermarkAdd_TaskFinishedByModel = Signal(str)
 
     # 水印移除 UI
     watermarkRemove_InputFileUpdate = Signal(str)
@@ -14,12 +17,14 @@ class GlobalEventBus(QObject):
     watermarkRemove_PreviewFile = Signal(str)
     watermarkRemove_ImageNavigationInit = Signal()
     watermarkRemove_ManualMaskUpdate = Signal(str)
+    watermarkRemove_TaskFinishedByModel = Signal(str)
 
     # OCR UI
     OCR_InputFileUpdate = Signal(str)
     OCR_TaskFinished = Signal(str, tuple)
     OCR_PreviewFile = Signal(str)
     OCR_ImageNavigationInit = Signal()
+    OCR_TaskFinishedByModel = Signal(str)
 
 
 global_event_bus = GlobalEventBus()

@@ -6,6 +6,7 @@ import numpy as np
 import onnxruntime as ort
 ort.preload_dlls(directory="")
 from PIL import Image
+from app.algorithms import general_inference_session
 
 
 class EMDFInpaint():
@@ -37,7 +38,7 @@ class EMDFInpaint():
         else:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
-        self.session = ort.InferenceSession(
+        self.session = general_inference_session(
             self.onnx_path,
             providers=providers,
             provider_options=provider_options,
@@ -339,7 +340,7 @@ if __name__ == "__main__":
     input_image = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assess", "image.jpg")
     mask_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assess", "mask.png")
     inpaint = EMDFInpaint()
-    inpaint.prepare(onnx_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "emdf_inpaint.onnx"))
+    inpaint.prepare(onnx_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "emdf_inpaint.encmodel"))
 
     mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
     if mask.ndim == 3 and mask.shape[2] == 1:

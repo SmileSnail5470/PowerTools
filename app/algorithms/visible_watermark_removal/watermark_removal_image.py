@@ -96,6 +96,18 @@ class WatermarkSegment():
                     yolo_mask = np.clip(yolo_mask, 0.0, 1.0)
                     yolo_mask = (yolo_mask * 255.0).astype(np.uint8)
                     mask = self._merge_text_yolo_masks(mask, yolo_mask)
+            elif self.watermark_type == "subtitle":
+                mask = detect_text_watermarks(
+                    input_path=image_path,
+                    limit_side_len = kwargs.get("limit_side_len", 960),
+                    limit_type = kwargs.get("limit_type", "max"),
+                    det_thresh = kwargs.get("det_thresh", 0.3),
+                    det_box_thresh = kwargs.get("det_box_thresh", 0.6),
+                    unclip_ratio = kwargs.get("unclip_ratio", 1.5),
+                    score_mode = kwargs.get("score_mode", "fast"),
+                    det_box_type = kwargs.get("det_box_type", "quad"),
+                    onnx_path = text_detection_onnx_path
+                )
             else:
                 slbr_segment = SLBRSegment()
                 slbr_segment.prepare(onnx_path=sr_onnx_path)
@@ -310,6 +322,9 @@ class ImageWatermarkRemove():
             dilate_num: int = 2,
             **kwargs
         ):
+        progress_cb = kwargs.get("progress_cb", None)
+        if progress_cb is not None:
+            progress_cb("MaskStart", "")
         if not mask_path:
             # ai 选择水印掩码
             mask = WatermarkSegment(watermark_type, ai_detect_type, ai_interactive_type, ai_interactive_prompt, ai_interactive_boxes, watermark_confidence).segment(
@@ -324,15 +339,14 @@ class ImageWatermarkRemove():
         else:
             # 读取人工标注的水印掩码
             mask = self._read_mask(mask_path=mask_path)
-        process_cb = kwargs.get("process_cb", None)
-        if process_cb is not None:
+        if progress_cb is not None:
             mask_tmp_path = "{0}_mask.png".format(output_path.rsplit(".", 1)[0])
             self._save_mask_visualization(
                 img_path=image_path,
                 mask=mask,
                 file_path=mask_tmp_path,
             )
-            process_cb("MaskCompleted", mask_tmp_path)
+            progress_cb("MaskCompleted", mask_tmp_path)
 
         image_inpainting = WatermarkInpaint(
             mask=mask,
@@ -345,3 +359,5 @@ class ImageWatermarkRemove():
             dilate_num=dilate_num,
         )
         image_inpainting.inpaint(image_path=image_path, output_path=output_path)
+        if progress_cb is not None:
+            progress_cb("WaterRemoved", "")

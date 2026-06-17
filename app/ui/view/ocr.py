@@ -22,10 +22,12 @@ from app.ui.common.event_bus import global_event_bus
 from app.controllers.task_manager import global_task_manager
 from app.ui.common.task_params import bind_widget_to_param, TaskParams
 from app.ui.common.task_status import TaskStatusModel
-from app.ui.common.utils import get_file_type
+from app.ui.common.utils import get_file_type, global_backend_info_cache
 from app.ui.common.config import cfg
 
 from app.workers.ocr_work import OCRWork
+
+from app.license.globals import feature_gate
 
 
 ocr_params = TaskParams()
@@ -93,16 +95,29 @@ class ModelStyleCard(HeaderCardWidget):
         main_layout.addWidget(pp_ocr_card)
         main_layout.addWidget(CardSeparator(self))
 
-        pp_ocr_card.set_selected(True)
         for i, card in enumerate(self.cards):
             card.mousePressEvent = lambda event, c=card, idx=i: self.on_card_clicked(c, idx)
 
         bind_widget_to_param(self, "model_name", ocr_params, "model_name", transform=None)
-        self.model_name.emit("pp_ocr")
-
+        self.select_first_interactive()
+        global_event_bus.License_update.connect(self.select_first_interactive)
+        global_event_bus.OCR_TaskFinishedByModel.connect(self.update_model_card_info)
         main_layout.addStretch()
 
+    def update_model_card_info(self, model_name):
+        for one_card in self.cards:
+            if one_card.get_name() != model_name:
+                continue
+            one_card.UpdateLicenseInfo.emit()
+            if not one_card.is_interactive():
+                self.model_name.emit("")
+                self.select_first_interactive()
+            break
+
     def on_card_clicked(self, card, index):
+        # 如果卡片不可交互，则不响应点击
+        if not card.is_interactive():
+            return
         # 取消所有卡片的选中状态
         for c in self.cards:
             c.set_selected(False)
@@ -111,6 +126,14 @@ class ModelStyleCard(HeaderCardWidget):
         card.set_selected(True)
         self.model_name.emit(card.get_name())
 
+    def select_first_interactive(self):
+        if any(c.is_selected for c in self.cards):
+            return
+        for card in self.cards:
+            if card.is_interactive():
+                card.set_selected(True)
+                self.model_name.emit(card.get_name())
+                return
 
 class SettingsCard(HeaderCardWidget):
     language_map = {
@@ -275,8 +298,9 @@ class PreviewWidget(QWidget):
         bottom_layout.addWidget(self.image_navigation_widget, 3)
 
         # 底部状态栏
-        status_info_widget = StatusInfoWidget(ocr_task_status_model, self)
-        bottom_layout.addWidget(status_info_widget, 2)
+        self.status_info_widget = StatusInfoWidget(ocr_task_status_model, self)
+        self.status_info_widget.model.set_pipeline_steps(names=[self.tr('准备任务'), self.tr('文字识别'), self.tr('导出结果')])
+        bottom_layout.addWidget(self.status_info_widget, 2)
 
         main_layout.addLayout(bottom_layout)
 
@@ -295,11 +319,14 @@ class PreviewWidget(QWidget):
         self.media_type = "image"
         if not file_path:
             self.stack.setCurrentIndex(0)
+            ocr_task_status_model.reset()
             return
         if os.path.isdir(file_path):
             tmp_file_path = os.path.join(file_path, os.listdir(file_path)[0])
+            self.status_info_widget.show_batch_pipeline_widget()
         else:
             tmp_file_path = file_path
+            self.status_info_widget.show_pipeline_widget()
         file_type = get_file_type(tmp_file_path)
         ext = tmp_file_path.lower().split(".")[-1]
         if file_type == "image":
@@ -308,6 +335,7 @@ class PreviewWidget(QWidget):
         else:
             self.placeholder_widget.setText(f"不支持的文件类型: {ext}")
             self.stack.setCurrentIndex(0)
+            ocr_task_status_model.reset()
 
     def update_preview(self, input_path, ocr_result):
         self.files_preview_info[input_path] = ocr_result
@@ -375,22 +403,33 @@ class HeaderWidget(QWidget):
         w = TaskInfoMessageBox(task_params, "ocr-rec", self.window())
         if not w.exec():
             return
+        
+        allowed_use, error_msg = feature_gate.can_use(feature_name=feature_gate.get_feature_name(ocr_params.to_dict()["model_name"]), return_errmsg=True)
+        if not allowed_use:
+            MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
+            return
+        task_params["_feature_name_"] = feature_gate.get_feature_name(ocr_params.to_dict()["model_name"])
+
         total_tasks = []
         input_path = task_params["input_path"]
-        ocr_task_status_model.reset()
         global_event_bus.OCR_ImageNavigationInit.emit()
         if os.path.isdir(input_path):
+            self.is_batch_task = True
             for one_file in os.listdir(input_path):
                 task_params["input_path"] = os.path.join(input_path, one_file)
                 task_instance = OCRWork(**task_params)
                 func, args, kwargs = task_instance.to_worker()
                 total_tasks.append((func, args, kwargs))
         else:
+            self.is_batch_task = False
             task_instance = OCRWork(**task_params)
             func, args, kwargs = task_instance.to_worker()
             total_tasks.append((func, args, kwargs))
 
-        ocr_task_status_model.set_total(len(total_tasks))
+        backend_type, gpu_name = global_backend_info_cache.get(key="backend_info")
+        ocr_task_status_model.start_batch(total=len(total_tasks), backend_type=backend_type, gpu_name=gpu_name)
+        if not self.is_batch_task:
+            ocr_task_status_model.start_step(name=self.tr("准备任务"))
 
         for func, args, kwargs in total_tasks:
             input_path = kwargs["input_path"]
@@ -405,6 +444,9 @@ class HeaderWidget(QWidget):
             future.cancelled.connect(
                 lambda path=input_path: ocr_task_status_model.report_failure(path, "任务被取消")
             )
+            future.progress.connect(
+                lambda value, msg, path=input_path: self._task_progress(path, value, msg)
+            )
 
         TeachingTip.create(
             target=self.process_btn,
@@ -417,9 +459,27 @@ class HeaderWidget(QWidget):
             parent=self
         )
 
+    def _task_progress(self, input_path, value, msg):
+        if value == "OCRStart":
+            if not self.is_batch_task:
+                ocr_task_status_model.finish_step(name=self.tr("准备任务"))
+                ocr_task_status_model.start_step(name=self.tr('文字识别'))
+        elif value == "OCRCompleted":
+            if not self.is_batch_task:
+                ocr_task_status_model.finish_step(name=self.tr("文字识别"))
+                ocr_task_status_model.start_step(name=self.tr('导出结果'))
+
     def _task_finished(self, input_path, ocr_result):
+        if not feature_gate.is_pro:
+            try:
+                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(ocr_params.to_dict()["model_name"]))
+            except Exception:
+                pass
+            global_event_bus.OCR_TaskFinishedByModel.emit(ocr_params.to_dict()["model_name"])
         ocr_task_status_model.report_success()
         global_event_bus.OCR_TaskFinished.emit(input_path, ocr_result)
+        if not self.is_batch_task:
+            ocr_task_status_model.finish_step(name=self.tr("导出结果"))
 
     def _params_check(self, params):
         error_msg = ""
@@ -432,9 +492,11 @@ class HeaderWidget(QWidget):
             return error_msg, task_params
         
         if "input_path" not in params or not params["input_path"] or " " in params["input_path"]:
-            error_msg = self.tr("请选择要处理的文件或目录且文件名不能有空格")
+            error_msg = self.tr("请选择要处理的文件或目录且路径不能有空格")
             return error_msg, task_params
         else:
+            if isinstance(params["input_path"], str) and not params["input_path"].isascii():
+                return self.tr("输入路径: 不支持非英文路径"), task_params
             task_params["input_path"] = params["input_path"]
 
         if "model_name" not in params or not params["model_name"]:

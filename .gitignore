@@ -2,8 +2,12 @@ __pycache__/
 .DS_Store
 app/resources/ffmpeg/*
 app/resources/deps/*
+app/resources/deps_ori/*
 app/ui/library/qfluentwidgets/_rc/resource.py
 app/ui/library/qframelesswindow/_rc/resource.py
 app/ui/resources/resource.py
 dist/*
 app/resources/deps/super_resolution/*
+*.pyd
+*.so
+*.lic

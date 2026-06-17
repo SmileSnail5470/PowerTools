@@ -16,7 +16,7 @@ class TaskManager(QObject):
 
     def __init__(self, max_workers: int = 8, parent=None):
         super().__init__(parent)
-        self.pool = QThreadPool.globalInstance()
+        self.pool = QThreadPool()
         self.pool.setMaxThreadCount(max_workers)
         self._tasks: Dict[str, TaskFuture] = {}
         self._lock = threading.Lock()
@@ -136,3 +136,20 @@ class TaskManager(QObject):
 
 
 global_task_manager = TaskManager(max_workers=int(cfg.get(cfg.taskParallelNumber)))
+
+
+class InternalTaskManager:
+    _instance = None
+
+    @classmethod
+    def get_pool(cls) -> QThreadPool:
+        if cls._instance is None:
+            cls._instance = QThreadPool()
+            cls._instance.setMaxThreadCount(6)
+        return cls._instance
+
+    @classmethod
+    def shutdown(cls):
+        if cls._instance is not None:
+            cls._instance.waitForDone()
+            cls._instance = None

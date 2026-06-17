@@ -22,9 +22,10 @@ class OptionCard(QFrame):
         layout = QVBoxLayout(self)
         self.title_label = QLabel(title)
         self.title_label.setObjectName("optTitle")
-        setFont(self.title_label, 13, QFont.DemiBold)
+        setFont(self.title_label, 13, QFont.Medium)
         self.desc_label = QLabel(desc)
         self.desc_label.setObjectName("optDesc")
+        self.desc_label.setWordWrap(True)
         setFont(self.desc_label, 11)
         
         layout.addWidget(self.title_label)
@@ -39,6 +40,8 @@ class OptionCard(QFrame):
         self.setProperty("selected", self.selected)
         self.style().unpolish(self)
         self.style().polish(self)
+        self.title_label.style().unpolish(self.title_label)
+        self.title_label.style().polish(self.title_label)
 
     def mousePressEvent(self, event):
         if self.parent():
@@ -125,14 +128,17 @@ class WatermarkDetectSettings(QWidget):
         grid0 = QWidget()
         grid0_l = QHBoxLayout(grid0)
         grid0_l.setContentsMargins(0,0,0,0)
-        c1 = OptionCard(self.tr("通用水印"), self.tr("Logo、图案、复合元素"))
+        c1 = OptionCard(self.tr("通用水印"), self.tr("Logo、文字、日期"))
         c1.clicked.connect(lambda: self.watermarkContent.emit("general_watermark"))
         c1.selected = True
         c1.update_style()
-        grid0_l.addWidget(c1)
-        c1_1 = OptionCard(self.tr("文字水印"), self.tr("纯文本、日期、字幕"))
+        grid0_l.addWidget(c1, stretch=1)
+        c1_1 = OptionCard(self.tr("文字水印"), self.tr("纯文本"))
         c1_1.clicked.connect(lambda: self.watermarkContent.emit("text_watermark"))
-        grid0_l.addWidget(c1_1)
+        grid0_l.addWidget(c1_1, stretch=1)
+        c1_2 = OptionCard(self.tr("字幕"), self.tr("字幕"))
+        c1_2.clicked.connect(lambda: self.watermarkContent.emit("subtitle"))
+        grid0_l.addWidget(c1_2, stretch=1)
         p0_l.addWidget(grid0)
         p0_l.addSpacing(24)
         
@@ -488,7 +494,7 @@ class WatermarkDetectSettings(QWidget):
             self.dir_clear_btn.setVisible(True)
             self.dir_select_btn.setVisible(False)
             self.primary_btn.setEnabled(False)
-            self.maskDirectoryChanged.emit(dir_path) if len(os.listdir(dir_path)) == 1 else self.maskDirectoryChanged.emit(os.path.join(dir_path, os.listdir(dir_path)[0]))
+            self.maskDirectoryChanged.emit(dir_path) if len(os.listdir(dir_path)) > 1 else self.maskDirectoryChanged.emit(os.path.join(dir_path, os.listdir(dir_path)[0]))
 
     def _on_clear_mask_dir(self):
         self.mask_dir_path = ""
@@ -504,7 +510,12 @@ class WatermarkDetectSettings(QWidget):
         self.watermarkConfidence.emit(float_val)
 
     def set_file_path(self, file_path):
-        self.file_path = file_path
+        if not file_path:
+            return
+        if os.path.isfile(file_path):
+            self.file_path = file_path
+        else:
+            self.file_path = os.path.join(file_path, os.listdir(file_path)[0])
 
     def _watermark_area_selector(self):
         if not self.file_path:

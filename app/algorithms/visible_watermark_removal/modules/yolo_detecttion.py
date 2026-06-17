@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import onnxruntime as ort
 ort.preload_dlls(directory="")
+from app.algorithms import general_inference_session
 
 
 def prepare_input(img, size):
@@ -195,7 +196,7 @@ class YOLODetection():
         else:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
-        sess = ort.InferenceSession(
+        sess = general_inference_session(
             onnx_path,
             providers=providers,
             provider_options=provider_options,
@@ -335,7 +336,7 @@ if __name__ == "__main__":
     import os
     input_image = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assess", "image.jpg")
     detection = YOLODetection()
-    detection.prepare(onnx_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "yolo.onnx"))
+    detection.prepare(onnx_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "OnnxModels", "yolo.encmodel"))
     
     output_images, output_masks, combined_info = detection.detect_watermarks(
         image_path=input_image,

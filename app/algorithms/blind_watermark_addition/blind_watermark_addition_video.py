@@ -6,6 +6,7 @@ import onnxruntime as ort
 ort.preload_dlls(directory="")
 from app.algorithms.blind_watermark_addition.ecc_utils import HammingECC
 import app.utils.ffmpeg as ffmpeg
+from app.algorithms import general_inference_session
 
 
 class VideoBlindWatermarkEmbed():
@@ -34,7 +35,7 @@ class VideoBlindWatermarkEmbed():
         else:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
-        self.session = ort.InferenceSession(
+        self.session = general_inference_session(
             self.onnx_path,
             providers=providers,
             provider_options=provider_options,
@@ -200,7 +201,7 @@ class VideoBlindWatermarkDetect():
         else:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
-        self.session = ort.InferenceSession(
+        self.session = general_inference_session(
             self.onnx_path,
             providers=providers,
             provider_options=provider_options,
@@ -275,8 +276,8 @@ class VideoBlindWatermarkDetect():
 
 if __name__ == "__main__":
     ffmpeg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ffmpeg-linux64", "bin")
-    embed_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "onnxmodel", "pixelseal_video_embed.onnx")
-    detect_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "onnxmodel", "pixelseal_video_detect.onnx")
+    embed_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "onnxmodel", "pixelseal_video_embed.encmodel")
+    detect_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "onnxmodel", "pixelseal_video_detect.encmodel")
     image_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "videos", "1.mp4")
     output_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output", "1.mp4")
 

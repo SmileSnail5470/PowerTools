@@ -202,7 +202,8 @@ class OCR():
             drop_score = 0.5,
             det_onnx_path = None,
             rec_onnx_path = None,
-            cls_onnx_path = None
+            cls_onnx_path = None,
+            progress_cb = None
         ):
         self.det_box_type = det_box_type
         self.drop_score = drop_score
@@ -218,8 +219,11 @@ class OCR():
         )
         self.text_recognizer.prepare(onnx_path=rec_onnx_path)
         self.text_classifier.prepare(onnx_path=cls_onnx_path)
+        self.progress_cb = progress_cb
 
     def predict(self, image_path, output_path=None, use_cls=True, gen_visualize=False):
+        if self.progress_cb is not None:
+            self.progress_cb("OCRStart", "")
         img = cv2.imread(image_path)
         ori_im = img.copy()
         dt_boxes, _ = self.text_detector(img)
@@ -258,6 +262,8 @@ class OCR():
             if score >= self.drop_score:
                 filter_boxes.append(box)
                 filter_rec_res.append(rec_result)
+        if self.progress_cb is not None:
+            self.progress_cb("OCRCompleted", "")
         return filter_boxes, filter_rec_res
     
 
@@ -265,9 +271,9 @@ if __name__ == "__main__":
     import os
     image_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assess", "test1.jpg")
     output_file = "./out.png"
-    det_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resources", "deps", "ocr", "pp_ocr_det.onnx")
-    rec_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resources", "deps", "ocr", "pp_ocr_rec.onnx")
-    cls_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resources", "deps", "ocr", "pp_lcnet_x1_0_textline_ori.onnx")
+    det_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resources", "deps", "ocr", "pp_ocr_det.encmodel")
+    rec_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resources", "deps", "ocr", "pp_ocr_rec.encmodel")
+    cls_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resources", "deps", "ocr", "pp_lcnet_x1_0_textline_ori.encmodel")
 
     ocr = OCR()
     ocr.prepare(det_onnx_path=det_onnx_path, rec_onnx_path=rec_onnx_path, cls_onnx_path=cls_onnx_path)

@@ -68,6 +68,7 @@ class Config(QConfig):
     localWatermarkRemovalEnabled = ConfigItem("LocalAISettings", "LocalWatermarkRemovalEnabled", False, BoolValidator())
     localObjectSegmentationEnabled = ConfigItem("LocalAISettings", "LocalObjectSegmentationEnabled", False, BoolValidator())
     localOCREnabled = ConfigItem("LocalAISettings", "localOCREnabled", False, BoolValidator())
+    localVideoInpaintingEnabled = ConfigItem("LocalAISettings", "localVideoInpaintingEnabled", False, BoolValidator())
 
     # 高级设置
     logLevel = OptionsConfigItem("AdvancedSettings", "LogLevel", "INFO", OptionsValidator(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]))

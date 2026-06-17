@@ -29,8 +29,10 @@ def get_base_options(outdir):
         '--nofollow-import-to=*.tests',
         '--noinclude-pytest-mode=nofollow',
         '--noinclude-unittest-mode=nofollow',
+        '--include-package=cryptography',
         '--include-package=app.algorithms',
         '--include-data-dir=app/algorithms=app/algorithms',
+        '--include-data-dir=app/library=app/license'
     ]
 
 def build_macos_command(args, project_root, outdir):
