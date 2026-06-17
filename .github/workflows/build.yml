@@ -78,20 +78,6 @@ jobs:
         if: runner.os == 'Windows'
         shell: cmd
         run: |
-            if exist "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" (
-                set DEV_CMD="C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
-            ) else if exist "C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\Tools\VsDevCmd.bat" (
-                set DEV_CMD="C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\Tools\VsDevCmd.bat"
-            ) else if exist "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" (
-                set DEV_CMD="C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat"
-            ) else (
-                echo "No MSVC DevCmd.bat found!"
-                exit /b 1
-            )
-
-            echo Using MSVC DevCmd: %DEV_CMD%
-
-            call %DEV_CMD% -arch=x64 -host_arch=x64 && ^
             python build.py --output-dir build
 
       - name: Reinstall openssl libs
