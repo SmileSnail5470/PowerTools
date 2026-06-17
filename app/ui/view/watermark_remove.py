@@ -801,6 +801,10 @@ class HeaderWidget(QWidget):
         else:
             task_params["model_name"] = params["model_name"]
 
+        if task_params["model_name"] in ["ppt"] and not cfg.get(cfg.localVideoInpaintingEnabled):
+            error_msg = self.tr("请在设置页面打开 '视频修复AI能力' 开关")
+            return error_msg, task_params
+
         if "output_path" not in params or not params["output_path"]:
             error_msg = self.tr("请设置文件保存位置")
             return error_msg, task_params

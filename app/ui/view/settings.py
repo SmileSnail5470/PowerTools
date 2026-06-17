@@ -33,19 +33,23 @@ from app.utils.logger.decorators import log_exception, log_function_call
 
 models_deps_urls = {
     "visible_watermark_removal": {
-        "url": "1ulNiQo8G0XHiSP4gV7Hk-ng4XCJSvTlL",
+        "url": "11_MWFIk8tgKXOjRszVm8_GYnyaDJPYyx",
         "sha256": None
     },
     "blind_watermark_addition": {
-        "url": "1HgJzhcWxvhy2_QhbVFow6Z84yTRftgzL",
+        "url": "1K0TUa76B-EYQm8pdiyVVZvXhLT7jJUoc",
         "sha256": None
     },
     "ocr": {
-        "url": "1PNEJ8UXyqxEbwDDq2CpnU5lTa0bUUGgo",
+        "url": "16BNBEEbuIazFIp2jCrkVQgJCnL2Bx_k7",
         "sha256": None
     },
     "segment": {
-        "url": "1k9ik2t755Adq4j2CIQ6D8byPWBjmZE1E",
+        "url": "19-WHk4g9BCIAukQntt8lnI0n9cgh042g",
+        "sha256": None
+    },
+    "video_inpainting": {
+        "url": "1dwEBhZ465TcNXUBiSfCDsRSzRIpNKYqA",
         "sha256": None
     }
 }
@@ -875,6 +879,28 @@ class Settings(QWidget):
         ocr_card.addWidget(ocr_switch, stretch=0)
         ocr_card.setSeparatorVisible(True)
         ai_settings_cards.append(ocr_card)
+
+        video_inpainting_switch = ToggleSwitch()
+        self.ai_toggle_switchs.append(video_inpainting_switch)
+        video_inpainting_switch.setActive(cfg.get(cfg.localVideoInpaintingEnabled))
+        video_inpainting_switch.toggled.connect(lambda flag: setattr(cfg.localVideoInpaintingEnabled, "value", flag))
+        video_inpainting_status = StatusBadge(text=self.tr("未启用"), color="#726e62", name="video_inpainting")
+        try:
+            text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{video_inpainting_status.name}_status_info"]["text"]
+            color = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{video_inpainting_status.name}_status_info"]["color"]
+            video_inpainting_status.setLabel(text=text, color=color)
+        except Exception:
+            pass
+        self._bind_ai_toggle(
+            switch=video_inpainting_switch,
+            badge=video_inpainting_status,
+            local_ai_type="video_inpainting"
+        )
+        video_inpainting_card = CustomCardGroupWidget(title=self.tr("视频修复AI能力"), content=self.tr("视频物体移除、水印去除等"), parent=self)
+        video_inpainting_card.addWidget(video_inpainting_status, stretch=0)
+        video_inpainting_card.addWidget(video_inpainting_switch, stretch=0)
+        video_inpainting_card.setSeparatorVisible(True)
+        ai_settings_cards.append(video_inpainting_card)
 
         for card in ai_settings_cards:
             ai_settings.addCard(card=card)
