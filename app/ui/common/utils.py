@@ -24,7 +24,9 @@ def verify_gpu_environment():
     if not _has_cuda_gpu():
         return "CPU 运行", ""
     try:
-        ppt_onnx_path = os.path.join(cfg.get(cfg.localAIModelDeps), "video_inpainting", "ppt", "recurrent_flow_completion", "fusion.onnx")
+        ppt_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "license", "fusion.onnx")
+        if not os.path.exists(ppt_onnx_path):
+            ppt_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "library", "fusion.onnx")
         session = ort.InferenceSession(ppt_onnx_path, providers=['GPUExecutionProvider'])
         providers = session.get_providers()
         if "CUDAExecutionProvider" in providers:
