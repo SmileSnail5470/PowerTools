@@ -73,6 +73,7 @@ class LicenseManager:
         if license_dir is None:
             license_dir = os.path.join(pathlib.Path.home(), ".PowerTools", "license")
         self._license_dir = license_dir
+        os.makedirs(self._license_dir, exist_ok=True)
         self._license_file = os.path.join(self._license_dir, "license.lic")
         self._license_file_for_model_validate_license = os.path.join(os.path.join(pathlib.Path.home(), ".PowerTools", "license"), "license.lic")
         self._state_file = os.path.join(self._license_dir, ".state")
@@ -81,7 +82,6 @@ class LicenseManager:
         self._error_message = ""
 
         self._copy_free_license()
-        os.makedirs(self._license_dir, exist_ok=True)
         self._try_load_license()
         os.makedirs(os.path.dirname(self._license_file_for_model_validate_license), exist_ok=True)
 
