@@ -4,6 +4,7 @@ import pathlib
 import threading
 import onnxruntime as ort
 import app.library._model_loader as model_loader
+from app.ui.common.utils import global_backend_info_cache
 
 
 class ORTEnvironment:
@@ -17,6 +18,10 @@ class ORTEnvironment:
         with cls._lock:
             if cls._initialized:
                 return
+            if "GPU" in global_backend_info_cache.get()[0]:
+                cuda_info = ort.OrtMemoryInfo("Cuda", ort.OrtAllocatorType.ORT_ARENA_ALLOCATOR, 0, ort.OrtMemType.DEFAULT)
+                arena_cfg = ort.OrtArenaCfg(0, 1, -1, -1)
+                ort.create_and_register_allocator_v2("CUDAExecutionProvider", cuda_info, {}, arena_cfg)
             info = ort.OrtMemoryInfo("Cpu", ort.OrtAllocatorType.ORT_ARENA_ALLOCATOR, 0, ort.OrtMemType.DEFAULT)
             ort.create_and_register_allocator(info, None)
             cls._initialized = True

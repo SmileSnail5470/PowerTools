@@ -31,7 +31,7 @@ class PatchWiperSegment():
             provider_options = [{}]
         elif "CUDAExecutionProvider" in available and self._hash_cuda_gpu():
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            provider_options = [{}, {}]
+            provider_options = [{"arena_extend_strategy": "kSameAsRequested"}, {}]
         else:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
