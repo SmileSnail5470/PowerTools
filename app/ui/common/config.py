@@ -73,6 +73,7 @@ class Config(QConfig):
     # 高级设置
     logLevel = OptionsConfigItem("AdvancedSettings", "LogLevel", "INFO", OptionsValidator(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]))
     taskParallelNumber = OptionsConfigItem("AdvancedSettings", "TaskParallelNumber", 8, OptionsValidator([1, 2, 4, 8, 16]), restart=True)
+    hardwareOptimizationType = OptionsConfigItem("AdvancedSettings", "HardwareOptimizationType", "Auto", OptionsValidator(["Auto", "CPU", "GPU"]))
 
     def __init__(self):
         super().__init__()

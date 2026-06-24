@@ -13,7 +13,7 @@ from PySide6.QtWidgets import(
     QSizePolicy, QDialog, QProgressBar, QTextEdit, QButtonGroup
 )
 from PySide6.QtGui import QFont, QPainter, QPen, QColor
-from huggingface_hub import hf_hub_download
+from huggingface_hub import snapshot_download
 
 from app.ui.library.qfluentwidgets import(
     setFont, ScrollArea, TeachingTip, InfoBarIcon, TeachingTipTailPosition, FluentIcon,
@@ -25,39 +25,39 @@ from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 from app.ui.library.qframelesswindow.titlebar import CloseButton
 from app.ui.common.config import cfg, Language
 from app.controllers.task_manager import InternalTaskManager
-from app.ui.common.utils import verify_gpu_environment
+from app.ui.common.utils import global_backend_info_cache
 from app.utils.logger import get_log_manager
 from app.utils.logger.decorators import log_exception, log_function_call
 
 
 def detect_gpu_available() -> bool:
-    status, _ = verify_gpu_environment()
+    status, _ = global_backend_info_cache.get()
     return "GPU" in status
 
 
-HF_REPO_ID = "SmileSnail5470/PowerTools-models"
+HF_REPO_ID = "SmailSnail/PowerToolsEnc"
 HF_MIRROR_ENDPOINT = "https://hf-mirror.com"
 
 models_deps_urls = {
     "visible_watermark_removal": {
-        "cpu": {"path": "cpu/visible_watermark_removal.zip", "sha256": None},
-        "gpu": {"path": "gpu/visible_watermark_removal.zip", "sha256": None},
+        "cpu": {"path": "CPU/visible_watermark_removal", "sha256": None},
+        "gpu": {"path": "GPU/visible_watermark_removal", "sha256": None},
     },
     "blind_watermark_addition": {
-        "cpu": {"path": "cpu/blind_watermark_addition.zip", "sha256": None},
-        "gpu": {"path": "gpu/blind_watermark_addition.zip", "sha256": None},
+        "cpu": {"path": "CPU/blind_watermark_addition", "sha256": None},
+        "gpu": {"path": "GPU/blind_watermark_addition", "sha256": None},
     },
     "ocr": {
-        "cpu": {"path": "cpu/ocr.zip", "sha256": None},
-        "gpu": {"path": "gpu/ocr.zip", "sha256": None},
+        "cpu": {"path": "CPU/ocr", "sha256": None},
+        "gpu": {"path": "GPU/ocr", "sha256": None},
     },
     "segment": {
-        "cpu": {"path": "cpu/segment.zip", "sha256": None},
-        "gpu": {"path": "gpu/segment.zip", "sha256": None},
+        "cpu": {"path": "CPU/segment", "sha256": None},
+        "gpu": {"path": "GPU/segment", "sha256": None},
     },
     "video_inpainting": {
-        "cpu": {"path": "cpu/video_inpainting.zip", "sha256": None},
-        "gpu": {"path": "gpu/video_inpainting.zip", "sha256": None},
+        "cpu": {"path": "cpu/video_inpainting", "sha256": None},
+        "gpu": {"path": "gpu/video_inpainting", "sha256": None},
     }
 }
 
@@ -148,28 +148,30 @@ class InitWorker(QRunnable):
     def _download_module(self):
         logger.info(f"start download {self.task_name} ({self.variant}) module, mirror={self.use_mirror}.")
         model_info = models_deps_urls[self.task_name][self.variant]
-        file_path = model_info["path"]
-        if not file_path:
+        dir_path = model_info["path"]
+        if not dir_path:
             raise Exception(f"{self.task_name} ({self.variant}) download path not exist.")
 
         endpoint = HF_MIRROR_ENDPOINT if self.use_mirror else None
         variant_deps_path = os.path.join(self.deps_path, self.variant)
         os.makedirs(variant_deps_path, exist_ok=True)
 
-        downloaded_path = hf_hub_download(
+        self.signals.progress.emit(f"正在下载: {self.task_name} ({self.variant})...")
+        snapshot_download(
             repo_id=HF_REPO_ID,
-            filename=file_path,
+            allow_patterns=f"{dir_path}/**",
             local_dir=variant_deps_path,
             endpoint=endpoint,
         )
 
-        if model_info["sha256"]:
-            actual = self._sha256_of_file(downloaded_path)
-            if actual.lower() != model_info["sha256"].lower():
-                raise Exception(f"SHA256 check failed: expected {model_info['sha256']}, actual {actual}")
-
-        self._extract_if_needed(downloaded_path, variant_deps_path)
-        os.remove(downloaded_path)
+        downloaded_dir = os.path.join(variant_deps_path, dir_path)
+        for root, _, files in os.walk(downloaded_dir):
+            for fname in files:
+                fpath = os.path.join(root, fname)
+                lower = fname.lower()
+                if lower.endswith(".zip") or lower.endswith(".tar.gz") or lower.endswith(".tgz"):
+                    self._extract_if_needed(fpath, variant_deps_path)
+                    os.remove(fpath)
         logger.info(f"download {self.task_name} ({self.variant}) module success.")
 
     def _init_model(self):
@@ -1226,6 +1228,19 @@ class Settings(QWidget):
         task_parallel_number_card.addWidget(task_parallel_number_combox, stretch=0)
         task_parallel_number_card.setSeparatorVisible(True)
         performance_settings_cards.append(task_parallel_number_card)
+
+        hardware_optimization_combox = ComboBox()
+        current_hardware = cfg.get(cfg.hardwareOptimizationType)
+        setFont(hardware_optimization_combox, 14)
+        hardware_optimization_combox.addItems(["Auto", "CPU", "GPU"])
+        hardware_optimization_combox.currentTextChanged.connect(lambda value: setattr(cfg.hardwareOptimizationType, "value", value))
+        index = hardware_optimization_combox.findText(current_hardware)
+        if index >= 0:
+            hardware_optimization_combox.setCurrentIndex(index)
+        hardware_optimization_card = CustomCardGroupWidget(title=self.tr("硬件加速"), content=self.tr("设置硬件加速类型"), parent=self)
+        hardware_optimization_card.addWidget(hardware_optimization_combox, stretch=0)
+        hardware_optimization_card.setSeparatorVisible(True)
+        performance_settings_cards.append(hardware_optimization_card)
 
         for card in performance_settings_cards:
             performance_settings.addCard(card=card)
