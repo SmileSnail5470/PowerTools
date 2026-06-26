@@ -114,14 +114,4 @@
 
 - 使用中如有问题或建议，欢迎通过仓库 **Issues** 或应用内「反馈」提交。
 
-如果 PowerTools 对你有帮助，欢迎请我喝杯咖啡 ☕
-
-<p align="center">
-  <img src="docs/wechat.jpg" alt="WeChat Pay" height="220" />
-  &nbsp;&nbsp;&nbsp;
-  <img src="docs/alipay.jpg" alt="Alipay" height="220" />
-</p>
-
-> 赞助将用于项目维护与功能迭代，完全自愿 ❤️
-
 感谢使用 **PowerTools**。
