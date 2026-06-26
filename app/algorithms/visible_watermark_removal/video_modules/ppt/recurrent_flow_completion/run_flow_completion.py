@@ -3,7 +3,7 @@ import platform
 import sys
 import numpy as np
 import onnxruntime as ort
-from app.algorithms import ORTEnvironment
+from app.algorithms import ORTEnvironment, general_provider, general_session
 ORTEnvironment.initialize()
 from app.algorithms.visible_watermark_removal.video_modules.ppt.recurrent_flow_completion.encoder import EncoderORT
 from app.algorithms.visible_watermark_removal.video_modules.ppt.recurrent_flow_completion.decoder import DecoderORT
@@ -19,32 +19,8 @@ class RecurrentFlowCompleteORT:
         self.prepare_models()
 
     def _get_session_options(self):
-        opts = ort.SessionOptions()
-        opts.add_session_config_entry("session.use_env_allocators", "1")
-        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        opts = general_session()
         return opts
-
-    def _get_providers(self):
-        available = ort.get_available_providers()
-        is_apple_silicon = sys.platform == "darwin" and platform.machine() == "arm64"
-        if is_apple_silicon:
-            providers = ["CPUExecutionProvider"]
-            provider_options = [{}]
-        elif "CUDAExecutionProvider" in available and self._hash_cuda_gpu():
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            provider_options = [{"arena_extend_strategy": "kSameAsRequested"}, {}]
-        else:
-            providers = ["CPUExecutionProvider"]
-            provider_options = [{}]
-        return providers, provider_options
-    
-    def _hash_cuda_gpu(self):
-        if platform.system() != "Windows":
-            return True
-        cuda_path = r"C:\Program Files\NVIDIA Corporation"
-        if os.path.exists(cuda_path):
-            return True
-        return False
     
     def __del__(self):
         if hasattr(self, 'encoder_ort'):
@@ -58,7 +34,7 @@ class RecurrentFlowCompleteORT:
         if self.encoder_ort is not None and self.prop_ort is not None and self.decoder_ort is not None:
             return
         sess_options = self._get_session_options()
-        providers, provider_options = self._get_providers()
+        providers, provider_options = general_provider()
         run_options = ort.RunOptions()
         self.encoder_ort = EncoderORT(os.path.join(self.onnx_dir, 'encoder.encmodel'), providers=providers, provider_options=provider_options, sess_options=sess_options, run_options=run_options)
         self.prop_ort = BidirectionalPropagationORT(

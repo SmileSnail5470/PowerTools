@@ -10,7 +10,8 @@ import onnxruntime as ort
 from app.algorithms.segment.SimpleTokenizer import SimpleTokenizer
 from app.algorithms.segment.preprocessing import preprocess_opencv
 ort.preload_dlls(directory="")
-from app.algorithms import general_inference_session
+from app.algorithms import general_inference_session, general_session, general_provider, ORTEnvironment
+ORTEnvironment.initialize()
 
 
 @dataclass
@@ -41,15 +42,14 @@ class SAM3Predictor:
         self.tokenizer = SimpleTokenizer(f"{model_dir}/vocab.txt", f"{model_dir}/merges.txt")
 
     def _get_session_options(self) -> ort.SessionOptions:
-        opts = ort.SessionOptions()
-        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
+        opts = general_session()
         return opts
 
     def _ensure_grounding_models(self):
         if self._g_encoder_session is not None:
             return
         opts = self._get_session_options()
-        providers, provider_options = self._get_providers()
+        providers, provider_options = general_provider()
 
         self._g_encoder_session = general_inference_session(
             os.path.join(self.model_dir, "sam3_grounding_encoder.encmodel"),
@@ -74,7 +74,7 @@ class SAM3Predictor:
         if self._i_encoder_session is not None:
             return
         opts = self._get_session_options()
-        providers, provider_options = self._get_providers()
+        providers, provider_options = general_provider()
 
         self._i_encoder_session = general_inference_session(
             os.path.join(self.model_dir, "sam3_encoder.encmodel"),
@@ -88,28 +88,6 @@ class SAM3Predictor:
             providers=providers,
             provider_options=provider_options,
         )
-
-    def _get_providers(self) -> Tuple[List[str], List[dict]]:
-        available = ort.get_available_providers()
-        is_apple_silicon = sys.platform == "darwin" and platform.machine() == "arm64"
-        if is_apple_silicon:
-            providers = ["CPUExecutionProvider"]
-            provider_options = [{}]
-        elif "CUDAExecutionProvider" in available and self._hash_cuda_gpu():
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            provider_options = [{"arena_extend_strategy": "kSameAsRequested"}, {}]
-        else:
-            providers = ["CPUExecutionProvider"]
-            provider_options = [{}]
-        return providers, provider_options
-    
-    def _hash_cuda_gpu(self):
-        if platform.system() != "Windows":
-            return True
-        cuda_path = r"C:\Program Files\NVIDIA Corporation"
-        if os.path.exists(cuda_path):
-            return True
-        return False
 
     def predict_text(
         self,

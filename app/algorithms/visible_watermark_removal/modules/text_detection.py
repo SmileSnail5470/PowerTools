@@ -12,7 +12,8 @@ import numpy as np
 import onnxruntime as ort
 ort.preload_dlls(directory="")
 from shapely.geometry import Polygon
-from app.algorithms import general_inference_session
+from app.algorithms import general_inference_session, general_provider, general_session, ORTEnvironment
+ORTEnvironment.initialize()
 
 
 class DBPostProcess(object):
@@ -186,7 +187,7 @@ class DBPostProcess(object):
         box[:, 0] = box[:, 0] - xmin
         box[:, 1] = box[:, 1] - ymin
         cv2.fillPoly(mask, box.reshape(1, -1, 2).astype("int32"), 1)
-        return cv2.mean(bitmap[ymin : ymax + 1, xmin : xmax + 1], mask)[0]
+        return cv2.mean(bitmap[ymin : ymax + 1, xmin : xmax + 1].astype(np.float32), mask)[0]
 
     def box_score_slow(self, bitmap, contour):
         """
@@ -207,7 +208,7 @@ class DBPostProcess(object):
         contour[:, 1] = contour[:, 1] - ymin
 
         cv2.fillPoly(mask, contour.reshape(1, -1, 2).astype("int32"), 1)
-        return cv2.mean(bitmap[ymin : ymax + 1, xmin : xmax + 1], mask)[0]
+        return cv2.mean(bitmap[ymin : ymax + 1, xmin : xmax + 1].astype(np.float32), mask)[0]
 
     def __call__(self, outs_dict, shape_list):
         pred = outs_dict["maps"]
@@ -445,29 +446,9 @@ def transform(data, ops=None):
     return data
 
 
-def _hash_cuda_gpu():
-    if platform.system() != "Windows":
-        return True
-    cuda_path = r"C:\Program Files\NVIDIA Corporation"
-    if os.path.exists(cuda_path):
-        return True
-    return False
-
-
 def create_predictor(onnx_path):
-    session_options = ort.SessionOptions()
-    session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-    available = ort.get_available_providers()
-    is_apple_silicon = sys.platform == "darwin" and platform.machine() == "arm64"
-    if is_apple_silicon:
-        providers = ["CPUExecutionProvider"]
-        provider_options = [{}]
-    elif "CUDAExecutionProvider" in available and _hash_cuda_gpu():
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-        provider_options = [{"arena_extend_strategy": "kSameAsRequested"}, {}]
-    else:
-        providers = ["CPUExecutionProvider"]
-        provider_options = [{}]
+    session_options = general_session()
+    providers, provider_options = general_provider()
     sess = general_inference_session(
         onnx_path,
         providers=providers,

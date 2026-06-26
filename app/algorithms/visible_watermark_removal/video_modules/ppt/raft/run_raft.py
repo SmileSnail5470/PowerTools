@@ -5,7 +5,7 @@ import numpy as np
 import onnxruntime as ort
 from app.algorithms import ORTEnvironment
 ORTEnvironment.initialize()
-from app.algorithms import general_inference_session
+from app.algorithms import general_inference_session, general_session, general_provider
 
 
 class RAFTBiONNX:
@@ -15,32 +15,8 @@ class RAFTBiONNX:
         self.prepare_model()
 
     def _get_session_options(self):
-        opts = ort.SessionOptions()
-        opts.add_session_config_entry("session.use_env_allocators", "1")
-        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        opts = general_session()
         return opts
-
-    def _get_providers(self):
-        available = ort.get_available_providers()
-        is_apple_silicon = sys.platform == "darwin" and platform.machine() == "arm64"
-        if is_apple_silicon:
-            providers = ["CPUExecutionProvider"]
-            provider_options = [{}]
-        elif "CUDAExecutionProvider" in available and self._hash_cuda_gpu():
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            provider_options = [{"arena_extend_strategy": "kSameAsRequested"}, {}]
-        else:
-            providers = ["CPUExecutionProvider"]
-            provider_options = [{}]
-        return providers, provider_options
-    
-    def _hash_cuda_gpu(self):
-        if platform.system() != "Windows":
-            return True
-        cuda_path = r"C:\Program Files\NVIDIA Corporation"
-        if os.path.exists(cuda_path):
-            return True
-        return False
     
     def __del__(self):
         if hasattr(self, 'session'):
@@ -51,7 +27,7 @@ class RAFTBiONNX:
         if self.session is not None:
             return
         sess_options = self._get_session_options()
-        providers, provider_options = self._get_providers()
+        providers, provider_options = general_provider()
         self.run_options = ort.RunOptions()
         self.session = general_inference_session(self.model_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
         self.input_name_1 = self.session.get_inputs()[0].name
