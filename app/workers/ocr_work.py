@@ -1,7 +1,7 @@
 import logging
 import os
 from app.ui.common.config import cfg
-from app.workers.work_base import BaseWorker
+from app.workers.work_base import BaseWorker, _resolve_hardware_variant
 from app.utils.logger.decorators import log_exception
 from app.algorithms.ocr.pp_ocr import OCR
 
@@ -24,7 +24,7 @@ class OCRWork(BaseWorker):
     @log_exception(logger=logging.getLogger('OCR'), reraise=True, log_args=True, log_result=True)
     def run_algorithm(self, progress_cb, cancel_requested, *args, **kwargs):
         input_path = kwargs["input_path"]
-        onnx_model_dir = os.path.join(self.deps_path, "ocr")
+        onnx_model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "ocr")
         if "_feature_name_" in kwargs:
             os.environ["_feature_name_"] = kwargs["_feature_name_"]
         params = {

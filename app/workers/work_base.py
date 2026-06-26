@@ -1,4 +1,15 @@
-from app.ui.common.utils import get_file_type
+from app.ui.common.config import cfg
+from app.ui.common.utils import get_file_type, global_backend_info_cache
+
+
+def _resolve_hardware_variant() -> str:
+    hw_type = cfg.get(cfg.hardwareOptimizationType)
+    if hw_type == "CPU":
+        return "cpu"
+    if hw_type == "GPU":
+        return "gpu"
+    status, _ = global_backend_info_cache.get()
+    return "gpu" if "GPU" in status else "cpu"
 
 
 def _worker_task_func(worker, *args, progress_cb=None, cancel_requested=None, **kwargs):

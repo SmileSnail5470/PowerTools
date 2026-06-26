@@ -509,7 +509,13 @@ class ModelVariantPanel(QWidget):
         except Exception:
             variant = None
         if variant is None:
-            variant = "gpu" if detect_gpu_available() else "cpu"
+            hw_type = cfg.get(cfg.hardwareOptimizationType)
+            if hw_type == "CPU":
+                variant = "cpu"
+            elif hw_type == "GPU":
+                variant = "gpu"
+            else:
+                variant = "gpu" if detect_gpu_available() else "cpu"
             self._save_preference(variant)
         if variant == "gpu":
             self.gpu_btn.setChecked(True)
@@ -527,7 +533,7 @@ class ModelVariantPanel(QWidget):
 
     def _load_mirror_preference(self) -> bool:
         try:
-            return cfg.get(cfg.additionalParams).get("use_hf_mirror", False)
+            return cfg.get(cfg.additionalParams).get("use_hf_mirror", True)
         except Exception:
             return False
 
@@ -1233,10 +1239,10 @@ class Settings(QWidget):
         current_hardware = cfg.get(cfg.hardwareOptimizationType)
         setFont(hardware_optimization_combox, 14)
         hardware_optimization_combox.addItems(["Auto", "CPU", "GPU"])
-        hardware_optimization_combox.currentTextChanged.connect(lambda value: setattr(cfg.hardwareOptimizationType, "value", value))
         index = hardware_optimization_combox.findText(current_hardware)
         if index >= 0:
             hardware_optimization_combox.setCurrentIndex(index)
+        hardware_optimization_combox.currentTextChanged.connect(self._on_hardware_type_changed)
         hardware_optimization_card = CustomCardGroupWidget(title=self.tr("硬件加速"), content=self.tr("设置硬件加速类型"), parent=self)
         hardware_optimization_card.addWidget(hardware_optimization_combox, stretch=0)
         hardware_optimization_card.setSeparatorVisible(True)
@@ -1336,4 +1342,34 @@ class Settings(QWidget):
             progress_dialog.enableCloseBtn()
             progress_dialog.append_log(f"\n❌ 错误信息：{error}")
             progress_dialog.progress.setRange(0, 1)
+
+    def _on_hardware_type_changed(self, value: str):
+        cfg.hardwareOptimizationType.value = value
+        if value == "CPU":
+            variant = "cpu"
+        elif value == "GPU":
+            variant = "gpu"
+        else:
+            status, _ = global_backend_info_cache.get()
+            variant = "gpu" if "GPU" in status else "cpu"
+        enabled_map = {
+            "blind_watermark_addition": ("盲水印AI能力", cfg.get(cfg.localBlindWatermarkEnabled)),
+            "visible_watermark_removal": ("水印去除AI能力", cfg.get(cfg.localWatermarkRemovalEnabled)),
+            "segment": ("物体分割AI能力", cfg.get(cfg.localObjectSegmentationEnabled)),
+            "ocr": ("OCR 能力", cfg.get(cfg.localOCREnabled)),
+            "video_inpainting": ("视频修复AI能力", cfg.get(cfg.localVideoInpaintingEnabled)),
+        }
+        deps_path = cfg.get(cfg.localAIModelDeps)
+        missing = []
+        for key, (name, enabled) in enabled_map.items():
+            if not enabled:
+                continue
+            model_path = os.path.join(deps_path, variant, key) if deps_path else ""
+            if not model_path or not os.path.exists(model_path) or not os.listdir(model_path):
+                missing.append(name)
+        if missing:
+            content = self.tr("以下已激活的AI能力尚未下载对应的 {variant} 模型：\n\n").format(variant=variant.upper())
+            content += "\n".join(f"  • {name}" for name in missing)
+            content += self.tr("\n\n请在各模型设置中下载对应硬件版本的模型，否则相关功能将无法正常使用。")
+            MessageBox(title=self.tr("模型缺失提醒"), content=content, parent=self.window()).exec()
 

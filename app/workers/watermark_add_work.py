@@ -1,7 +1,7 @@
 import os
 import logging
 from app.ui.common.config import cfg
-from app.workers.work_base import BaseWorker
+from app.workers.work_base import BaseWorker, _resolve_hardware_variant
 from app.utils.logger.decorators import log_exception
 
 from app.algorithms.visible_watermark_addition.watermark_addition import VisibleWatermarkAddition
@@ -145,7 +145,7 @@ class WatermarkAddWork(BaseWorker):
                     "message": kwargs["watermark_text"]
                 }
                 self._get_blind_image_instance().prepare(
-                    onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_image_embed.encmodel".format(kwargs["blind_watermark_model_name"]))
+                    onnx_path=os.path.join(self.deps_path, _resolve_hardware_variant(), "blind_watermark_addition", "{0}_image_embed.encmodel".format(kwargs["blind_watermark_model_name"]))
                 )
                 self._get_blind_image_instance().watermark_addition(**params)
             else:
@@ -156,7 +156,7 @@ class WatermarkAddWork(BaseWorker):
                     "chunk_size": 8
                 }
                 self._get_blind_video_instance().prepare(
-                    onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_video_embed.encmodel".format(kwargs["blind_watermark_model_name"])),
+                    onnx_path=os.path.join(self.deps_path, _resolve_hardware_variant(), "blind_watermark_addition", "{0}_video_embed.encmodel".format(kwargs["blind_watermark_model_name"])),
                     ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN")
                 )
                 self._get_blind_video_instance().watermark_addition(**params)
