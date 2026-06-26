@@ -1,9 +1,14 @@
+import os
+import logging
 import multiprocessing
 import queue
+import traceback
 from typing import Callable
 from PySide6.QtCore import QRunnable, Slot
+from app.utils.logger import get_log_manager
 from app.controllers.task_future import TaskStatus, TaskFuture
 
+logger = logging.getLogger(__name__)
 
 _MSG_PROGRESS = "progress"
 _MSG_RESULT = "result"
@@ -11,7 +16,15 @@ _MSG_ERROR = "error"
 _POLL_INTERVAL = 0.05
 
 
-def _subprocess_target(func, msg_queue, cancel_event, args, kwargs):
+def _subprocess_target(func, msg_queue, cancel_event, log_dir, args, kwargs):
+    sub_logger = logging.getLogger("subprocess")
+    sub_logger.setLevel(logging.DEBUG)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+        fh = logging.FileHandler(os.path.join(log_dir, "powertools.log"), encoding="utf-8")
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] [subprocess] %(message)s"))
+        sub_logger.addHandler(fh)
     try:
         def progress_cb(v: str, msg: str):
             if cancel_event.is_set():
@@ -28,6 +41,8 @@ def _subprocess_target(func, msg_queue, cancel_event, args, kwargs):
 
         msg_queue.put((_MSG_RESULT, result))
     except Exception as e:
+        tb = traceback.format_exc()
+        sub_logger.error(f"Subprocess exception: {type(e).__name__}: {e}\n{tb}")
         msg_queue.put((_MSG_ERROR, type(e).__name__, str(e)))
 
 
@@ -38,6 +53,12 @@ class Worker(QRunnable):
         self.future = future
         self.args = args
         self.kwargs = kwargs
+
+    def _get_log_dir(self):
+        try:
+            return get_log_manager().config.log_dir
+        except Exception:
+            return None
 
     @Slot()
     def run(self):
@@ -52,7 +73,7 @@ class Worker(QRunnable):
 
         process = ctx.Process(
             target=_subprocess_target,
-            args=(self.func, msg_queue, cancel_event, self.args, self.kwargs),
+            args=(self.func, msg_queue, cancel_event, self._get_log_dir(), self.args, self.kwargs),
             daemon=True,
         )
         process.start()
@@ -73,6 +94,7 @@ class Worker(QRunnable):
             if self.future.cancelled_requested():
                 self.future.cancel()
             elif process.exitcode != 0:
+                logger.error(f"Subprocess exited with code {process.exitcode}, func={self.func.__name__}")
                 self.future.set_exception(RuntimeError(f"Subprocess exited with code {process.exitcode}"))
 
     def _drain_queue(self, msg_queue):
@@ -94,6 +116,7 @@ class Worker(QRunnable):
             if exc_name == "InterruptedError":
                 self.future.cancel()
             else:
+                logger.error(f"Subprocess error: {exc_name}: {exc_msg}, func={self.func.__name__}")
                 self.future.set_exception(RuntimeError(f"{exc_name}: {exc_msg}"))
 
     def _cleanup(self, process, msg_queue):

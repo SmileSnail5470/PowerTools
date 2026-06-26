@@ -292,7 +292,7 @@ class SAM3Predictor:
         mask_logit = masks_data[0, best_idx, :, :]  # (mask_h, mask_w)
 
         # Resize to original image size
-        mask_logit_resized = cv2.resize(mask_logit, (w_img, h_img))
+        mask_logit_resized = cv2.resize(np.ascontiguousarray(mask_logit, dtype=np.float32), (w_img, h_img))
 
         # Threshold at 0.0 (sigmoind logit)
         binary_mask = np.where(mask_logit_resized > 0.0, 255, 0).astype(np.uint8)
@@ -390,7 +390,7 @@ class SAM3Predictor:
                 mask_logit = masks_arr[i, q, :, :]  # (mask_h, mask_w)
 
                 # Resize mask to original image size
-                mask_resized = cv2.resize(mask_logit, (w_img, h_img))
+                mask_resized = cv2.resize(np.ascontiguousarray(mask_logit, dtype=np.float32), (w_img, h_img))
                 binary_mask = np.where(mask_resized > 0.0, 255, 0).astype(np.uint8)
 
                 # Denormalize box to pixel coordinates

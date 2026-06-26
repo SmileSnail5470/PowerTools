@@ -16,10 +16,10 @@ from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_tran
 def interpolate_numpy(x, scale_factor, mode='bilinear'):
     b, c, h, w = x.shape
     new_h, new_w = int(h * scale_factor), int(w * scale_factor)
-    out = np.zeros((b, c, new_h, new_w), dtype=x.dtype)
+    out = np.zeros((b, c, new_h, new_w), dtype=np.float32)
     cv_mode = cv2.INTER_LINEAR if mode == 'bilinear' else cv2.INTER_NEAREST
     for i in range(b):
-        img = x[i].transpose(1, 2, 0) # cv2.resize 需要输入形状为 (H, W, C)
+        img = np.ascontiguousarray(x[i].transpose(1, 2, 0), dtype=np.float32)
         res = cv2.resize(img, (new_w, new_h), interpolation=cv_mode)
         if c == 1:
             out[i, 0] = res

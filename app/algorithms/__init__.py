@@ -2,9 +2,45 @@ import json
 import os
 import pathlib
 import threading
+import numpy as np
 import onnxruntime as ort
 import app.library._model_loader as model_loader
 from app.ui.common.utils import global_backend_info_cache
+
+# ONNX type string -> numpy dtype mapping
+_ONNX_TO_NP_DTYPE = {
+    "tensor(float16)": np.float16,
+    "tensor(float)": np.float32,
+    "tensor(double)": np.float64,
+    "tensor(int32)": np.int32,
+    "tensor(int64)": np.int64,
+    "tensor(int8)": np.int8,
+    "tensor(uint8)": np.uint8,
+    "tensor(bool)": np.bool_,
+}
+
+
+class _AutoCastSession:
+    def __init__(self, session):
+        self._session = session
+        self._input_dtypes = {}
+        for inp in session.get_inputs():
+            dtype = _ONNX_TO_NP_DTYPE.get(inp.type)
+            if dtype is not None:
+                self._input_dtypes[inp.name] = dtype
+
+    def run(self, output_names, input_feed, **kwargs):
+        casted_feed = {}
+        for name, value in input_feed.items():
+            expected = self._input_dtypes.get(name)
+            if expected is not None and isinstance(value, np.ndarray) and value.dtype != expected:
+                casted_feed[name] = value.astype(expected)
+            else:
+                casted_feed[name] = value
+        return self._session.run(output_names, casted_feed, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._session, name)
 
 
 class ORTEnvironment:
@@ -44,5 +80,5 @@ def general_inference_session(model_path: str, sess_options, providers, provider
         provider_options=provider_options
     )
     os.chdir(old_cwd)
-    return sess
+    return _AutoCastSession(sess)
 
