@@ -144,11 +144,14 @@ class BidirectionalPropagationORT:
 
         # Stack results and fuse
         outputs_b = np.stack(backward_results, axis=1).reshape(-1, c, h, w)
+        del backward_results
         outputs_f = np.stack(forward_results, axis=1).reshape(-1, c, h, w)
+        del forward_results
         mask_flat = mask.reshape(-1, 2, h, w)
         x_raw = feats.reshape(-1, c, h, w)
 
         fused = self._run_fusion(outputs_b, outputs_f, mask_flat, x_raw)
+        del outputs_b, outputs_f, mask_flat, x_raw
         fused = fused.reshape(b, t, c, h, w)
         return fused
     

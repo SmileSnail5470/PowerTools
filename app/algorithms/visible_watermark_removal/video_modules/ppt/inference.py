@@ -182,6 +182,7 @@ class PPTInferenceORT:
             pred_flows_bi = self.fix_flow_complete.combine_flow(gt_flows_bi, (pred_flows_f, pred_flows_b), flow_masks_np)
         del self.fix_flow_complete
         self.fix_flow_complete = None
+        del gt_flows_bi
         gc.collect()
         if debug:
             print(f'Flow Completion ONNX Inference Cost: {time.time() - start_time:.4f}s')
@@ -216,6 +217,9 @@ class PPTInferenceORT:
             print(f'Image Propagation ONNX Inference Cost: {time.time() - start_time:.4f}s')
             start_time = time.time()
 
+        del masked_frames_np, frames_np, flow_masks_np
+        gc.collect()
+
         comp_frames = [None] * video_length
         neighbor_stride = self.neighbor_length // 2
         ref_num = self.subvideo_length // self.ref_stride if video_length > self.subvideo_length else -1
@@ -242,6 +246,9 @@ class PPTInferenceORT:
                     comp_frames[idx] = img
                 else:
                     comp_frames[idx] = (comp_frames[idx].astype(np.float32) * 0.5 + img.astype(np.float32) * 0.5).astype(np.uint8)
+            del selected_imgs, selected_masks, selected_update_masks, selected_pred_flows_bi
+            del pred_img, binary_masks
+            gc.collect()
         if debug:
             print(f'Propagation Transformer ONNX Inference Cost: {time.time() - start_time:.4f}s')
 

@@ -1,3 +1,4 @@
+import gc
 import os
 import platform
 import sys
@@ -80,6 +81,7 @@ class PropagationTransformerORT:
         sess_options = self._get_session_options()
         providers, provider_options = general_provider()
         run_options = ort.RunOptions()
+        run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "gpu:0")
 
         self.encoder = EncoderORT(self.onnx_paths['encoder'], providers=providers, provider_options=provider_options, sess_options=sess_options, run_options=run_options)
         self.decoder = DecoderORT(self.onnx_paths['decoder'], providers=providers, provider_options=provider_options, sess_options=sess_options, run_options=run_options)
@@ -116,6 +118,7 @@ class PropagationTransformerORT:
         inp_masks_updated = masks_updated.reshape(b * t, 1, ori_h, ori_w)
 
         enc_feat = self.encoder(inp_frames, inp_masks_in, inp_masks_updated)
+        del inp_frames, inp_masks_in, inp_masks_updated
         _, c, h, w = enc_feat.shape
 
         enc_feat = enc_feat.reshape(b, t, c, h, w)
@@ -132,13 +135,17 @@ class PropagationTransformerORT:
         masks_updated_local_flat = masks_updated[:, :l_t].reshape(-1, 1, ori_h, ori_w)
         ds_mask_updated_local = interpolate_numpy(masks_updated_local_flat, 0.25, mode='nearest')
         ds_mask_updated_local = ds_mask_updated_local.reshape(b, l_t, 1, h, w)
+        del masks_updated_local_flat
 
         mask_pool_l = max_pool2d_numpy(ds_mask_in_local.reshape(-1, 1, h, w), kernel_size=(7,7), stride=(3,3), padding=(3,3))
         mask_pool_l = mask_pool_l.reshape(b, l_t, 1, mask_pool_l.shape[-2], mask_pool_l.shape[-1])
 
         prop_mask_in = np.concatenate([ds_mask_in_local, ds_mask_updated_local], axis=2)
+        del ds_mask_in_local, ds_mask_updated_local
         local_feat = self.feat_prop.forward(local_feat, ds_flows_f, ds_flows_b, prop_mask_in)
+        del ds_flows_f, ds_flows_b, prop_mask_in
         enc_feat_updated = np.concatenate((local_feat, ref_feat), axis=1)
+        del local_feat, ref_feat, enc_feat
 
         enc_feat_flat = enc_feat_updated.reshape(-1, c, h, w)
         trans_feat = self.ss(enc_feat_flat)
@@ -147,13 +154,17 @@ class PropagationTransformerORT:
         mask_pool_l = np.transpose(mask_pool_l, (0, 1, 3, 4, 2))
         mask_pool_l = np.ascontiguousarray(mask_pool_l)
         trans_feat = self.transformers(trans_feat, enc_feat_flat, mask_pool_l, t_dilation=t_dilation)
+        del mask_pool_l
 
         trans_feat = self.sc(trans_feat, enc_feat_flat)
+        del enc_feat_flat
         trans_feat = trans_feat.reshape(b, t, -1, h, w)
 
         enc_feat_updated = enc_feat_updated + trans_feat
+        del trans_feat
 
         output = self.decoder(enc_feat_updated[:, :l_t].reshape(-1, c, h, w))
+        del enc_feat_updated
         output = np.tanh(output).reshape(b, l_t, 3, ori_h, ori_w)
         return output
     

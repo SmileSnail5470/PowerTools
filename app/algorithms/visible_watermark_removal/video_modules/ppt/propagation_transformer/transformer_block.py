@@ -147,6 +147,7 @@ class TemporalSparseTransformerBlockORT:
             shortcut = x
             norm_x = self.norm1_layers[i](x)
             win_q, win_k, win_v = self.core_layers[i](norm_x)
+            del norm_x
 
             out_layer = np.zeros_like(win_q)
             curr_t_ind = t_indices[i]
@@ -162,9 +163,12 @@ class TemporalSparseTransformerBlockORT:
                     win_v_t = win_v_t[:, :, curr_t_ind, :, :]                   
                     q_flat = win_q_t.reshape(mask_n, n_head, T * w_h_w_w, c_head)
                     k_flat = win_k_t.reshape(mask_n, n_head, len(curr_t_ind) * win_k_t.shape[3], c_head)
-                    v_flat = win_v_t.reshape(mask_n, n_head, len(curr_t_ind) * win_v_t.shape[3], c_head)                   
+                    v_flat = win_v_t.reshape(mask_n, n_head, len(curr_t_ind) * win_v_t.shape[3], c_head)
+                    del win_q_t, win_k_t, win_v_t
                     y_t = self.attn_layers[i](q_flat, k_flat, v_flat)
+                    del q_flat, k_flat, v_flat
                     out_layer[b_idx, mask_ind_i] = y_t.reshape(mask_n, n_head, T, w_h_w_w, c_head)
+                    del y_t
 
                 unmask_ind_i = np.nonzero(layer_mask_b == 0)[0]
                 unmask_n = len(unmask_ind_i)
@@ -175,15 +179,21 @@ class TemporalSparseTransformerBlockORT:
                     q_flat_s = win_q_s.reshape(unmask_n, n_head, T * w_h_w_w, c_head)
                     k_flat_s = win_k_s.reshape(unmask_n, n_head, T * w_h_w_w, c_head)
                     v_flat_s = win_v_s.reshape(unmask_n, n_head, T * w_h_w_w, c_head)
-                    
+                    del win_q_s, win_k_s, win_v_s
                     y_s = self.attn_layers[i](q_flat_s, k_flat_s, v_flat_s)
+                    del q_flat_s, k_flat_s, v_flat_s
                     out_layer[b_idx, unmask_ind_i] = y_s.reshape(unmask_n, n_head, T, w_h_w_w, c_head)
+                    del y_s
 
+            del win_q, win_k, win_v
             att_x = self.proj_layers[i](out_layer, x)
+            del out_layer
             x = shortcut + att_x
+            del shortcut, att_x
             shortcut_mlp = x
             norm_y = self.norm2_layers[i](x)
             mlp_out = self.mlp_layers[i](norm_y.reshape(B, T * H * W, C), enc_feat)
+            del norm_y
             x = shortcut_mlp + mlp_out.reshape(B, T, H, W, C)
-            del win_q, win_k, win_v, norm_x, norm_y, att_x, mlp_out
+            del shortcut_mlp, mlp_out
         return x

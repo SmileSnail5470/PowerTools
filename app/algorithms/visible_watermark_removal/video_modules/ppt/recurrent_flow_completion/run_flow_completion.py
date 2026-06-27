@@ -36,6 +36,7 @@ class RecurrentFlowCompleteORT:
         sess_options = self._get_session_options()
         providers, provider_options = general_provider()
         run_options = ort.RunOptions()
+        run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "gpu:0")
         self.encoder_ort = EncoderORT(os.path.join(self.onnx_dir, 'encoder.encmodel'), providers=providers, provider_options=provider_options, sess_options=sess_options, run_options=run_options)
         self.prop_ort = BidirectionalPropagationORT(
             backward_onnx_path = os.path.join(self.onnx_dir, 'backward_step.encmodel'),

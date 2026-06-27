@@ -70,7 +70,7 @@ class ORTEnvironment:
                 return
             
             cuda_info = ort.OrtMemoryInfo("Cuda", ort.OrtAllocatorType.ORT_ARENA_ALLOCATOR, 0, ort.OrtMemType.DEFAULT)
-            arena_cfg = ort.OrtArenaCfg(0, 1, -1, -1)
+            arena_cfg = ort.OrtArenaCfg(0, 0, 256 * 1024 * 1024, -1)
             ort.create_and_register_allocator_v2("CUDAExecutionProvider", cuda_info, {}, arena_cfg)
 
             info = ort.OrtMemoryInfo("Cpu", ort.OrtAllocatorType.ORT_ARENA_ALLOCATOR, 0, ort.OrtMemType.DEFAULT)
@@ -107,7 +107,7 @@ def general_provider():
         provider_options = [{}]
     elif "CUDAExecutionProvider" in available and is_gpu_device():
         providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-        provider_options = [{"arena_extend_strategy": "kSameAsRequested"}, {}]
+        provider_options = [{"arena_extend_strategy": "kNextPowerOfTwo"}, {}]
     else:
         providers = ["CPUExecutionProvider"]
         provider_options = [{}]

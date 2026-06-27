@@ -29,6 +29,7 @@ class RAFTBiONNX:
         sess_options = self._get_session_options()
         providers, provider_options = general_provider()
         self.run_options = ort.RunOptions()
+        self.run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "gpu:0")
         self.session = general_inference_session(self.model_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
         self.input_name_1 = self.session.get_inputs()[0].name
         self.input_name_2 = self.session.get_inputs()[1].name

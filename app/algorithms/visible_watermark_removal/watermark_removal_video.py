@@ -317,7 +317,7 @@ class VideoWatermarkRemover:
                 resize_ratio = 540.0 / max(process_h, process_w)
                 subvideo_length = 80
             else:
-                resize_ratio = 640.0 / max(process_h, process_w)
+                resize_ratio = 720.0 / max(process_h, process_w)
                 subvideo_length = 60
             pipeline = PPTInferenceORT(
                 onnx_paths=ONNX_PATHS,
