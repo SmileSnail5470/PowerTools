@@ -136,7 +136,7 @@ class PPTInferenceORT:
         if debug:
             print(f'\nProcessing pure ONNX Pipeline: [{video_length} frames]...')
             start_time = time.time()
-        short_clip_len = 12 if frames_np.shape[-1] <= 640 else (8 if frames_np.shape[-1] <= 720 else (4 if frames_np.shape[-1] <= 1280 else 2))
+        short_clip_len = 6 if frames_np.shape[-1] <= 640 else (4 if frames_np.shape[-1] <= 720 else 2)
         if video_length > short_clip_len:
             gt_flows_f_list, gt_flows_b_list = [], []
             for f in range(0, video_length, short_clip_len):

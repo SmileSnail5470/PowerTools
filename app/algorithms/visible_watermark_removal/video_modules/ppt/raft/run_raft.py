@@ -48,14 +48,14 @@ class RAFTBiONNX:
         outputs_forward = self.session.run(
             [self.output_name],
             {self.input_name_1: gtlf_1_flat, self.input_name_2: gtlf_2_flat},
-            self.run_options
+            run_options=self.run_options
         )
         flow_up_forward = outputs_forward[0]
 
         outputs_backward = self.session.run(
             [self.output_name],
             {self.input_name_1: gtlf_2_flat, self.input_name_2: gtlf_1_flat},
-            self.run_options
+            run_options=self.run_options
         )
         flow_up_backward = outputs_backward[0]
 
