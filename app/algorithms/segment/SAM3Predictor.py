@@ -43,6 +43,7 @@ class SAM3Predictor:
 
     def _get_session_options(self) -> ort.SessionOptions:
         opts = general_session()
+        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
         return opts
 
     def _ensure_grounding_models(self):

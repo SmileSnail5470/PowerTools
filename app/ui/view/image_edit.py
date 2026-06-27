@@ -305,7 +305,7 @@ class PreviewWidget(QWidget):
         self.stack = QStackedLayout()
         self.stack.setContentsMargins(0, 0, 0, 0)
 
-        self.placeholder_widget = QLabel(self.tr("请选择图片文件进行盲水印去除预览"))
+        self.placeholder_widget = QLabel(self.tr("请选择图片文件进行盲水印去除预览"), parent=self)
         self.placeholder_widget.setStyleSheet("color: #888888;")
         setFont(self.placeholder_widget, 20)
         self.placeholder_widget.setAlignment(Qt.AlignCenter)
