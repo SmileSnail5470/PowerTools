@@ -960,7 +960,7 @@ class Settings(QWidget):
         
         auto_start_switch = ToggleSwitch()
         auto_start_switch.setActive(cfg.get(cfg.autoStartup))
-        auto_start_switch.toggled.connect(lambda flag: setattr(cfg.autoStartup, "value", flag))
+        auto_start_switch.toggled.connect(lambda flag: cfg.set(cfg.autoStartup, flag))
         auto_start_card = CustomCardGroupWidget(title=self.tr("开机自启动"), content=self.tr("系统启动时自动运行程序（开发中）"), parent=self)
         auto_start_card.addWidget(auto_start_switch, stretch=0)
         auto_start_card.setSeparatorVisible(True)
@@ -968,7 +968,7 @@ class Settings(QWidget):
 
         auto_update_switch = ToggleSwitch()
         auto_update_switch.setActive(cfg.get(cfg.autoUpdate))
-        auto_update_switch.toggled.connect(lambda flag: setattr(cfg.autoUpdate, "value", flag))
+        auto_update_switch.toggled.connect(lambda flag: cfg.set(cfg.autoUpdate, flag))
         auto_update_card = CustomCardGroupWidget(title=self.tr("自动更新"), content=self.tr("自动检查并安装新版本（开发中）"), parent=self)
         auto_update_card.addWidget(auto_update_switch, stretch=0)
         auto_update_card.setSeparatorVisible(True)
@@ -976,7 +976,7 @@ class Settings(QWidget):
 
         self.cache_line_edit = QLineEdit()
         self.cache_line_edit.setText(cfg.get(cfg.cachePath))
-        self.cache_line_edit.textChanged.connect(lambda path: setattr(cfg.cachePath, "value", path))
+        self.cache_line_edit.textChanged.connect(lambda path: cfg.set(cfg.cachePath, path))
         self.cache_line_edit.textChanged.connect(lambda path: get_log_manager().update_log_dir(os.path.join(path, "logs")))
         setFont(self.cache_line_edit, 14)
         self.cache_line_edit.setStyleSheet("""
@@ -1002,7 +1002,7 @@ class Settings(QWidget):
 
         theme_combox = ComboBox()
         theme_combox.setText(theme_map[cfg.get(cfg.uiTheme)])
-        theme_combox.currentTextChanged.connect(lambda text: setattr(cfg.uiTheme, "value", theme_map[text]))
+        theme_combox.currentTextChanged.connect(lambda text: cfg.set(cfg.uiTheme, theme_map[text]))
         setFont(theme_combox, 14)
         theme_combox.addItems(["浅色"])
         theme_card = CustomCardGroupWidget(title=self.tr("界面主题"), content=self.tr("选择您喜欢的界面风格"), parent=self)
@@ -1012,7 +1012,7 @@ class Settings(QWidget):
 
         language_combox = ComboBox()
         language_combox.setText(language_map[cfg.language.serialize()])
-        language_combox.currentTextChanged.connect(lambda text: setattr(cfg.language, "value", language_map[text]))
+        language_combox.currentTextChanged.connect(lambda text: cfg.set(cfg.language, language_map[text]))
         setFont(language_combox, 14)
         language_combox.addItems(["简体中文"])
         language_card = CustomCardGroupWidget(title=self.tr("语言设置"), content=self.tr("选择界面显示语言"), parent=self)
@@ -1041,7 +1041,7 @@ class Settings(QWidget):
 
         localAIModelDeps_line_edit = QLineEdit()
         localAIModelDeps_line_edit.setText(cfg.get(cfg.localAIModelDeps))
-        localAIModelDeps_line_edit.textChanged.connect(lambda path: setattr(cfg.localAIModelDeps, "value", path))
+        localAIModelDeps_line_edit.textChanged.connect(lambda path: cfg.set(cfg.localAIModelDeps, path))
         localAIModelDeps_line_edit.textChanged.connect(self._update_toggle_switch_off)
         setFont(localAIModelDeps_line_edit, 14)
         localAIModelDeps_line_edit.setStyleSheet("""
@@ -1068,7 +1068,7 @@ class Settings(QWidget):
         blind_watermark_switch = ToggleSwitch()
         self.ai_toggle_switchs.append(blind_watermark_switch)
         blind_watermark_switch.setActive(cfg.get(cfg.localBlindWatermarkEnabled))
-        blind_watermark_switch.toggled.connect(lambda flag: setattr(cfg.localBlindWatermarkEnabled, "value", flag))
+        blind_watermark_switch.toggled.connect(lambda flag: cfg.set(cfg.localBlindWatermarkEnabled, flag))
         blind_watermark_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="blind_watermark_addition")
         try:
             text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{blind_watermark_status.name}_status_info"]["text"]
@@ -1095,7 +1095,7 @@ class Settings(QWidget):
         watermark_removal_switch = ToggleSwitch()
         self.ai_toggle_switchs.append(watermark_removal_switch)
         watermark_removal_switch.setActive(cfg.get(cfg.localWatermarkRemovalEnabled))
-        watermark_removal_switch.toggled.connect(lambda flag: setattr(cfg.localWatermarkRemovalEnabled, "value", flag))
+        watermark_removal_switch.toggled.connect(lambda flag: cfg.set(cfg.localWatermarkRemovalEnabled, flag))
         watermark_removal_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="watermark_removal")
         try:
             text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{watermark_removal_status.name}_status_info"]["text"]
@@ -1122,7 +1122,7 @@ class Settings(QWidget):
         object_segmentation_switch = ToggleSwitch()
         self.ai_toggle_switchs.append(object_segmentation_switch)
         object_segmentation_switch.setActive(cfg.get(cfg.localObjectSegmentationEnabled))
-        object_segmentation_switch.toggled.connect(lambda flag: setattr(cfg.localObjectSegmentationEnabled, "value", flag))
+        object_segmentation_switch.toggled.connect(lambda flag: cfg.set(cfg.localObjectSegmentationEnabled, flag))
         object_segmentation_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="object_segmentation")
         try:
             text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{object_segmentation_status.name}_status_info"]["text"]
@@ -1149,7 +1149,7 @@ class Settings(QWidget):
         ocr_switch = ToggleSwitch()
         self.ai_toggle_switchs.append(ocr_switch)
         ocr_switch.setActive(cfg.get(cfg.localOCREnabled))
-        ocr_switch.toggled.connect(lambda flag: setattr(cfg.localOCREnabled, "value", flag))
+        ocr_switch.toggled.connect(lambda flag: cfg.set(cfg.localOCREnabled, flag))
         ocr_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="ocr")
         try:
             text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{ocr_status.name}_status_info"]["text"]
@@ -1176,7 +1176,7 @@ class Settings(QWidget):
         video_inpainting_switch = ToggleSwitch()
         self.ai_toggle_switchs.append(video_inpainting_switch)
         video_inpainting_switch.setActive(cfg.get(cfg.localVideoInpaintingEnabled))
-        video_inpainting_switch.toggled.connect(lambda flag: setattr(cfg.localVideoInpaintingEnabled, "value", flag))
+        video_inpainting_switch.toggled.connect(lambda flag: cfg.set(cfg.localVideoInpaintingEnabled, flag))
         video_inpainting_status = StatusBadge(text=self.tr("未启用"), color="#726e62", name="video_inpainting")
         try:
             text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{video_inpainting_status.name}_status_info"]["text"]
@@ -1213,7 +1213,7 @@ class Settings(QWidget):
         current_level = cfg.get(cfg.logLevel)
         setFont(log_level_combox, 14)
         log_level_combox.addItems(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
-        log_level_combox.currentTextChanged.connect(lambda text: setattr(cfg.logLevel, "value", text.upper()))
+        log_level_combox.currentTextChanged.connect(lambda text: cfg.set(cfg.logLevel, text.upper()))
         index = log_level_combox.findText(current_level.upper() if isinstance(current_level, str) else current_level)
         if index >= 0:
             log_level_combox.setCurrentIndex(index)
@@ -1226,7 +1226,7 @@ class Settings(QWidget):
         current_number = int(cfg.get(cfg.taskParallelNumber))
         setFont(task_parallel_number_combox, 14)
         task_parallel_number_combox.addItems([str(n) for n in [1, 2, 4, 8, 16]])
-        task_parallel_number_combox.currentTextChanged.connect(lambda number: setattr(cfg.taskParallelNumber, "value", int(number)))
+        task_parallel_number_combox.currentTextChanged.connect(lambda number: cfg.set(cfg.taskParallelNumber, int(number)))
         index = task_parallel_number_combox.findText(str(current_number))
         if index >= 0:
             task_parallel_number_combox.setCurrentIndex(index)
@@ -1344,7 +1344,7 @@ class Settings(QWidget):
             progress_dialog.progress.setRange(0, 1)
 
     def _on_hardware_type_changed(self, value: str):
-        cfg.hardwareOptimizationType.value = value
+        cfg.set(cfg.hardwareOptimizationType, value)
         if value == "CPU":
             variant = "cpu"
         elif value == "GPU":
