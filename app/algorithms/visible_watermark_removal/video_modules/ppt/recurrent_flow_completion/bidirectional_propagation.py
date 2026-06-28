@@ -1,6 +1,6 @@
 import numpy as np
 import onnxruntime as ort
-from app.algorithms import general_inference_session
+from app.algorithms import general_inference_session, ortvalue_from_numpy, ortvalue_to_numpy
 
 
 class BidirectionalPropagationORT:
@@ -47,8 +47,17 @@ class BidirectionalPropagationORT:
             sess_options=sess_options,
         )
         self.run_options = run_options
+        self._use_iobinding = self.backward_session.use_cuda
 
     def run_backward_step(self, feat_current, feat_prop_prev, feat_n2):
+        if self._use_iobinding:
+            feed = {
+                "feat_current": feat_current,
+                "feat_prop_prev": feat_prop_prev if isinstance(feat_prop_prev, ort.OrtValue) else feat_prop_prev,
+                "feat_n2": feat_n2 if isinstance(feat_n2, ort.OrtValue) else feat_n2,
+            }
+            ort_outputs = self.backward_session.run_with_iobinding(feed, run_options=self.run_options)
+            return ort_outputs[0]
         outputs = self.backward_session.run(
             None,
             {
@@ -61,6 +70,15 @@ class BidirectionalPropagationORT:
         return outputs[0]
 
     def run_forward_step(self, feat_current, feat_prop_prev, feat_n2, feat_backward):
+        if self._use_iobinding:
+            feed = {
+                "feat_current": feat_current,
+                "feat_prop_prev": feat_prop_prev if isinstance(feat_prop_prev, ort.OrtValue) else feat_prop_prev,
+                "feat_n2": feat_n2 if isinstance(feat_n2, ort.OrtValue) else feat_n2,
+                "feat_backward": feat_backward if isinstance(feat_backward, ort.OrtValue) else feat_backward,
+            }
+            ort_outputs = self.forward_session.run_with_iobinding(feed, run_options=self.run_options)
+            return ort_outputs[0]
         outputs = self.forward_session.run(
             None,
             {
@@ -74,6 +92,13 @@ class BidirectionalPropagationORT:
         return outputs[0]
 
     def run_backward_backbone(self, feat_current, feat_prop_prev):
+        if self._use_iobinding:
+            feed = {
+                "feat_current": feat_current,
+                "feat_prop_prev": feat_prop_prev if isinstance(feat_prop_prev, ort.OrtValue) else feat_prop_prev,
+            }
+            ort_outputs = self.backward_backbone_session.run_with_iobinding(feed, run_options=self.run_options)
+            return ort_outputs[0]
         outputs = self.backward_backbone_session.run(
             None,
             {
@@ -85,6 +110,14 @@ class BidirectionalPropagationORT:
         return outputs[0]
 
     def run_forward_backbone(self, feat_current, feat_backward, feat_prop_prev):
+        if self._use_iobinding:
+            feed = {
+                "feat_current": feat_current,
+                "feat_backward": feat_backward if isinstance(feat_backward, ort.OrtValue) else feat_backward,
+                "feat_prop_prev": feat_prop_prev if isinstance(feat_prop_prev, ort.OrtValue) else feat_prop_prev,
+            }
+            ort_outputs = self.forward_backbone_session.run_with_iobinding(feed, run_options=self.run_options)
+            return ort_outputs[0]
         outputs = self.forward_backbone_session.run(
             None,
             {
@@ -97,11 +130,13 @@ class BidirectionalPropagationORT:
         return outputs[0]
 
     def fusion_conv(self, x):
+        if self._use_iobinding:
+            feed = {"x": x}
+            ort_outputs = self.fusion_session.run_with_iobinding_numpy(feed, run_options=self.run_options)
+            return ort_outputs[0]
         outputs = self.fusion_session.run(
             None,
-            {
-                "x": x,
-            },
+            {"x": x},
             run_options=self.run_options
         )
         return outputs[0]
@@ -110,8 +145,11 @@ class BidirectionalPropagationORT:
         T = len(feat_list)
         backward_results = [None] * T
         
-        computed_history = []
-        feat_prop_prev = np.zeros_like(feat_list[0])
+        feat_n2_prev = None
+        if self._use_iobinding:
+            feat_prop_prev = ortvalue_from_numpy(np.zeros_like(feat_list[0]), use_cuda=True)
+        else:
+            feat_prop_prev = np.zeros_like(feat_list[0])
         
         for i, idx in enumerate(range(T - 1, -1, -1)):
             feat_current = feat_list[idx]
@@ -119,13 +157,18 @@ class BidirectionalPropagationORT:
                 feat_prop = self.run_backward_backbone(feat_current, feat_prop_prev)
             else:
                 if i > 1:
-                    feat_n2 = computed_history[-2]
+                    feat_n2 = feat_n2_prev
                 else:
-                    feat_n2 = np.zeros_like(feat_prop_prev)
+                    if self._use_iobinding:
+                        feat_n2 = ortvalue_from_numpy(
+                            np.zeros(feat_prop_prev.shape(), dtype=np.float32), use_cuda=True
+                        )
+                    else:
+                        feat_n2 = np.zeros_like(feat_prop_prev)
                 feat_prop = self.run_backward_step(feat_current, feat_prop_prev, feat_n2)
-                
-            backward_results[idx] = feat_prop
-            computed_history.append(feat_prop)
+            
+            backward_results[idx] = ortvalue_to_numpy(feat_prop)
+            feat_n2_prev = feat_prop_prev
             feat_prop_prev = feat_prop
             
         return backward_results
@@ -134,8 +177,11 @@ class BidirectionalPropagationORT:
         T = len(feat_list)
         forward_results = [None] * T
         
-        computed_history = []
-        feat_prop_prev = np.zeros_like(feat_list[0])
+        feat_n2_prev = None
+        if self._use_iobinding:
+            feat_prop_prev = ortvalue_from_numpy(np.zeros_like(feat_list[0]), use_cuda=True)
+        else:
+            feat_prop_prev = np.zeros_like(feat_list[0])
         
         for i, idx in enumerate(range(T)):
             feat_current = feat_list[idx]
@@ -143,13 +189,18 @@ class BidirectionalPropagationORT:
                 feat_prop = self.run_forward_backbone(feat_current, backward_results[idx], feat_prop_prev)
             else:
                 if i > 1:
-                    feat_n2 = computed_history[-2]
+                    feat_n2 = feat_n2_prev
                 else:
-                    feat_n2 = np.zeros_like(feat_prop_prev)
+                    if self._use_iobinding:
+                        feat_n2 = ortvalue_from_numpy(
+                            np.zeros(feat_prop_prev.shape(), dtype=np.float32), use_cuda=True
+                        )
+                    else:
+                        feat_n2 = np.zeros_like(feat_prop_prev)
                 feat_prop = self.run_forward_step(feat_current, feat_prop_prev, feat_n2, backward_results[idx])
                 
-            forward_results[idx] = feat_prop
-            computed_history.append(feat_prop)
+            forward_results[idx] = ortvalue_to_numpy(feat_prop)
+            feat_n2_prev = feat_prop_prev
             feat_prop_prev = feat_prop
             
         return forward_results
@@ -163,10 +214,11 @@ class BidirectionalPropagationORT:
         
         outputs = []
         for i in range(T):
-            fused = np.concatenate([backward_results[i], forward_results[i]], axis=1)
+            fused = np.ascontiguousarray(np.concatenate([backward_results[i], forward_results[i]], axis=1))
             fused = self.fusion_conv(fused)
             outputs.append(fused)
-            
+        
+        del backward_results, forward_results
         outputs = np.stack(outputs, axis=1)
         outputs = outputs + feats
         return outputs

@@ -109,7 +109,7 @@ class PPTInferenceORT:
                     ref_index.append(i)
         return ref_index
 
-    def inference(self, input_frames_dir, masks_dir, output_dir, debug=False):
+    def inference(self, input_frames_dir, masks_dir, output_dir, debug=True):
         frames, _, size = self._read_frame(frame_root=input_frames_dir)
         if self.width != -1 and self.height != -1:
             size = (self.width, self.height)
@@ -136,20 +136,26 @@ class PPTInferenceORT:
         if debug:
             print(f'\nProcessing pure ONNX Pipeline: [{video_length} frames]...')
             start_time = time.time()
-        short_clip_len = 6 if frames_np.shape[-1] <= 640 else (4 if frames_np.shape[-1] <= 720 else 2)
+        
+        frames_np = np.ascontiguousarray(frames_np)
+        flow_masks_np = np.ascontiguousarray(flow_masks_np)
+        masks_dilated_np = np.ascontiguousarray(masks_dilated_np)
+        
+        raft_scale = 0.5
+        short_clip_len = 12 if max(frames_np.shape) <= 1280 else 6
         if video_length > short_clip_len:
             gt_flows_f_list, gt_flows_b_list = [], []
             for f in range(0, video_length, short_clip_len):
                 end_f = min(video_length, f + short_clip_len)
                 sub_frames = frames_np[:, f:end_f] if f == 0 else frames_np[:, f-1:end_f]
-                flows_f, flows_b = self.raft_model.forward(sub_frames)
+                flows_f, flows_b = self.raft_model.forward(sub_frames, scale_factor=raft_scale)
                 gt_flows_f_list.append(flows_f)
                 gt_flows_b_list.append(flows_b)
             gt_flows_f = np.concatenate(gt_flows_f_list, axis=1)
             gt_flows_b = np.concatenate(gt_flows_b_list, axis=1)
             gt_flows_bi = (gt_flows_f, gt_flows_b)
         else:
-            gt_flows_bi = self.raft_model.forward(frames_np)
+            gt_flows_bi = self.raft_model.forward(frames_np, scale_factor=raft_scale)
         del self.raft_model
         self.raft_model = None
         gc.collect()
@@ -223,13 +229,18 @@ class PPTInferenceORT:
         comp_frames = [None] * video_length
         neighbor_stride = self.neighbor_length // 2
         ref_num = self.subvideo_length // self.ref_stride if video_length > self.subvideo_length else -1
+        if video_length > 80:
+            neighbor_stride = self.neighbor_length
         for f in range(0, video_length, neighbor_stride):
             neighbor_ids = [i for i in range(max(0, f - neighbor_stride), min(video_length, f + neighbor_stride + 1))]
             ref_ids = self._get_ref_index(f, neighbor_ids, video_length, self.ref_stride, ref_num)
-            selected_imgs = updated_frames[:, neighbor_ids + ref_ids, ...]
-            selected_masks = masks_dilated_np[:, neighbor_ids + ref_ids, ...]
-            selected_update_masks = updated_masks[:, neighbor_ids + ref_ids, ...]
-            selected_pred_flows_bi = (pred_flows_bi[0][:, neighbor_ids[:-1], ...], pred_flows_bi[1][:, neighbor_ids[:-1], ...])
+            selected_imgs = np.ascontiguousarray(updated_frames[:, neighbor_ids + ref_ids, ...])
+            selected_masks = np.ascontiguousarray(masks_dilated_np[:, neighbor_ids + ref_ids, ...])
+            selected_update_masks = np.ascontiguousarray(updated_masks[:, neighbor_ids + ref_ids, ...])
+            selected_pred_flows_bi = (
+                np.ascontiguousarray(pred_flows_bi[0][:, neighbor_ids[:-1], ...]),
+                np.ascontiguousarray(pred_flows_bi[1][:, neighbor_ids[:-1], ...])
+            )
             l_t = len(neighbor_ids)
             pred_img = self.ppt_pipeline.forward(
                 selected_imgs, selected_pred_flows_bi[0], selected_pred_flows_bi[1],
@@ -248,7 +259,6 @@ class PPTInferenceORT:
                     comp_frames[idx] = (comp_frames[idx].astype(np.float32) * 0.5 + img.astype(np.float32) * 0.5).astype(np.uint8)
             del selected_imgs, selected_masks, selected_update_masks, selected_pred_flows_bi
             del pred_img, binary_masks
-            gc.collect()
         if debug:
             print(f'Propagation Transformer ONNX Inference Cost: {time.time() - start_time:.4f}s')
 

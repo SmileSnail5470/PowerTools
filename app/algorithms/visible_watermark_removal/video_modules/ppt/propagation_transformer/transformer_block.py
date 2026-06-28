@@ -7,8 +7,13 @@ class SparseAttentionCoreORT:
         self.session = general_inference_session(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
         self.input_names = [inp.name for inp in self.session.get_inputs()]
         self.run_options = run_options
+        self._use_iobinding = self.session.use_cuda
 
     def __call__(self, x):
+        if self._use_iobinding:
+            feed = {self.input_names[0]: x}
+            ort_outputs = self.session.run_with_iobinding_numpy(feed, run_options=self.run_options)
+            return ort_outputs[0], ort_outputs[1], ort_outputs[2]
         outputs = self.session.run(None, {self.input_names[0]: x}, run_options=self.run_options)
         return outputs[0], outputs[1], outputs[2]  # win_q, win_k, win_v
     
@@ -21,6 +26,7 @@ class AttentionComputationORT:
         self.session = general_inference_session(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
         self.input_names = [inp.name for inp in self.session.get_inputs()]
         self.run_options = run_options
+        self._use_iobinding = self.session.use_cuda
 
     def __call__(self, q, k, v):
         feed_dict = {
@@ -28,6 +34,9 @@ class AttentionComputationORT:
             self.input_names[1]: k,
             self.input_names[2]: v,
         }
+        if self._use_iobinding:
+            ort_outputs = self.session.run_with_iobinding_numpy(feed_dict, run_options=self.run_options)
+            return ort_outputs[0]
         outputs = self.session.run(None, feed_dict, run_options=self.run_options)
         return outputs[0]
     
@@ -40,12 +49,16 @@ class MLPComputationORT:
         self.session = general_inference_session(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
         self.input_names = [inp.name for inp in self.session.get_inputs()]
         self.run_options = run_options
+        self._use_iobinding = self.session.use_cuda
 
     def __call__(self, x, enc_feat):
         feed_dict = {
             self.input_names[0]: x,
             self.input_names[1]: enc_feat,
         }
+        if self._use_iobinding:
+            ort_outputs = self.session.run_with_iobinding_numpy(feed_dict, run_options=self.run_options)
+            return ort_outputs[0]
         outputs = self.session.run(None, feed_dict, run_options=self.run_options)
         return outputs[0]
     
@@ -58,12 +71,16 @@ class OutputProjectionORT:
         self.session = general_inference_session(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
         self.input_names = [inp.name for inp in self.session.get_inputs()]
         self.run_options = run_options
+        self._use_iobinding = self.session.use_cuda
 
     def __call__(self, att_out, x):
         feed_dict = {
             self.input_names[0]: att_out,
             self.input_names[1]: x,
         }
+        if self._use_iobinding:
+            ort_outputs = self.session.run_with_iobinding_numpy(feed_dict, run_options=self.run_options)
+            return ort_outputs[0]
         outputs = self.session.run(None, feed_dict, run_options=self.run_options)
         return outputs[0]
     
@@ -76,9 +93,13 @@ class NormComputationORT:
         self.session = general_inference_session(onnx_path, providers=providers, provider_options=provider_options, sess_options=sess_options)
         self.input_names = [inp.name for inp in self.session.get_inputs()]
         self.run_options = run_options
+        self._use_iobinding = self.session.use_cuda
 
     def __call__(self, x):
         feed_dict = {self.input_names[0]: x}
+        if self._use_iobinding:
+            ort_outputs = self.session.run_with_iobinding_numpy(feed_dict, run_options=self.run_options)
+            return ort_outputs[0]
         outputs = self.session.run(None, feed_dict, run_options=self.run_options)
         return outputs[0]
     

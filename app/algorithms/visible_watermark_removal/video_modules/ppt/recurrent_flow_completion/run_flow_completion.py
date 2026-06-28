@@ -1,9 +1,7 @@
 import os
-import platform
-import sys
 import numpy as np
 import onnxruntime as ort
-from app.algorithms import ORTEnvironment, general_provider, general_session
+from app.algorithms import ORTEnvironment, general_provider, general_session, is_gpu_device
 ORTEnvironment.initialize()
 from app.algorithms.visible_watermark_removal.video_modules.ppt.recurrent_flow_completion.encoder import EncoderORT
 from app.algorithms.visible_watermark_removal.video_modules.ppt.recurrent_flow_completion.decoder import DecoderORT
@@ -36,7 +34,10 @@ class RecurrentFlowCompleteORT:
         sess_options = self._get_session_options()
         providers, provider_options = general_provider()
         run_options = ort.RunOptions()
-        run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "gpu:0")
+        if is_gpu_device():
+            run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "gpu:0")
+        else:
+            run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "cpu")
         self.encoder_ort = EncoderORT(os.path.join(self.onnx_dir, 'encoder.encmodel'), providers=providers, provider_options=provider_options, sess_options=sess_options, run_options=run_options)
         self.prop_ort = BidirectionalPropagationORT(
             backward_onnx_path = os.path.join(self.onnx_dir, 'backward_step.encmodel'),

@@ -1,11 +1,7 @@
-import gc
-import os
-import platform
-import sys
 import cv2
 import numpy as np
 import onnxruntime as ort
-from app.algorithms import ORTEnvironment, general_session, general_provider
+from app.algorithms import ORTEnvironment, general_session, general_provider, ortvalue_to_numpy, is_gpu_device
 ORTEnvironment.initialize()
 from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_transformer.bidirectional_propagation import BidirectionalPropagationORT, ImgPropStepORT
 from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_transformer.decoder import DecoderORT
@@ -17,34 +13,42 @@ from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_tran
 def interpolate_numpy(x, scale_factor, mode='bilinear'):
     b, c, h, w = x.shape
     new_h, new_w = int(h * scale_factor), int(w * scale_factor)
-    out = np.zeros((b, c, new_h, new_w), dtype=np.float32)
     cv_mode = cv2.INTER_LINEAR if mode == 'bilinear' else cv2.INTER_NEAREST
-    for i in range(b):
-        img = np.ascontiguousarray(x[i].transpose(1, 2, 0), dtype=np.float32)
-        res = cv2.resize(img, (new_w, new_h), interpolation=cv_mode)
-        if c == 1:
-            out[i, 0] = res
-        else:
-            out[i] = res.transpose(2, 0, 1)
+    if c <= 4:
+        out = np.zeros((b, c, new_h, new_w), dtype=np.float32)
+        for i in range(b):
+            img = np.ascontiguousarray(x[i].transpose(1, 2, 0), dtype=np.float32)
+            res = cv2.resize(img, (new_w, new_h), interpolation=cv_mode)
+            if c == 1:
+                out[i, 0] = res if res.ndim == 2 else res[:, :, 0]
+            else:
+                out[i] = res.transpose(2, 0, 1)
+    else:
+        out = np.zeros((b, c, new_h, new_w), dtype=np.float32)
+        for i in range(b):
+            for ch in range(c):
+                img = np.ascontiguousarray(x[i, ch], dtype=np.float32)
+                out[i, ch] = cv2.resize(img, (new_w, new_h), interpolation=cv_mode)
     return out
 
 
 def max_pool2d_numpy(x, kernel_size=(7, 7), stride=(3, 3), padding=(3, 3)):
     b, c, h, w = x.shape
     ph, pw = padding
-    # 使用极小值进行 padding
+    kh, kw = kernel_size
+    sh, sw = stride
+    # Use stride_tricks for vectorized max pooling
     x_pad = np.pad(x, ((0,0), (0,0), (ph, ph), (pw, pw)), mode='constant', constant_values=-1e9)
-    out_h = (h + 2 * ph - kernel_size[0]) // stride[0] + 1
-    out_w = (w + 2 * pw - kernel_size[1]) // stride[1] + 1
-    out = np.zeros((b, c, out_h, out_w), dtype=x.dtype)
-    for i in range(out_h):
-        for j in range(out_w):
-            h_start = i * stride[0]
-            h_end = h_start + kernel_size[0]
-            w_start = j * stride[1]
-            w_end = w_start + kernel_size[1]
-            out[:, :, i, j] = np.max(x_pad[:, :, h_start:h_end, w_start:w_end], axis=(2, 3))
-    return out
+    out_h = (h + 2 * ph - kh) // sh + 1
+    out_w = (w + 2 * pw - kw) // sw + 1
+    # Create strided view for efficient max pooling
+    padded_h, padded_w = x_pad.shape[2], x_pad.shape[3]
+    s_b, s_c, s_h, s_w = x_pad.strides
+    shape = (b, c, out_h, out_w, kh, kw)
+    strides = (s_b, s_c, s_h * sh, s_w * sw, s_h, s_w)
+    windows = np.lib.stride_tricks.as_strided(x_pad, shape=shape, strides=strides)
+    out = windows.max(axis=(4, 5))
+    return np.ascontiguousarray(out)
 
 
 class PropagationTransformerORT:
@@ -81,7 +85,10 @@ class PropagationTransformerORT:
         sess_options = self._get_session_options()
         providers, provider_options = general_provider()
         run_options = ort.RunOptions()
-        run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "gpu:0")
+        if is_gpu_device():
+            run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "gpu:0")
+        else:
+            run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "cpu")
 
         self.encoder = EncoderORT(self.onnx_paths['encoder'], providers=providers, provider_options=provider_options, sess_options=sess_options, run_options=run_options)
         self.decoder = DecoderORT(self.onnx_paths['decoder'], providers=providers, provider_options=provider_options, sess_options=sess_options, run_options=run_options)
@@ -171,50 +178,69 @@ class PropagationTransformerORT:
     def img_propagation(self, masked_frames, completed_flows, masks):
         flows_forward, flows_backward = completed_flows
         b, t, c, h, w = masked_frames.shape
-        feats_input = [masked_frames[:, i, :, :, :] for i in range(t)]
-        masks_input = [masks[:, i, :, :, :] for i in range(t)]
+        feats_input = [np.ascontiguousarray(masked_frames[:, i, :, :, :]) for i in range(t)]
+        masks_input = [np.ascontiguousarray(masks[:, i, :, :, :]) for i in range(t)]
 
-        feats_b = []
-        masks_b = []
+        use_iobinding = self.img_prop._use_iobinding
+
+        feats_b_np = [None] * t
+        masks_b_np = [None] * t
         frame_idx_b = list(range(0, t))[::-1]
         flow_idx_b = frame_idx_b
+        feat_prop = None
+        mask_prop = None
         for i, idx in enumerate(frame_idx_b):
             feat_current = feats_input[idx]
             mask_current = masks_input[idx]
             if i == 0:
-                feat_prop = feat_current
-                mask_prop = mask_current
+                if use_iobinding:
+                    feat_prop = ort.OrtValue.ortvalue_from_numpy(
+                        feat_current, device_type="cuda", device_id=0
+                    )
+                    mask_prop = ort.OrtValue.ortvalue_from_numpy(
+                        mask_current, device_type="cuda", device_id=0
+                    )
+                else:
+                    feat_prop = feat_current
+                    mask_prop = mask_current
             else:
-                flow_prop = flows_forward[:, flow_idx_b[i], :, :, :]
-                flow_check = flows_backward[:, flow_idx_b[i], :, :, :]
+                flow_prop = np.ascontiguousarray(flows_forward[:, flow_idx_b[i], :, :, :])
+                flow_check = np.ascontiguousarray(flows_backward[:, flow_idx_b[i], :, :, :])
                 feat_prop, mask_prop = self.img_prop(
                     feat_current, feat_prop, mask_current, mask_prop, flow_prop, flow_check
                 )
-            feats_b.append(feat_prop)
-            masks_b.append(mask_prop)
-        feats_b = feats_b[::-1]
-        masks_b = masks_b[::-1]
+            feats_b_np[idx] = ortvalue_to_numpy(feat_prop)
+            masks_b_np[idx] = ortvalue_to_numpy(mask_prop)
 
-        feats_f = []
-        masks_f = []
+        feats_f_np = [None] * t
+        masks_f_np = [None] * t
         frame_idx_f = list(range(0, t))
         flow_idx_f = list(range(-1, t - 1))
+        feat_prop = None
+        mask_prop = None
         for i, idx in enumerate(frame_idx_f):
-            feat_current = feats_b[idx]
-            mask_current = masks_b[idx]
+            feat_current = feats_b_np[idx]
+            mask_current = masks_b_np[idx]
             if i == 0:
-                feat_prop = feat_current
-                mask_prop = mask_current
+                if use_iobinding:
+                    feat_prop = ort.OrtValue.ortvalue_from_numpy(
+                        np.ascontiguousarray(feat_current), device_type="cuda", device_id=0
+                    )
+                    mask_prop = ort.OrtValue.ortvalue_from_numpy(
+                        np.ascontiguousarray(mask_current), device_type="cuda", device_id=0
+                    )
+                else:
+                    feat_prop = feat_current
+                    mask_prop = mask_current
             else:
-                flow_prop = flows_backward[:, flow_idx_f[i], :, :, :]
-                flow_check = flows_forward[:, flow_idx_f[i], :, :, :]
-                
+                flow_prop = np.ascontiguousarray(flows_backward[:, flow_idx_f[i], :, :, :])
+                flow_check = np.ascontiguousarray(flows_forward[:, flow_idx_f[i], :, :, :])
                 feat_prop, mask_prop = self.img_prop(
                     feat_current, feat_prop, mask_current, mask_prop, flow_prop, flow_check
                 )
-            feats_f.append(feat_prop)
-            masks_f.append(mask_prop)
+            feats_f_np[idx] = ortvalue_to_numpy(feat_prop)
+            masks_f_np[idx] = ortvalue_to_numpy(mask_prop)
 
-        prop_frames = np.stack(feats_f, axis=1).reshape(b, t, c, h, w)
-        updated_masks = np.stack(masks_f, axis=1)
+        prop_frames = np.stack(feats_f_np, axis=1).reshape(b, t, c, h, w)
+        updated_masks = np.stack(masks_f_np, axis=1)
         return prop_frames, updated_masks
