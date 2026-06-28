@@ -112,7 +112,7 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
         watermark_detect_settings.watermarkDetectPrompt.emit("")
         watermark_detect_settings.watermarkBoxes.emit([])
         watermark_detect_settings.watermarkContent.emit("general_watermark")
-        watermark_detect_settings.watermarkConfidence.emit(0.5)
+        watermark_detect_settings.watermarkConfidence.emit(0.3)
 
         global_event_bus.watermarkRemove_InputFileUpdate.connect(lambda file_path: watermark_detect_settings.set_file_path(file_path=file_path))
 

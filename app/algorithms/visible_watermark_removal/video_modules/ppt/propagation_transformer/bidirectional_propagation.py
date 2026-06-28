@@ -185,6 +185,9 @@ class BidirectionalPropagationORT:
         feat_list = [np.ascontiguousarray(feats[:, i]) for i in range(t)]
         mask_list = [np.ascontiguousarray(mask[:, i]) for i in range(t)]
 
+        if self._use_iobinding:
+            mask_list = [self.backward_step.to_device("mask_current", m) for m in mask_list]
+
         backward_results = self.backward_propagation(
             feat_list, mask_list, flows_forward, flows_backward
         )
