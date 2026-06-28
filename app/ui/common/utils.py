@@ -61,6 +61,11 @@ class BackendInfoCacheManager(QObject):
         self._cache = {}
 
     def get(self, key: str = "backend_info"):
+        hw_type = cfg.get(cfg.hardwareOptimizationType)
+        if hw_type == "CPU":
+            return "CPU 运行", ""
+        if hw_type == "GPU":
+            return "GPU 运行", ""
         if key in self._cache:
             return self._cache[key]
         if key not in self._cache:
