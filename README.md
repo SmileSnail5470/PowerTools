@@ -29,7 +29,7 @@
 - **图片/视频盲水印去除**
 
 ### 📌 未来计划
-- ✅ 支持 GPU 加速，提升处理速度
+- ✅ 支持 GPU 加速，提升处理速度（8G显存也可以流程运行）
 - ✅ 优化视频去水印效果
 - ✅ 视频支持字幕提取和去除
 
@@ -42,6 +42,10 @@
 
 
 ## 安装
+
+### 配置 GPU 环境（可选）
+- 安装 [cuda 12.x 版本](https://developer.nvidia.com/cuda/toolkit) + [cudnn 9.x](https://developer.nvidia.com/cudnn) 版本
+- ***CUDA bin*** 目录 和 ***cuDNN bin*** 目录 需要添加到系统的 ***PATH*** 环境变量中
 
 ### 下载 Release 安装包（推荐）
 
@@ -77,10 +81,6 @@
 └── visible_watermark_removal
 ```
 ![AI 模型依赖路径设置示例](docs/screenshots/models_path.png)
-
-### 配置 GPU 环境（可选）
-- 安装 [cuda 12.x 版本](https://developer.nvidia.com/cuda/toolkit) + [cudnn 9.x](https://developer.nvidia.com/cudnn) 版本
-- ***CUDA bin*** 目录 和 ***cuDNN bin*** 目录 需要添加到系统的 ***PATH*** 环境变量中
 
 ---
 

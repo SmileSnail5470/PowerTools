@@ -56,25 +56,25 @@ models_deps_urls = {
         "gpu": {"path": "GPU/segment", "sha256": None},
     },
     "video_inpainting": {
-        "cpu": {"path": "cpu/video_inpainting", "sha256": None},
-        "gpu": {"path": "gpu/video_inpainting", "sha256": None},
+        "cpu": {"path": "CPU/video_inpainting", "sha256": None},
+        "gpu": {"path": "GPU/video_inpainting", "sha256": None},
     }
 }
 
 model_estimated_sizes = {
     "gpu": {
-        "blind_watermark_addition": "890 MB",
-        "visible_watermark_removal": "2.5 GB",
-        "segment": "1.3 GB",
-        "ocr": "210 MB",
-        "video_inpainting": "1.8 GB",
+        "blind_watermark_addition": "1.08 GB",
+        "visible_watermark_removal": "2.48 GB",
+        "segment": "2.63 GB",
+        "ocr": "217 MB",
+        "video_inpainting": "183 MB",
     },
     "cpu": {
-        "blind_watermark_addition": "890 MB",
-        "visible_watermark_removal": "2.5 GB",
-        "segment": "1.3 GB",
-        "ocr": "210 MB",
-        "video_inpainting": "1.8 GB",
+        "blind_watermark_addition": "1.08 GB",
+        "visible_watermark_removal": "2.58 GB",
+        "segment": "1.42 GB",
+        "ocr": "217 MB",
+        "video_inpainting": "261 MB",
     }
 }
 
@@ -157,21 +157,37 @@ class InitWorker(QRunnable):
         os.makedirs(variant_deps_path, exist_ok=True)
 
         self.signals.progress.emit(f"正在下载: {self.task_name} ({self.variant})...")
-        snapshot_download(
-            repo_id=HF_REPO_ID,
-            allow_patterns=f"{dir_path}/**",
-            local_dir=variant_deps_path,
-            endpoint=endpoint,
-        )
+        try:
+            snapshot_download(
+                repo_id=HF_REPO_ID,
+                allow_patterns=f"{dir_path}/**",
+                local_dir=variant_deps_path,
+                endpoint=endpoint,
+            )
+        except Exception:
+            cache_dir = os.path.join(variant_deps_path, ".cache")
+            if os.path.exists():
+                shutil.rmtree(cache_dir)
+            CPU_dir = os.path.join(variant_deps_path, "CPU")
+            if os.path.exists():
+                shutil.rmtree(CPU_dir)
+            GPU_dir = os.path.join(variant_deps_path, "GPU")
+            if os.path.exists():
+                shutil.rmtree(GPU_dir)
+            raise Exception(f"Download {dir_path} failed")
 
-        downloaded_dir = os.path.join(variant_deps_path, dir_path)
-        for root, _, files in os.walk(downloaded_dir):
-            for fname in files:
-                fpath = os.path.join(root, fname)
-                lower = fname.lower()
-                if lower.endswith(".zip") or lower.endswith(".tar.gz") or lower.endswith(".tgz"):
-                    self._extract_if_needed(fpath, variant_deps_path)
-                    os.remove(fpath)
+        for item in os.listdir(variant_deps_path):
+            path = os.path.join(variant_deps_path, item)
+            if item not in ["CPU", "GPU"]:
+                continue
+            for tmp_item in os.listdir(path):
+                src_path = os.path.join(path, tmp_item)
+                dst_path = variant_deps_path
+                shutil.move(src_path, dst_path)
+            shutil.rmtree(path)
+        cache_dir = os.path.join(variant_deps_path, ".cache")
+        if os.path.exists(cache_dir):
+            shutil.rmtree(cache_dir)
         logger.info(f"download {self.task_name} ({self.variant}) module success.")
 
     def _init_model(self):
@@ -315,7 +331,6 @@ class StatusBadge(QWidget):
 
 class ModelVariantPanel(QWidget):
     variantChanged = Signal(str)
-    downloadRequested = Signal(str)  # emits model config_key
 
     def __init__(self, config_key: str, parent=None):
         super().__init__(parent)
@@ -408,24 +423,7 @@ class ModelVariantPanel(QWidget):
         self.size_label.setStyleSheet("color: #666; border: none;")
         setFont(self.size_label, 13)
         info_row.addWidget(self.size_label)
-
         info_row.addStretch()
-
-        self.download_btn = QPushButton(self.tr("  立即下载"))
-        self.download_btn.setIcon(FluentIcon.DOWNLOAD.qicon())
-        self.download_btn.setCursor(Qt.PointingHandCursor)
-        self.download_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #4f46e5; color: white; border: none;
-                padding: 8px 16px; border-radius: 6px;
-            }
-            QPushButton:hover { background-color: #4338ca; }
-            QPushButton:pressed { background-color: #3730a3; }
-        """)
-        setFont(self.download_btn, 13, QFont.Medium)
-        self.download_btn.clicked.connect(lambda: self.downloadRequested.emit(self.config_key))
-        info_row.addWidget(self.download_btn)
-
         panel_layout.addLayout(info_row)
 
         self._update_segment_styles()
@@ -450,26 +448,8 @@ class ModelVariantPanel(QWidget):
                 downloaded = True
         if downloaded:
             self.status_label.setText(self.tr("模型状态: ") + f"<b style='color:#2da44e;'>{self.tr('已就绪')}</b>")
-            self.download_btn.setText(self.tr("  已下载"))
-            self.download_btn.setEnabled(False)
-            self.download_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #d1d5db; color: #6b7280; border: none;
-                    padding: 8px 16px; border-radius: 6px;
-                }
-            """)
         else:
             self.status_label.setText(self.tr("模型状态: ") + f"<b style='color:#e65100;'>{self.tr('未下载')}</b>")
-            self.download_btn.setText(self.tr("  立即下载"))
-            self.download_btn.setEnabled(True)
-            self.download_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #4f46e5; color: white; border: none;
-                    padding: 8px 16px; border-radius: 6px;
-                }
-                QPushButton:hover { background-color: #4338ca; }
-                QPushButton:pressed { background-color: #3730a3; }
-            """)
 
     def _seg_active_style(self):
         return """
@@ -554,6 +534,9 @@ class ModelVariantPanel(QWidget):
 
     def is_expanded(self) -> bool:
         return self._expanded
+    
+    def check_model_status(self):
+        self._check_model_status()
 
 
 class InitProgressDialog(QDialog):
@@ -1311,7 +1294,7 @@ class Settings(QWidget):
             worker.signals.progress.connect(progress_dialog.append_log)
             worker.signals.finished.connect(
                 lambda ok, msg, switch=switch, badge=badge, progress_dialog=progress_dialog: 
-                self._on_init_finished(ok, msg, switch, badge, progress_dialog)
+                self._on_init_finished(ok, msg, switch, badge, progress_dialog, panel)
             )
             InternalTaskManager.get_pool().start(worker)
         else:
@@ -1319,15 +1302,18 @@ class Settings(QWidget):
             tmp = cfg.get(cfg.additionalParams).get("LocalAISettings", {})
             tmp.update({f"{badge.name}_status_info": {"text": self.tr("未启用"), "color": "#eab308"}})
             cfg.additionalParams.value.update({"LocalAISettings": tmp})
+            panel.check_model_status()
 
     def _on_init_finished(
             self, ok: bool,
             error: str,
             switch: ToggleSwitch, 
             badge: StatusBadge, 
-            progress_dialog: InitProgressDialog
+            progress_dialog: InitProgressDialog,
+            panel: ModelVariantPanel
         ):
         if ok:
+            panel.check_model_status()
             badge.setLabel(text=self.tr("已启用"), color="#22c55e")
             tmp = cfg.get(cfg.additionalParams).get("LocalAISettings", {})
             tmp.update({f"{badge.name}_status_info": {"text": self.tr("已启用"), "color": "#22c55e"}})

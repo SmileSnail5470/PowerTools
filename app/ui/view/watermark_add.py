@@ -840,7 +840,8 @@ class HeaderWidget(QWidget):
             func, args, kwargs = task_instance.to_worker()
             total_tasks.append((func, args, kwargs))
 
-        backend_type, gpu_name = global_backend_info_cache.get(key="backend_info")
+        # backend_type, gpu_name = global_backend_info_cache.get(key="backend_info")
+        backend_type, gpu_name = "CPU 运行", ""
         task_status_model.start_batch(total=len(total_tasks), backend_type=backend_type, gpu_name=gpu_name)
         if not self.is_batch_task:
             task_status_model.start_step(name=self.tr("准备任务"))

@@ -16,7 +16,7 @@ class VideoBlindWatermarkEmbed():
 
     def _create_predictor(self):
         session_options = general_session()
-        providers, provider_options = general_provider()
+        providers, provider_options = general_provider(use_cpu=True)
         self.session = general_inference_session(
             self.onnx_path,
             providers=providers,
@@ -163,7 +163,7 @@ class VideoBlindWatermarkDetect():
 
     def _create_predictor(self):
         session_options = general_session()
-        providers, provider_options = general_provider()
+        providers, provider_options = general_provider(use_cpu=True)
         self.session = general_inference_session(
             self.onnx_path,
             providers=providers,
