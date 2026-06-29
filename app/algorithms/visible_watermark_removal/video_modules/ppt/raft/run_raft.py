@@ -13,14 +13,13 @@ class RAFTBiONNX:
         self.prepare_model()
 
     def _get_session_options(self):
-        opts = general_session()
-        return opts
-    
+        return general_session()
+
     def __del__(self):
         if hasattr(self, 'session'):
             del self.session
             self.session = None
-    
+
     def prepare_model(self):
         if self.session is not None:
             return
@@ -46,47 +45,36 @@ class RAFTBiONNX:
             frames_ds = np.zeros((frames_flat.shape[0], c, new_h, new_w), dtype=np.float32)
             for i in range(frames_flat.shape[0]):
                 img = frames_flat[i].transpose(1, 2, 0)
-                img_ds = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-                frames_ds[i] = img_ds.transpose(2, 0, 1)
+                frames_ds[i] = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR).transpose(2, 0, 1)
             gt_local_frames_input = frames_ds.reshape(b, l_t, c, new_h, new_w)
         else:
             gt_local_frames_input = gt_local_frames
             new_h, new_w = h, w
 
         _, _, _, ih, iw = gt_local_frames_input.shape
-
-        gtlf_1 = gt_local_frames_input[:, :-1, :, :, :]
-        gtlf_2 = gt_local_frames_input[:, 1:, :, :, :]
-
-        gtlf_1_flat = np.ascontiguousarray(gtlf_1.reshape(-1, c, ih, iw))
-        gtlf_2_flat = np.ascontiguousarray(gtlf_2.reshape(-1, c, ih, iw))
+        gtlf_1_flat = np.ascontiguousarray(gt_local_frames_input[:, :-1].reshape(-1, c, ih, iw))
+        gtlf_2_flat = np.ascontiguousarray(gt_local_frames_input[:, 1:].reshape(-1, c, ih, iw))
 
         if self._use_iobinding:
-            outputs_forward = self.session.run_with_iobinding_numpy(
+            flow_up_forward = self.session.run_with_iobinding_numpy(
                 {self.input_name_1: gtlf_1_flat, self.input_name_2: gtlf_2_flat},
                 run_options=self.run_options
-            )
-            flow_up_forward = outputs_forward[0]
-
-            outputs_backward = self.session.run_with_iobinding_numpy(
+            )[0]
+            flow_up_backward = self.session.run_with_iobinding_numpy(
                 {self.input_name_1: gtlf_2_flat, self.input_name_2: gtlf_1_flat},
                 run_options=self.run_options
-            )
-            flow_up_backward = outputs_backward[0]
+            )[0]
         else:
-            outputs_forward = self.session.run(
+            flow_up_forward = self.session.run(
                 [self.output_name],
                 {self.input_name_1: gtlf_1_flat, self.input_name_2: gtlf_2_flat},
                 run_options=self.run_options
-            )
-            flow_up_forward = outputs_forward[0]
-
-            outputs_backward = self.session.run(
+            )[0]
+            flow_up_backward = self.session.run(
                 [self.output_name],
                 {self.input_name_1: gtlf_2_flat, self.input_name_2: gtlf_1_flat},
                 run_options=self.run_options
-            )
-            flow_up_backward = outputs_backward[0]
+            )[0]
 
         gt_flows_forward = flow_up_forward.reshape(b, l_t - 1, 2, ih, iw)
         gt_flows_backward = flow_up_backward.reshape(b, l_t - 1, 2, ih, iw)
@@ -99,12 +87,8 @@ class RAFTBiONNX:
             for bi in range(b):
                 for fi in range(n_flows):
                     for ch in range(2):
-                        flows_f_up[bi, fi, ch] = cv2.resize(
-                            gt_flows_forward[bi, fi, ch], (w, h), interpolation=cv2.INTER_LINEAR
-                        ) * inv_scale
-                        flows_b_up[bi, fi, ch] = cv2.resize(
-                            gt_flows_backward[bi, fi, ch], (w, h), interpolation=cv2.INTER_LINEAR
-                        ) * inv_scale
+                        flows_f_up[bi, fi, ch] = cv2.resize(gt_flows_forward[bi, fi, ch], (w, h), interpolation=cv2.INTER_LINEAR) * inv_scale
+                        flows_b_up[bi, fi, ch] = cv2.resize(gt_flows_backward[bi, fi, ch], (w, h), interpolation=cv2.INTER_LINEAR) * inv_scale
             return flows_f_up, flows_b_up
 
         return gt_flows_forward, gt_flows_backward

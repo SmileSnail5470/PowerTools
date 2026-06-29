@@ -1,5 +1,13 @@
+import numpy as np
 import onnxruntime as ort
 from app.algorithms import general_inference_session
+try:
+    import cupy as cp
+    _HAS_CUPY = True
+except ImportError:
+    _HAS_CUPY = False
+
+from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_transformer.transformer_block import _ortvalue_to_cupy, _cupy_to_ortvalue
 
 
 class SoftSplitORT:
@@ -8,17 +16,18 @@ class SoftSplitORT:
         self.input_names = [inp.name for inp in self.session.get_inputs()]
         self.run_options = run_options
         self._use_iobinding = self.session.use_cuda
+        self._use_cupy = self._use_iobinding and _HAS_CUPY
 
     def __call__(self, x):
-        feed_dict = {
-            self.input_names[0]: x,
-        }
+        if self._use_cupy:
+            x_ort = _cupy_to_ortvalue(x) if isinstance(x, cp.ndarray) else x
+            ort_outputs = self.session.run_with_iobinding({self.input_names[0]: x_ort}, run_options=self.run_options)
+            return _ortvalue_to_cupy(ort_outputs[0])
+        feed = {self.input_names[0]: x}
         if self._use_iobinding:
-            ort_outputs = self.session.run_with_iobinding_numpy(feed_dict, run_options=self.run_options)
-            return ort_outputs[0]
-        outputs = self.session.run(None, feed_dict, run_options=self.run_options)
-        return outputs[0]
-    
+            return self.session.run_with_iobinding_numpy(feed, run_options=self.run_options)[0]
+        return self.session.run(None, feed, run_options=self.run_options)[0]
+
     def __del__(self):
         self.session = None
 
@@ -29,17 +38,19 @@ class SoftCompORT:
         self.input_names = [inp.name for inp in self.session.get_inputs()]
         self.run_options = run_options
         self._use_iobinding = self.session.use_cuda
+        self._use_cupy = self._use_iobinding and _HAS_CUPY
 
     def __call__(self, x, enc_feat):
-        feed_dict = {
-            self.input_names[0]: x,
-            self.input_names[1]: enc_feat,
-        }
+        if self._use_cupy:
+            x_ort = _cupy_to_ortvalue(x) if isinstance(x, cp.ndarray) else x
+            enc_ort = _cupy_to_ortvalue(enc_feat) if isinstance(enc_feat, cp.ndarray) else enc_feat
+            feed = {self.input_names[0]: x_ort, self.input_names[1]: enc_ort}
+            ort_outputs = self.session.run_with_iobinding(feed, run_options=self.run_options)
+            return _ortvalue_to_cupy(ort_outputs[0])
+        feed = {self.input_names[0]: x, self.input_names[1]: enc_feat}
         if self._use_iobinding:
-            ort_outputs = self.session.run_with_iobinding_numpy(feed_dict, run_options=self.run_options)
-            return ort_outputs[0]
-        outputs = self.session.run(None, feed_dict, run_options=self.run_options)
-        return outputs[0]
-    
+            return self.session.run_with_iobinding_numpy(feed, run_options=self.run_options)[0]
+        return self.session.run(None, feed, run_options=self.run_options)[0]
+
     def __del__(self):
         self.session = None

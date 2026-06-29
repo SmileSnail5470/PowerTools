@@ -301,7 +301,11 @@ def general_inference_session(model_path: str, sess_options, providers, provider
 
 
 
-def general_provider(enable_cuda_graph: bool = False):
+def general_provider(enable_cuda_graph: bool = False, use_cpu: bool = False):
+    if use_cpu:
+        providers = ["CPUExecutionProvider"]
+        provider_options = [{}]
+        return providers, provider_options
     available = ort.get_available_providers()
     is_apple_silicon = sys.platform == "darwin" and platform.machine() == "arm64"
     if is_apple_silicon:
