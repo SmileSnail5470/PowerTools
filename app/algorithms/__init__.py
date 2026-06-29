@@ -241,9 +241,10 @@ class CudaGraphRunner:
                     value = self._s._cast_input(name, value)
                     value = np.ascontiguousarray(value)
                     self._in_bufs[name].update_inplace(value)
-                self._s._session.run_with_iobinding(self._io)  # 重放
+                self._s._session.run_with_iobinding(self._io)
             return {n: b.numpy() for n, b in self._out_bufs.items()}
         except Exception:
+            print("CudaGraphRunner failed and start fallback")
             self._fallback = True
             self._io = None
             self._in_bufs.clear()

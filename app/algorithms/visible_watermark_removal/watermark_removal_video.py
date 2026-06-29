@@ -279,7 +279,7 @@ class VideoWatermarkRemover:
         if refine_type == "ppt":
             ppt_onnx_basedir = args.get("ppt_onnx_basedir")
             ONNX_PATHS = {
-                "raft": os.path.join(ppt_onnx_basedir, "raft", "raft_iter40.encmodel"),
+                "raft": os.path.join(ppt_onnx_basedir, "raft", "raft_iter20.encmodel"),
                 "recurrent_flow_complete": os.path.join(ppt_onnx_basedir, "recurrent_flow_completion"),
                 "ppt": {
                     'encoder': os.path.join(ppt_onnx_basedir, "propagation_transformer", "encoder.encmodel"),
@@ -310,12 +310,12 @@ class VideoWatermarkRemover:
             new_input_frames_dir, new_masks_dir = self._crop_frames_and_masks(input_frames_dir, masks_dir, bbox)
             xmin, ymin, xmax, ymax = bbox
             process_w, process_h = xmax - xmin, ymax - ymin
-            if max(process_h, process_w) <= 540:
+            if max(process_h, process_w) < 540:
                 resize_ratio = 1.0
                 subvideo_length = 80
-            elif max(process_h, process_w) <= 720:
+            elif max(process_h, process_w) < 720:
                 resize_ratio = 540.0 / max(process_h, process_w)
-                subvideo_length = 80
+                subvideo_length = 70
             else:
                 resize_ratio = 720.0 / max(process_h, process_w)
                 subvideo_length = 60

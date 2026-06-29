@@ -229,8 +229,6 @@ class PPTInferenceORT:
         comp_frames = [None] * video_length
         neighbor_stride = self.neighbor_length // 2
         ref_num = self.subvideo_length // self.ref_stride if video_length > self.subvideo_length else -1
-        if video_length > 80:
-            neighbor_stride = self.neighbor_length
         for f in range(0, video_length, neighbor_stride):
             neighbor_ids = [i for i in range(max(0, f - neighbor_stride), min(video_length, f + neighbor_stride + 1))]
             ref_ids = self._get_ref_index(f, neighbor_ids, video_length, self.ref_stride, ref_num)
