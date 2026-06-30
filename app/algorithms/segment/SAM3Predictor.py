@@ -1,7 +1,5 @@
 import math
 import os
-import platform
-import sys
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 import cv2
@@ -10,7 +8,8 @@ import onnxruntime as ort
 from app.algorithms.segment.SimpleTokenizer import SimpleTokenizer
 from app.algorithms.segment.preprocessing import preprocess_opencv
 ort.preload_dlls(directory="")
-from app.algorithms import general_inference_session
+from app.algorithms import general_inference_session, general_session, general_provider, is_gpu_device, ORTEnvironment, ortvalue_to_numpy
+ORTEnvironment.initialize()
 
 
 @dataclass
@@ -38,10 +37,12 @@ class SAM3Predictor:
         self._g_decoder_session: Optional[ort.InferenceSession] = None
         self._i_encoder_session: Optional[ort.InferenceSession] = None
         self._i_decoder_session: Optional[ort.InferenceSession] = None
+        self._use_iobinding = False
+        self._run_options: Optional[ort.RunOptions] = None
         self.tokenizer = SimpleTokenizer(f"{model_dir}/vocab.txt", f"{model_dir}/merges.txt")
 
     def _get_session_options(self) -> ort.SessionOptions:
-        opts = ort.SessionOptions()
+        opts = general_session()
         opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
         return opts
 
@@ -49,7 +50,14 @@ class SAM3Predictor:
         if self._g_encoder_session is not None:
             return
         opts = self._get_session_options()
-        providers, provider_options = self._get_providers()
+        providers, provider_options = general_provider()
+
+        run_options = ort.RunOptions()
+        if is_gpu_device():
+            run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "gpu:0")
+        else:
+            run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "cpu")
+        self._run_options = run_options
 
         self._g_encoder_session = general_inference_session(
             os.path.join(self.model_dir, "sam3_grounding_encoder.encmodel"),
@@ -69,12 +77,21 @@ class SAM3Predictor:
             providers=providers,
             provider_options=provider_options,
         )
+        self._use_iobinding = self._g_encoder_session.use_cuda
 
     def _ensure_interactive_models(self):
         if self._i_encoder_session is not None:
             return
         opts = self._get_session_options()
-        providers, provider_options = self._get_providers()
+        providers, provider_options = general_provider()
+
+        if self._run_options is None:
+            run_options = ort.RunOptions()
+            if is_gpu_device():
+                run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "gpu:0")
+            else:
+                run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "cpu")
+            self._run_options = run_options
 
         self._i_encoder_session = general_inference_session(
             os.path.join(self.model_dir, "sam3_encoder.encmodel"),
@@ -88,28 +105,7 @@ class SAM3Predictor:
             providers=providers,
             provider_options=provider_options,
         )
-
-    def _get_providers(self) -> Tuple[List[str], List[dict]]:
-        available = ort.get_available_providers()
-        is_apple_silicon = sys.platform == "darwin" and platform.machine() == "arm64"
-        if is_apple_silicon:
-            providers = ["CPUExecutionProvider"]
-            provider_options = [{}]
-        elif "CUDAExecutionProvider" in available and self._hash_cuda_gpu():
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            provider_options = [{}, {}]
-        else:
-            providers = ["CPUExecutionProvider"]
-            provider_options = [{}]
-        return providers, provider_options
-    
-    def _hash_cuda_gpu(self):
-        if platform.system() != "Windows":
-            return True
-        cuda_path = r"C:\Program Files\NVIDIA Corporation"
-        if os.path.exists(cuda_path):
-            return True
-        return False
+        self._use_iobinding = self._i_encoder_session.use_cuda
 
     def predict_text(
         self,
@@ -237,8 +233,14 @@ class SAM3Predictor:
         input_blob = self._preprocess_image(bgr_img, target_size=TARGET_SIZE)
 
         encoder_input_name = self._i_encoder_session.get_inputs()[0].name
-        encoder_output_names = [o.name for o in self._i_encoder_session.get_outputs()]
-        encoder_outputs = self._i_encoder_session.run(encoder_output_names, {encoder_input_name: input_blob})
+        encoder_feed = {encoder_input_name: input_blob}
+
+        if self._use_iobinding:
+            encoder_outputs = self._i_encoder_session.run_with_iobinding(encoder_feed, run_options=self._run_options)
+        else:
+            encoder_output_names = [o.name for o in self._i_encoder_session.get_outputs()]
+            encoder_outputs = self._i_encoder_session.run(encoder_output_names, encoder_feed, run_options=self._run_options)
+
         pix_feat = encoder_outputs[0]  # (1, C, H, W)
         high_res_0 = encoder_outputs[1]
         high_res_1 = encoder_outputs[2]
@@ -270,18 +272,22 @@ class SAM3Predictor:
         coords_arr = np.array(final_coords, dtype=np.float32).reshape(1, num_pts, 2)
         labels_arr = np.array(final_labels, dtype=np.int32).reshape(1, num_pts)
 
-        decoder_inputs = {
+        decoder_feed = {
             "pix_feat": pix_feat,
             "high_res_0": high_res_0,
             "high_res_1": high_res_1,
             "point_coords": coords_arr,
             "point_labels": labels_arr,
         }
-        decoder_output_names = [o.name for o in self._i_decoder_session.get_outputs()]
 
-        decoder_outputs = self._i_decoder_session.run(decoder_output_names, decoder_inputs)
-        masks_data = decoder_outputs[0]  # (1, 3, H, W)
-        ious_data = decoder_outputs[1]   # (1, 3)
+        if self._use_iobinding:
+            decoder_outputs = self._i_decoder_session.run_with_iobinding(decoder_feed, run_options=self._run_options)
+        else:
+            decoder_output_names = [o.name for o in self._i_decoder_session.get_outputs()]
+            decoder_outputs = self._i_decoder_session.run(decoder_output_names, decoder_feed, run_options=self._run_options)
+
+        masks_data = ortvalue_to_numpy(decoder_outputs[0])  # (1, 3, H, W)
+        ious_data = ortvalue_to_numpy(decoder_outputs[1])   # (1, 3)
 
         # Find best mask (max IoU among 3 candidates)
         ious = ious_data[0]  # shape (3,)
@@ -292,7 +298,7 @@ class SAM3Predictor:
         mask_logit = masks_data[0, best_idx, :, :]  # (mask_h, mask_w)
 
         # Resize to original image size
-        mask_logit_resized = cv2.resize(mask_logit, (w_img, h_img))
+        mask_logit_resized = cv2.resize(np.ascontiguousarray(mask_logit, dtype=np.float32), (w_img, h_img))
 
         # Threshold at 0.0 (sigmoind logit)
         binary_mask = np.where(mask_logit_resized > 0.0, 255, 0).astype(np.uint8)
@@ -315,8 +321,13 @@ class SAM3Predictor:
         TARGET_SIZE = (1008, 1008)
         input_blob = self._preprocess_image(bgr_img, target_size=TARGET_SIZE)
         enc_input_name = self._g_encoder_session.get_inputs()[0].name
-        enc_output_names = [o.name for o in self._g_encoder_session.get_outputs()]
-        encoder_outputs = self._g_encoder_session.run(enc_output_names, {enc_input_name: input_blob})
+        enc_feed = {enc_input_name: input_blob}
+
+        if self._use_iobinding:
+            encoder_outputs = self._g_encoder_session.run_with_iobinding(enc_feed, run_options=self._run_options)
+        else:
+            enc_output_names = [o.name for o in self._g_encoder_session.get_outputs()]
+            encoder_outputs = self._g_encoder_session.run(enc_output_names, enc_feed, run_options=self._run_options)
 
         feat0 = encoder_outputs[0]
         feat1 = encoder_outputs[1]
@@ -329,8 +340,13 @@ class SAM3Predictor:
         tokens_data = np.array(tokenized[0], dtype=np.int64).reshape(1, 32)
 
         lang_input_name = self._lang_session.get_inputs()[0].name
-        lang_output_names = [o.name for o in self._lang_session.get_outputs()]
-        lang_outputs = self._lang_session.run(lang_output_names, {lang_input_name: tokens_data})
+        lang_feed = {lang_input_name: tokens_data}
+
+        if self._use_iobinding:
+            lang_outputs = self._lang_session.run_with_iobinding(lang_feed, run_options=self._run_options)
+        else:
+            lang_output_names = [o.name for o in self._lang_session.get_outputs()]
+            lang_outputs = self._lang_session.run(lang_output_names, lang_feed, run_options=self._run_options)
 
         text_attention_mask = lang_outputs[0]
         text_memory = lang_outputs[1]
@@ -351,7 +367,7 @@ class SAM3Predictor:
             box_labels_data = np.array([1], dtype=np.int64).reshape(1, 1)
             box_masks_data = np.array([1], dtype=np.bool_).reshape(1, 1)
 
-        decoder_input_map = {
+        decoder_feed = {
             "feat0": feat0,
             "feat1": feat1,
             "feat2": feat2,
@@ -362,19 +378,20 @@ class SAM3Predictor:
             "box_labels": box_labels_data,
             "box_masks": box_masks_data,
         }
-        # Only include vpe0/vpe1 if the model expects them (matching C++ sends vpe2 only)
-        dec_output_names = [o.name for o in self._g_decoder_session.get_outputs()]
-        decoder_outputs = self._g_decoder_session.run(dec_output_names, decoder_input_map)
 
-        boxes_arr = decoder_outputs[0]  # (num_prompts, num_queries, 4)
-        scores_arr = decoder_outputs[1]  # (num_prompts, num_queries)
-        masks_arr = decoder_outputs[2]   # (num_prompts, num_queries, H, W)
-        presence_arr = decoder_outputs[3]  # (num_prompts,)
+        if self._use_iobinding:
+            decoder_outputs = self._g_decoder_session.run_with_iobinding(decoder_feed, run_options=self._run_options)
+        else:
+            dec_output_names = [o.name for o in self._g_decoder_session.get_outputs()]
+            decoder_outputs = self._g_decoder_session.run(dec_output_names, decoder_feed, run_options=self._run_options)
+
+        boxes_arr = ortvalue_to_numpy(decoder_outputs[0])  # (num_prompts, num_queries, 4)
+        scores_arr = ortvalue_to_numpy(decoder_outputs[1])  # (num_prompts, num_queries)
+        masks_arr = ortvalue_to_numpy(decoder_outputs[2])   # (num_prompts, num_queries, H, W)
+        presence_arr = ortvalue_to_numpy(decoder_outputs[3])  # (num_prompts,)
 
         num_prompts = boxes_arr.shape[0]
         num_queries = boxes_arr.shape[1]
-        mask_h = masks_arr.shape[2]
-        mask_w = masks_arr.shape[3]
 
         candidates: List[Tuple[float, InferenceResult]] = []
 
@@ -390,7 +407,7 @@ class SAM3Predictor:
                 mask_logit = masks_arr[i, q, :, :]  # (mask_h, mask_w)
 
                 # Resize mask to original image size
-                mask_resized = cv2.resize(mask_logit, (w_img, h_img))
+                mask_resized = cv2.resize(np.ascontiguousarray(mask_logit, dtype=np.float32), (w_img, h_img))
                 binary_mask = np.where(mask_resized > 0.0, 255, 0).astype(np.uint8)
 
                 # Denormalize box to pixel coordinates

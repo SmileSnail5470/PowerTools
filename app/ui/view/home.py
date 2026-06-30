@@ -178,7 +178,7 @@ class HeroSection(QWidget):
         setFont(self.title, 52, QFont.Bold)
         
         self.subtitle = QLabel(
-            self.tr("图像处理工具集，为您的创意工作提供支持。从水印管理到截图，从文字识别到图像编辑，一站式解决您的需求。")
+            self.tr("图像处理工具集，为您的创意工作提供支持。从水印管理到截图，从文字识别到暗水印去除，一站式解决您的需求。")
         )
         self.subtitle.setObjectName("hero_subtitle")
         self.subtitle.setAlignment(Qt.AlignCenter)
@@ -328,7 +328,7 @@ class Home(QWidget):
             # ("📸", "屏幕截图", "快速截取屏幕内容，支持多种截图模式和编辑功能。内置强大的编辑工具，让截图更加专业。", None, "screenshot"),
             # ("📜", "滚动截图", "智能滚动并截取长页面内容，完美保存完整信息。自动识别滚动区域，无需手动操作。", None, "scroll-screenshot"),
             ("📝", "文字提取", "OCR智能识别图片中的文字，支持多语言高精度识别。先进的识别引擎，确保文字提取准确率。", None, "text-extract"),
-            ("🎨", "图像编辑", "专业的图像编辑工具，满足您的各种创意需求。丰富的滤镜效果和编辑功能，让图片处理更加简单。", None, "image-edit")
+            ("🔍", "暗水印去除", "智能识别并去除图片中的隐藏盲水印，还原图片原始状态。采用先进的AI算法，确保去除效果自然。", "AI驱动", "image-edit")
         ]
 
         features_map = {
@@ -337,7 +337,7 @@ class Home(QWidget):
             # 'screenshot': ['区域截图和窗口截图', '内置编辑工具', '快捷键支持', '云同步功能'],
             # 'scroll-screenshot': ['自动滚动检测', '智能拼接算法', '支持网页和文档', '高质量输出'],
             'text-extract': ['多语言支持', '高精度识别', '可编辑和导出', '表格识别功能'],
-            'image-edit': ['丰富的滤镜效果', '图层编辑功能', '批量处理支持', 'AI智能优化']
+            'image-edit': ['AI智能识别技术', '保持图片质量', '支持批量处理', '多种模型可选']
         }
         
         self.cards = []
@@ -355,12 +355,12 @@ class Home(QWidget):
     
     def handle_card_click(self, card_type):
         card_index = {
-            'watermark-add': 2,
-            'watermark-remove': 3,
+            'watermark-add': 3,
+            'watermark-remove': 4,
             # 'screenshot': 4,
             # 'scroll-screenshot': 5,
-            'text-extract': 4,
-            'image-edit': 5
+            'text-extract': 5,
+            'image-edit': 6
         }
         index = card_index.get(card_type, 0)
         self.window().stackedWidget.setCurrentIndex(index)

@@ -18,6 +18,7 @@ onnxruntime==1.24.4; platform_system=="Darwin"
 pyclipper==1.4.0
 shapely==2.1.2
 bitarray==3.7.1
-gdown==5.2.1
 future==1.0.0
 cryptography==49.0.0
+huggingface_hub==1.20.1
+cupy-cuda12x==14.1.1; platform_system!="Darwin"

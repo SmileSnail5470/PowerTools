@@ -232,7 +232,7 @@ class WatermarkDetectSettings(QWidget):
         conf_info_vbox.addWidget(ct)
         conf_info_vbox.addWidget(cd)
         
-        self.conf_val_label = QLabel("0.50")
+        self.conf_val_label = QLabel("0.30")
         self.conf_val_label.setObjectName("confValBadge")
         setFont(self.conf_val_label, 12, QFont.Bold)
         
@@ -244,7 +244,7 @@ class WatermarkDetectSettings(QWidget):
         self.conf_slider = QSlider(Qt.Horizontal)
         self.conf_slider.setObjectName("confSlider")
         self.conf_slider.setRange(0, 100)
-        self.conf_slider.setValue(50)
+        self.conf_slider.setValue(30)
         self.conf_slider.setFixedHeight(24)
         self.conf_slider.setCursor(Qt.PointingHandCursor)
         self.conf_slider.valueChanged.connect(self._on_conf_changed)

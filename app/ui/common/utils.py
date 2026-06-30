@@ -27,7 +27,7 @@ def verify_gpu_environment():
         ppt_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "license", "fusion.onnx")
         if not os.path.exists(ppt_onnx_path):
             ppt_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "library", "fusion.onnx")
-        session = ort.InferenceSession(ppt_onnx_path, providers=['GPUExecutionProvider'])
+        session = ort.InferenceSession(ppt_onnx_path, providers=['CUDAExecutionProvider'])
         providers = session.get_providers()
         if "CUDAExecutionProvider" in providers:
             return "GPU 运行", _get_gpu_hardware_name()
@@ -61,6 +61,11 @@ class BackendInfoCacheManager(QObject):
         self._cache = {}
 
     def get(self, key: str = "backend_info"):
+        hw_type = cfg.get(cfg.hardwareOptimizationType)
+        if hw_type == "CPU":
+            return "CPU 运行", ""
+        if hw_type == "GPU":
+            return "GPU 运行", ""
         if key in self._cache:
             return self._cache[key]
         if key not in self._cache:

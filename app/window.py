@@ -80,7 +80,7 @@ class MainWindow(FluentWindow):
 
         self.addSubInterface(self.OCRInterface, Icon.OCR, self.tr("文字提取"), pos, parent=None)
 
-        self.addSubInterface(self.imageEditInterface, Icon.IMAGE_EDIT, self.tr("图像编辑"), pos, parent=None)
+        self.addSubInterface(self.imageEditInterface, Icon.IMAGE_EDIT, self.tr("暗水印去除"), pos, parent=None)
 
         # add custom widget to bottom
         self.navigationInterface.addItem(

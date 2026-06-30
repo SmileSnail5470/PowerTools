@@ -1,7 +1,7 @@
 import logging
 import os
 from app.ui.common.config import cfg
-from app.workers.work_base import BaseWorker
+from app.workers.work_base import BaseWorker, _resolve_hardware_variant
 from app.utils.logger.decorators import log_exception
 from app.algorithms.visible_watermark_removal.watermark_removal_image import ImageWatermarkRemove
 from app.algorithms.visible_watermark_removal.watermark_removal_video import VideoWatermarkRemover
@@ -42,8 +42,8 @@ class WatermarkRemoveWork(BaseWorker):
         file_type = self.file_type(input_file=input_path)
         if file_type is None:
             raise Exception("Not support file {0}".format(input_path.split(".")[-1]))
-        onnx_model_dir = os.path.join(self.deps_path, "visible_watermark_removal")
-        segment_model_dir = os.path.join(self.deps_path, "segment")
+        onnx_model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "visible_watermark_removal")
+        segment_model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "segment")
         if "_feature_name_" in kwargs:
             os.environ["_feature_name_"] = kwargs["_feature_name_"]
         if file_type == "image":
@@ -73,7 +73,7 @@ class WatermarkRemoveWork(BaseWorker):
             }
             self._get_image_instance().run(**params)
         else:
-            ppt_onnx_basedir = os.path.join(self.deps_path, "video_inpainting", "ppt")
+            ppt_onnx_basedir = os.path.join(self.deps_path, _resolve_hardware_variant(), "video_inpainting", "ppt")
             params = {
                 "input_video_path": input_path, 
                 "output_video_path": output_file,

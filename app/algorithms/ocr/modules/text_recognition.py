@@ -12,7 +12,8 @@ import time
 import onnxruntime as ort
 ort.preload_dlls(directory="")
 import uuid
-from app.algorithms import general_inference_session
+from app.algorithms import general_inference_session, general_session, general_provider, ORTEnvironment
+ORTEnvironment.initialize()
 
 
 class BaseRecLabelDecode(object):
@@ -218,29 +219,9 @@ class CTCLabelDecode(BaseRecLabelDecode):
         return dict_character
 
 
-def _hash_cuda_gpu():
-    if platform.system() != "Windows":
-        return True
-    cuda_path = r"C:\Program Files\NVIDIA Corporation"
-    if os.path.exists(cuda_path):
-        return True
-    return False
-
-
 def create_predictor(onnx_path):
-    session_options = ort.SessionOptions()
-    session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-    available = ort.get_available_providers()
-    is_apple_silicon = sys.platform == "darwin" and platform.machine() == "arm64"
-    if is_apple_silicon:
-        providers = ["CPUExecutionProvider"]
-        provider_options = [{}]
-    elif "CUDAExecutionProvider" in available and _hash_cuda_gpu():
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-        provider_options = [{}, {}]
-    else:
-        providers = ["CPUExecutionProvider"]
-        provider_options = [{}]
+    session_options = general_session()
+    providers, provider_options = general_provider()
     sess = general_inference_session(
         onnx_path,
         providers=providers,

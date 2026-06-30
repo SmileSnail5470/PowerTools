@@ -1,40 +1,22 @@
 import os
-import platform
-import sys
 import cv2
 import numpy as np
 import onnxruntime as ort
 ort.preload_dlls(directory="")
 from PIL import Image
-from app.algorithms import general_inference_session
+from app.algorithms import general_inference_session,general_session, general_provider, ORTEnvironment, CudaGraphRunner
+ORTEnvironment.initialize()
 
 
 class LamaInpaint():
-    def __init__(self):
+    def __init__(self, use_cuda_graph: bool = False):
         self.tile_size = 512
-
-    def _hash_cuda_gpu(self):
-        if platform.system() != "Windows":
-            return True
-        cuda_path = r"C:\Program Files\NVIDIA Corporation"
-        if os.path.exists(cuda_path):
-            return True
-        return False
+        self.use_cuda_graph = use_cuda_graph
+        self._graph_runner = None
 
     def _create_predictor(self):
-        session_options = ort.SessionOptions()
-        session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        available = ort.get_available_providers()
-        is_apple_silicon = sys.platform == "darwin" and platform.machine() == "arm64"
-        if is_apple_silicon:
-            providers = ["CPUExecutionProvider"]
-            provider_options = [{}]
-        elif "CUDAExecutionProvider" in available and self._hash_cuda_gpu():
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            provider_options = [{}, {}]
-        else:
-            providers = ["CPUExecutionProvider"]
-            provider_options = [{}]
+        session_options = general_session()
+        providers, provider_options = general_provider(enable_cuda_graph=self.use_cuda_graph)
         self.session = general_inference_session(
             self.onnx_path,
             providers=providers,
@@ -46,6 +28,10 @@ class LamaInpaint():
         self.mask_input_name  = inputs[1].name
 
         self.output_name = self.session.get_outputs()[0].name
+
+        if self.use_cuda_graph and self.session.use_cuda:
+            out_specs = {self.output_name: ((1, 3, self.tile_size, self.tile_size), np.float32)}
+            self._graph_runner = CudaGraphRunner(self.session, out_specs)
 
     def prepare(self, onnx_path: str = None):
         self.onnx_path = onnx_path
@@ -329,13 +315,21 @@ class LamaInpaint():
                 img_tile = image[:, :, y:y+self.tile_size, x:x+self.tile_size]
                 mask_tile = mask[:, :, y:y+self.tile_size, x:x+self.tile_size]
                 if self.tile_has_watermark(mask_tile=mask_tile):
-                    out_tile = self.session.run(
-                        [self.output_name],
-                        {
-                            self.image_input_name: img_tile,
-                            self.mask_input_name: mask_tile
-                        }
-                    )[0]
+                    if self._graph_runner is not None:
+                        out_tile = self._graph_runner.run(
+                            {
+                                self.image_input_name: img_tile,
+                                self.mask_input_name: mask_tile,
+                            }
+                        )[self.output_name]
+                    else:
+                        out_tile = self.session.run(
+                            [self.output_name],
+                            {
+                                self.image_input_name: img_tile,
+                                self.mask_input_name: mask_tile
+                            }
+                        )[0]
                 else:
                     out_tile = img_tile * 255.0
                 output[:, :, y:y+self.tile_size, x:x+self.tile_size] = out_tile

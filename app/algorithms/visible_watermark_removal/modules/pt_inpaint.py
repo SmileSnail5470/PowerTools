@@ -5,38 +5,20 @@ import cv2
 import numpy as np
 import onnxruntime as ort
 ort.preload_dlls(directory="")
-from app.algorithms import general_inference_session
+from app.algorithms import general_inference_session, general_provider, general_session, ORTEnvironment
+ORTEnvironment.initialize()
 
 
 class PatchWiperInpaint():
     def __init__(self):
         self.tile_size = 512
 
-    def _hash_cuda_gpu(self):
-        if platform.system() != "Windows":
-            return True
-        cuda_path = r"C:\Program Files\NVIDIA Corporation"
-        if os.path.exists(cuda_path):
-            return True
-        return False
-
     def _create_predictor(self):
-        session_options = ort.SessionOptions()
+        session_options = general_session()
         if os.getenv("WATERMARK_REMOVAL_MEMORY_OPTIMATION", False):
             session_options.enable_cpu_mem_arena = False
             session_options.enable_mem_pattern = False
-        session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        available = ort.get_available_providers()
-        is_apple_silicon = sys.platform == "darwin" and platform.machine() == "arm64"
-        if is_apple_silicon:
-            providers = ["CPUExecutionProvider"]
-            provider_options = [{}]
-        elif "CUDAExecutionProvider" in available and self._hash_cuda_gpu():
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            provider_options = [{}, {}]
-        else:
-            providers = ["CPUExecutionProvider"]
-            provider_options = [{}]
+        providers, provider_options = general_provider()
         self.session = general_inference_session(
             self.onnx_path,
             providers=providers,

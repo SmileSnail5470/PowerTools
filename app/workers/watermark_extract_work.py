@@ -4,7 +4,7 @@ import platform
 from PIL import Image, ImageDraw, ImageFont
 import app.utils.ffmpeg as ffmpeg
 from app.ui.common.config import cfg
-from app.workers.work_base import BaseWorker
+from app.workers.work_base import BaseWorker, _resolve_hardware_variant
 from app.utils.logger.decorators import log_exception
 
 from app.algorithms.blind_watermark_addition.blind_watermark_addition_image import ImageBlindWatermarkDetect
@@ -124,7 +124,7 @@ class WatermarkExtractWork(BaseWorker):
                 "input_image_path": input_path
             }
             self._get_image_instance().prepare(
-                onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_image_detect.encmodel".format(kwargs["blind_watermark_model_name"]))
+                onnx_path=os.path.join(self.deps_path, _resolve_hardware_variant(), "blind_watermark_addition", "{0}_image_detect.encmodel".format(kwargs["blind_watermark_model_name"]))
             )
             if progress_cb is not None:
                 progress_cb("BlindWatermarkExtractStart", "")
@@ -138,7 +138,7 @@ class WatermarkExtractWork(BaseWorker):
                 "chunk_size": 8
             }
             self._get_video_instance().prepare(
-                onnx_path=os.path.join(self.deps_path, "blind_watermark_addition", "{0}_video_detect.encmodel".format(kwargs["blind_watermark_model_name"])),
+                onnx_path=os.path.join(self.deps_path, _resolve_hardware_variant(), "blind_watermark_addition", "{0}_video_detect.encmodel".format(kwargs["blind_watermark_model_name"])),
                 ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN")
             )
             if progress_cb is not None:

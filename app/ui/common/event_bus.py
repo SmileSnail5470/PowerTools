@@ -26,5 +26,12 @@ class GlobalEventBus(QObject):
     OCR_ImageNavigationInit = Signal()
     OCR_TaskFinishedByModel = Signal(str)
 
+    # 暗水印 UI
+    blindWatermarkRemove_InputFileUpdate = Signal(str)
+    blindWatermarkRemove_TaskFinished = Signal(str, tuple)
+    blindWatermarkRemove_PreviewFile = Signal(str)
+    blindWatermarkRemove_ImageNavigationInit = Signal()
+    blindWatermarkRemove_TaskFinishedByModel = Signal(str)
+
 
 global_event_bus = GlobalEventBus()

@@ -6,35 +6,17 @@ import onnxruntime as ort
 ort.preload_dlls(directory="")
 from app.algorithms.blind_watermark_addition.ecc_utils import HammingECC
 import app.utils.ffmpeg as ffmpeg
-from app.algorithms import general_inference_session
+from app.algorithms import general_inference_session, general_provider, general_session, ORTEnvironment
+ORTEnvironment.initialize()
 
 
 class VideoBlindWatermarkEmbed():
     def __init__(self):
         pass
 
-    def _hash_cuda_gpu(self):
-        if platform.system() != "Windows":
-            return True
-        cuda_path = r"C:\Program Files\NVIDIA Corporation"
-        if os.path.exists(cuda_path):
-            return True
-        return False
-
     def _create_predictor(self):
-        session_options = ort.SessionOptions()
-        session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        available = ort.get_available_providers()
-        is_apple_silicon = sys.platform == "darwin" and platform.machine() == "arm64"
-        if is_apple_silicon:
-            providers = ["CPUExecutionProvider"]
-            provider_options = [{}]
-        elif "CUDAExecutionProvider" in available and self._hash_cuda_gpu():
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            provider_options = [{}, {}]
-        else:
-            providers = ["CPUExecutionProvider"]
-            provider_options = [{}]
+        session_options = general_session()
+        providers, provider_options = general_provider(use_cpu=True)
         self.session = general_inference_session(
             self.onnx_path,
             providers=providers,
@@ -179,28 +161,9 @@ class VideoBlindWatermarkDetect():
     def __init__(self):
         pass
 
-    def _hash_cuda_gpu(self):
-        if platform.system() != "Windows":
-            return True
-        cuda_path = r"C:\Program Files\NVIDIA Corporation"
-        if os.path.exists(cuda_path):
-            return True
-        return False
-
     def _create_predictor(self):
-        session_options = ort.SessionOptions()
-        session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        available = ort.get_available_providers()
-        is_apple_silicon = sys.platform == "darwin" and platform.machine() == "arm64"
-        if is_apple_silicon:
-            providers = ["CPUExecutionProvider"]
-            provider_options = [{}]
-        elif "CUDAExecutionProvider" in available and self._hash_cuda_gpu():
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            provider_options = [{}, {}]
-        else:
-            providers = ["CPUExecutionProvider"]
-            provider_options = [{}]
+        session_options = general_session()
+        providers, provider_options = general_provider(use_cpu=True)
         self.session = general_inference_session(
             self.onnx_path,
             providers=providers,

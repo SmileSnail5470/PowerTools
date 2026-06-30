@@ -1,21 +1,19 @@
 import hashlib
 import logging
 import os
-import gdown
 import platform
 import shutil
-import ssl
 import subprocess
 import sys
 import tarfile
 import zipfile
-from PySide6.QtCore import Qt, Signal, QRunnable, QObject, QThread
+from PySide6.QtCore import Qt, Signal, QRunnable, QObject, QPropertyAnimation, QEasingCurve
 from PySide6.QtWidgets import(
     QHBoxLayout, QWidget, QVBoxLayout, QLabel, QFrame, QLineEdit, QPushButton, QFileDialog,
-    QSizePolicy, QDialog, QProgressBar, QTextEdit
+    QSizePolicy, QDialog, QProgressBar, QTextEdit, QButtonGroup
 )
-from PySide6.QtGui import QFont
-import urllib.request
+from PySide6.QtGui import QFont, QPainter, QPen, QColor
+from huggingface_hub import snapshot_download
 
 from app.ui.library.qfluentwidgets import(
     setFont, ScrollArea, TeachingTip, InfoBarIcon, TeachingTipTailPosition, FluentIcon,
@@ -27,30 +25,56 @@ from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 from app.ui.library.qframelesswindow.titlebar import CloseButton
 from app.ui.common.config import cfg, Language
 from app.controllers.task_manager import InternalTaskManager
+from app.ui.common.utils import global_backend_info_cache
 from app.utils.logger import get_log_manager
 from app.utils.logger.decorators import log_exception, log_function_call
 
 
+def detect_gpu_available() -> bool:
+    status, _ = global_backend_info_cache.get()
+    return "GPU" in status
+
+
+HF_REPO_ID = "SmailSnail/PowerToolsEnc"
+HF_MIRROR_ENDPOINT = "https://hf-mirror.com"
+
 models_deps_urls = {
     "visible_watermark_removal": {
-        "url": "11_MWFIk8tgKXOjRszVm8_GYnyaDJPYyx",
-        "sha256": None
+        "cpu": {"path": "CPU/visible_watermark_removal", "sha256": None},
+        "gpu": {"path": "GPU/visible_watermark_removal", "sha256": None},
     },
     "blind_watermark_addition": {
-        "url": "1K0TUa76B-EYQm8pdiyVVZvXhLT7jJUoc",
-        "sha256": None
+        "cpu": {"path": "CPU/blind_watermark_addition", "sha256": None},
+        "gpu": {"path": "GPU/blind_watermark_addition", "sha256": None},
     },
     "ocr": {
-        "url": "16BNBEEbuIazFIp2jCrkVQgJCnL2Bx_k7",
-        "sha256": None
+        "cpu": {"path": "CPU/ocr", "sha256": None},
+        "gpu": {"path": "GPU/ocr", "sha256": None},
     },
     "segment": {
-        "url": "19-WHk4g9BCIAukQntt8lnI0n9cgh042g",
-        "sha256": None
+        "cpu": {"path": "CPU/segment", "sha256": None},
+        "gpu": {"path": "GPU/segment", "sha256": None},
     },
     "video_inpainting": {
-        "url": "1dwEBhZ465TcNXUBiSfCDsRSzRIpNKYqA",
-        "sha256": None
+        "cpu": {"path": "CPU/video_inpainting", "sha256": None},
+        "gpu": {"path": "GPU/video_inpainting", "sha256": None},
+    }
+}
+
+model_estimated_sizes = {
+    "gpu": {
+        "blind_watermark_addition": "1.08 GB",
+        "visible_watermark_removal": "2.48 GB",
+        "segment": "2.63 GB",
+        "ocr": "217 MB",
+        "video_inpainting": "183 MB",
+    },
+    "cpu": {
+        "blind_watermark_addition": "1.08 GB",
+        "visible_watermark_removal": "2.58 GB",
+        "segment": "1.42 GB",
+        "ocr": "217 MB",
+        "video_inpainting": "261 MB",
     }
 }
 
@@ -78,9 +102,11 @@ class WorkerSignals(QObject):
 
 
 class InitWorker(QRunnable):
-    def __init__(self, task_name: str, parent: QObject = None):
+    def __init__(self, task_name: str, variant: str = "cpu", use_mirror: bool = False, parent: QObject = None):
         super().__init__()
         self.task_name = task_name
+        self.variant = variant
+        self.use_mirror = use_mirror
         self.signals = WorkerSignals(parent=parent)
         self.cancelled = False
         self.deps_path = cfg.get(cfg.localAIModelDeps)
@@ -118,89 +144,51 @@ class InitWorker(QRunnable):
                 tf.extractall(output_dir)
         return output_dir
     
-    def _download_from_url(self, url, output_path, expected_size=None, expected_sha256=None, extract_to=None):
-        max_retries = 3
-        backoff = 0.5
-        chunk_size = 1024 * 512
-        temp_path = output_path + ".part"
-        downloaded = 0
-
-        if os.path.exists(temp_path):
-            downloaded = os.path.getsize(temp_path)
-
-        context = ssl._create_unverified_context()
-        for attempt in range(1, max_retries + 1):
-            try:
-                headers = {}
-                if downloaded > 0:
-                    headers["Range"] = f"bytes={downloaded}-"
-
-                req = urllib.request.Request(url, headers=headers)
-
-                with urllib.request.urlopen(req, context=context) as resp:
-                    with open(temp_path, "ab") as f:
-                        while True:
-                            chunk = resp.read(chunk_size)
-                            if not chunk:
-                                break
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                break
-            except Exception as e:
-                if attempt >= max_retries:
-                    raise Exception(f"download failed: {e}")
-                wait = backoff * (2 ** (attempt - 1))
-                QThread.msleep(wait * 1000)
-
-        if os.path.exists(output_path):
-            os.remove(output_path)
-        os.rename(temp_path, output_path)
-
-        if expected_size is not None:
-            actual_size = os.path.getsize(output_path)
-            if actual_size != expected_size:
-                raise Exception(f"download file size check failed: expected {expected_size}, actual {actual_size}")
-
-        if expected_sha256 is not None:
-            actual_sha256 = self._sha256_of_file(output_path)
-            if actual_sha256.lower() != expected_sha256.lower():
-                raise Exception(f"SHA256 check failed: \n Expected: {expected_sha256}\n Actual: {actual_sha256}")
-
-        if extract_to:
-            os.makedirs(extract_to, exist_ok=True)
-            self._extract_if_needed(output_path, extract_to)
-            os.remove(output_path)
-
-    def _download_from_google_driver(self, url, output_path, expected_size=None, expected_sha256=None, extract_to=None):
-        if os.path.exists(output_path):
-            os.remove(output_path)
-        gdown.download(id=url, output=output_path)
-        if expected_size is not None:
-            actual_size = os.path.getsize(output_path)
-            if actual_size != expected_size:
-                raise Exception(f"download file size check failed: expected {expected_size}, actual {actual_size}")
-        if expected_sha256 is not None:
-            actual_sha256 = self._sha256_of_file(output_path)
-            if actual_sha256.lower() != expected_sha256.lower():
-                raise Exception(f"SHA256 check failed: \n Expected: {expected_sha256}\n Actual: {actual_sha256}")
-        if extract_to:
-            os.makedirs(extract_to, exist_ok=True)
-            self._extract_if_needed(output_path, extract_to)
-            os.remove(output_path)
-
     @log_function_call(logger=logging.getLogger("UI"), level=logging.INFO)
     def _download_module(self):
-        logger.info(f"start download {self.task_name} module.")
-        resources_url = models_deps_urls[self.task_name]["url"]
-        if not resources_url:
-            raise Exception(f"{self.task_name} download_url not exist.")
-        self._download_from_google_driver(
-            url=resources_url,
-            output_path=os.path.join(self.deps_path, "modules_deps.zip"),
-            expected_sha256=models_deps_urls[self.task_name]["sha256"],
-            extract_to=self.deps_path
-        )
-        logger.info(f"download {self.task_name} module success.")
+        logger.info(f"start download {self.task_name} ({self.variant}) module, mirror={self.use_mirror}.")
+        model_info = models_deps_urls[self.task_name][self.variant]
+        dir_path = model_info["path"]
+        if not dir_path:
+            raise Exception(f"{self.task_name} ({self.variant}) download path not exist.")
+
+        endpoint = HF_MIRROR_ENDPOINT if self.use_mirror else None
+        variant_deps_path = os.path.join(self.deps_path, self.variant)
+        os.makedirs(variant_deps_path, exist_ok=True)
+
+        self.signals.progress.emit(f"正在下载: {self.task_name} ({self.variant})...")
+        try:
+            snapshot_download(
+                repo_id=HF_REPO_ID,
+                allow_patterns=f"{dir_path}/**",
+                local_dir=variant_deps_path,
+                endpoint=endpoint,
+            )
+        except Exception:
+            cache_dir = os.path.join(variant_deps_path, ".cache")
+            if os.path.exists():
+                shutil.rmtree(cache_dir)
+            CPU_dir = os.path.join(variant_deps_path, "CPU")
+            if os.path.exists():
+                shutil.rmtree(CPU_dir)
+            GPU_dir = os.path.join(variant_deps_path, "GPU")
+            if os.path.exists():
+                shutil.rmtree(GPU_dir)
+            raise Exception(f"Download {dir_path} failed")
+
+        for item in os.listdir(variant_deps_path):
+            path = os.path.join(variant_deps_path, item)
+            if item not in ["CPU", "GPU"]:
+                continue
+            for tmp_item in os.listdir(path):
+                src_path = os.path.join(path, tmp_item)
+                dst_path = variant_deps_path
+                shutil.move(src_path, dst_path)
+            shutil.rmtree(path)
+        cache_dir = os.path.join(variant_deps_path, ".cache")
+        if os.path.exists(cache_dir):
+            shutil.rmtree(cache_dir)
+        logger.info(f"download {self.task_name} ({self.variant}) module success.")
 
     def _init_model(self):
         need_download = False
@@ -214,11 +202,11 @@ class InitWorker(QRunnable):
         self._download_module()
 
     def _valid_model(self):
-        current_task_deps_path = os.path.join(self.deps_path, self.task_name)
+        current_task_deps_path = os.path.join(self.deps_path, self.variant, self.task_name)
         if not os.path.exists(current_task_deps_path):
-            raise Exception(f"{self.task_name} deps valid failed for {current_task_deps_path} not exist.")
+            raise Exception(f"{self.task_name} ({self.variant}) deps valid failed for {current_task_deps_path} not exist.")
         if not os.listdir(current_task_deps_path):
-            raise Exception(f"{self.task_name} deps valid failed for {current_task_deps_path} is empty.")
+            raise Exception(f"{self.task_name} ({self.variant}) deps valid failed for {current_task_deps_path} is empty.")
 
     @log_exception(logger=logging.getLogger("UI"), reraise=True, log_args=True)
     def _step(self, task_step: str, msg: str):
@@ -259,6 +247,54 @@ class InitWorker(QRunnable):
         except Exception as e:
             self.signals.finished.emit(False, str(e))
 
+class ChevronButton(QWidget):
+    clicked = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(28, 28)
+        self.setCursor(Qt.PointingHandCursor)
+        self._rotated = False
+        self._color = QColor("#9ca3af")
+        self._hover = False
+
+    def set_rotated(self, rotated: bool):
+        self._rotated = rotated
+        self.update()
+
+    def enterEvent(self, event):
+        self._hover = True
+        self.update()
+
+    def leaveEvent(self, event):
+        self._hover = False
+        self.update()
+
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        color = QColor("#4b5563") if self._hover else QColor("#9ca3af")
+        pen = QPen(color, 2.0)
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+        p.setPen(pen)
+        p.setBrush(Qt.NoBrush)
+
+        # Draw chevron path centered in widget
+        cx, cy = self.width() / 2, self.height() / 2
+        if self._rotated:
+            # Up chevron: ∧
+            p.drawLine(int(cx - 5), int(cy + 2), int(cx), int(cy - 3))
+            p.drawLine(int(cx), int(cy - 3), int(cx + 5), int(cy + 2))
+        else:
+            # Down chevron: ∨
+            p.drawLine(int(cx - 5), int(cy - 2), int(cx), int(cy + 3))
+            p.drawLine(int(cx), int(cy + 3), int(cx + 5), int(cy - 2))
+        p.end()
+
 
 class StatusBadge(QWidget):
     def __init__(self, text: str, color: str, parent=None, name=""):
@@ -293,8 +329,218 @@ class StatusBadge(QWidget):
         """)
 
 
+class ModelVariantPanel(QWidget):
+    variantChanged = Signal(str)
+
+    def __init__(self, config_key: str, parent=None):
+        super().__init__(parent)
+        self.config_key = config_key
+        self._expanded = False
+        self._panel_height = 140
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Collapsible panel content
+        self.panel = QWidget()
+        self.panel.setMaximumHeight(0)
+        self.panel.setStyleSheet("background: #fcfcfc; border-top: 1px dashed #e5e5e5;")
+
+        panel_layout = QVBoxLayout(self.panel)
+        panel_layout.setContentsMargins(24, 12, 24, 16)
+        panel_layout.setSpacing(12)
+
+        # Row 1: hardware optimization segmented control
+        hw_row = QHBoxLayout()
+        hw_row.setSpacing(12)
+        label = QLabel(self.tr("硬件优化:"))
+        setFont(label, 13, QFont.DemiBold)
+        label.setStyleSheet("color: #1a1a1a; border: none;")
+        hw_row.addWidget(label)
+
+        seg_container = QWidget()
+        seg_container.setStyleSheet("background: #f0f0f0; border-radius: 8px; border: none;")
+        seg_layout = QHBoxLayout(seg_container)
+        seg_layout.setContentsMargins(3, 3, 3, 3)
+        seg_layout.setSpacing(0)
+
+        self.cpu_btn = QPushButton("CPU 优化")
+        self.gpu_btn = QPushButton("GPU 加速")
+        for btn in (self.cpu_btn, self.gpu_btn):
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            setFont(btn, 13, QFont.Medium)
+        self.cpu_btn.setChecked(True)
+
+        self._btn_group = QButtonGroup(self)
+        self._btn_group.setExclusive(True)
+        self._btn_group.addButton(self.cpu_btn, 0)
+        self._btn_group.addButton(self.gpu_btn, 1)
+        self._btn_group.idClicked.connect(self._on_segment_clicked)
+
+        seg_layout.addWidget(self.cpu_btn)
+        seg_layout.addWidget(self.gpu_btn)
+        hw_row.addWidget(seg_container)
+        hw_row.addStretch()
+        panel_layout.addLayout(hw_row)
+
+        # Row 2: mirror acceleration toggle
+        mirror_row = QHBoxLayout()
+        mirror_row.setSpacing(12)
+        mirror_label = QLabel(self.tr("国内加速:"))
+        setFont(mirror_label, 13, QFont.DemiBold)
+        mirror_label.setStyleSheet("color: #1a1a1a; border: none;")
+        mirror_row.addWidget(mirror_label)
+
+        self.mirror_switch = ToggleSwitch()
+        self.mirror_switch.setActive(self._load_mirror_preference())
+        self.mirror_switch.toggled.connect(self._on_mirror_toggled)
+        mirror_row.addWidget(self.mirror_switch)
+
+        mirror_tip = QLabel(self.tr("开启后使用 hf-mirror.com 镜像加速下载"))
+        mirror_tip.setStyleSheet("color: #9ca3af; border: none;")
+        setFont(mirror_tip, 11)
+        mirror_row.addWidget(mirror_tip)
+        mirror_row.addStretch()
+        panel_layout.addLayout(mirror_row)
+
+        # Row 3: model status, estimated size, download button
+        info_row = QHBoxLayout()
+        info_row.setSpacing(8)
+
+        self.status_label = QLabel(self.tr("模型状态: ") + f"<b style='color:#e65100;'>{self.tr('未下载')}</b>")
+        self.status_label.setStyleSheet("color: #666; border: none;")
+        setFont(self.status_label, 13)
+        info_row.addWidget(self.status_label)
+
+        sep_label = QLabel("|")
+        sep_label.setStyleSheet("color: #ccc; border: none;")
+        info_row.addWidget(sep_label)
+
+        estimated_size = model_estimated_sizes.get("cpu", {}).get(config_key, "-- MB")
+        self.size_label = QLabel(self.tr("预计大小: ") + estimated_size)
+        self.size_label.setStyleSheet("color: #666; border: none;")
+        setFont(self.size_label, 13)
+        info_row.addWidget(self.size_label)
+        info_row.addStretch()
+        panel_layout.addLayout(info_row)
+
+        self._update_segment_styles()
+
+        main_layout.addWidget(self.panel)
+
+        # Animation
+        self._anim = QPropertyAnimation(self.panel, b"maximumHeight")
+        self._anim.setDuration(200)
+        self._anim.setEasingCurve(QEasingCurve.InOutCubic)
+
+        self._load_preference()
+        self._check_model_status()
+
+    def _check_model_status(self):
+        variant = self.get_variant()
+        deps_path = cfg.get(cfg.localAIModelDeps)
+        downloaded = False
+        if deps_path:
+            model_path = os.path.join(deps_path, variant, self.config_key)
+            if os.path.exists(model_path) and os.listdir(model_path):
+                downloaded = True
+        if downloaded:
+            self.status_label.setText(self.tr("模型状态: ") + f"<b style='color:#2da44e;'>{self.tr('已就绪')}</b>")
+        else:
+            self.status_label.setText(self.tr("模型状态: ") + f"<b style='color:#e65100;'>{self.tr('未下载')}</b>")
+
+    def _seg_active_style(self):
+        return """
+            QPushButton { background: #ffffff; color: #1a1a1a; border: none;
+                border-radius: 6px; padding: 6px 16px; }
+        """
+
+    def _seg_inactive_style(self):
+        return """
+            QPushButton { background: transparent; color: #555; border: none;
+                border-radius: 6px; padding: 6px 16px; }
+            QPushButton:hover { background: #e8e8e8; }
+        """
+
+    def _update_segment_styles(self):
+        self.cpu_btn.setStyleSheet(self._seg_active_style() if self.cpu_btn.isChecked() else self._seg_inactive_style())
+        self.gpu_btn.setStyleSheet(self._seg_active_style() if self.gpu_btn.isChecked() else self._seg_inactive_style())
+
+    def _on_segment_clicked(self, id):
+        self._update_segment_styles()
+        variant = "cpu" if id == 0 else "gpu"
+        self._save_preference(variant)
+        self._update_size_label(variant)
+        self._check_model_status()
+        self.variantChanged.emit(variant)
+
+    def _update_size_label(self, variant: str):
+        size = model_estimated_sizes.get(variant, {}).get(self.config_key, "-- MB")
+        self.size_label.setText(self.tr("预计大小: ") + size)
+
+    def get_variant(self) -> str:
+        return "gpu" if self.gpu_btn.isChecked() else "cpu"
+
+    def _load_preference(self):
+        try:
+            variant = cfg.get(cfg.additionalParams).get("ModelVariants", {}).get(self.config_key, None)
+        except Exception:
+            variant = None
+        if variant is None:
+            hw_type = cfg.get(cfg.hardwareOptimizationType)
+            if hw_type == "CPU":
+                variant = "cpu"
+            elif hw_type == "GPU":
+                variant = "gpu"
+            else:
+                variant = "gpu" if detect_gpu_available() else "cpu"
+            self._save_preference(variant)
+        if variant == "gpu":
+            self.gpu_btn.setChecked(True)
+        else:
+            self.cpu_btn.setChecked(True)
+        self._update_segment_styles()
+        self._update_size_label(variant)
+
+    def _save_preference(self, variant: str):
+        params = cfg.get(cfg.additionalParams)
+        variants = params.get("ModelVariants", {})
+        variants[self.config_key] = variant
+        params["ModelVariants"] = variants
+        cfg.additionalParams.value = params
+
+    def _load_mirror_preference(self) -> bool:
+        try:
+            return cfg.get(cfg.additionalParams).get("use_hf_mirror", True)
+        except Exception:
+            return False
+
+    def _on_mirror_toggled(self, flag: bool):
+        params = cfg.get(cfg.additionalParams)
+        params["use_hf_mirror"] = flag
+        cfg.additionalParams.value = params
+
+    def use_mirror(self) -> bool:
+        return self.mirror_switch.isActive()
+
+    def toggle_expand(self):
+        self._expanded = not self._expanded
+        self._anim.stop()
+        self._anim.setStartValue(self.panel.maximumHeight())
+        self._anim.setEndValue(self._panel_height if self._expanded else 0)
+        self._anim.start()
+
+    def is_expanded(self) -> bool:
+        return self._expanded
+    
+    def check_model_status(self):
+        self._check_model_status()
+
+
 class InitProgressDialog(QDialog):
-    def __init__(self, title="", parent=None):
+    def __init__(self, title="", variant: str = "cpu", parent=None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setModal(True)
@@ -317,7 +563,8 @@ class InitProgressDialog(QDialog):
         main_layout.addWidget(self.bg_widget)
 
         header_layout = QHBoxLayout()
-        title_label = QLabel(self.tr("🔧 环境初始化中，请稍候…"))
+        variant_label = "GPU 加速" if variant == "gpu" else "CPU 优化"
+        title_label = QLabel(self.tr(f"🔧 正在初始化 {variant_label} 环境，请稍候…"))
         setFont(title_label, 14, QFont.Bold)
         title_label.setStyleSheet("color: #1f2937;")
         header_layout.addWidget(title_label)
@@ -696,7 +943,7 @@ class Settings(QWidget):
         
         auto_start_switch = ToggleSwitch()
         auto_start_switch.setActive(cfg.get(cfg.autoStartup))
-        auto_start_switch.toggled.connect(lambda flag: setattr(cfg.autoStartup, "value", flag))
+        auto_start_switch.toggled.connect(lambda flag: cfg.set(cfg.autoStartup, flag))
         auto_start_card = CustomCardGroupWidget(title=self.tr("开机自启动"), content=self.tr("系统启动时自动运行程序（开发中）"), parent=self)
         auto_start_card.addWidget(auto_start_switch, stretch=0)
         auto_start_card.setSeparatorVisible(True)
@@ -704,7 +951,7 @@ class Settings(QWidget):
 
         auto_update_switch = ToggleSwitch()
         auto_update_switch.setActive(cfg.get(cfg.autoUpdate))
-        auto_update_switch.toggled.connect(lambda flag: setattr(cfg.autoUpdate, "value", flag))
+        auto_update_switch.toggled.connect(lambda flag: cfg.set(cfg.autoUpdate, flag))
         auto_update_card = CustomCardGroupWidget(title=self.tr("自动更新"), content=self.tr("自动检查并安装新版本（开发中）"), parent=self)
         auto_update_card.addWidget(auto_update_switch, stretch=0)
         auto_update_card.setSeparatorVisible(True)
@@ -712,7 +959,7 @@ class Settings(QWidget):
 
         self.cache_line_edit = QLineEdit()
         self.cache_line_edit.setText(cfg.get(cfg.cachePath))
-        self.cache_line_edit.textChanged.connect(lambda path: setattr(cfg.cachePath, "value", path))
+        self.cache_line_edit.textChanged.connect(lambda path: cfg.set(cfg.cachePath, path))
         self.cache_line_edit.textChanged.connect(lambda path: get_log_manager().update_log_dir(os.path.join(path, "logs")))
         setFont(self.cache_line_edit, 14)
         self.cache_line_edit.setStyleSheet("""
@@ -738,7 +985,7 @@ class Settings(QWidget):
 
         theme_combox = ComboBox()
         theme_combox.setText(theme_map[cfg.get(cfg.uiTheme)])
-        theme_combox.currentTextChanged.connect(lambda text: setattr(cfg.uiTheme, "value", theme_map[text]))
+        theme_combox.currentTextChanged.connect(lambda text: cfg.set(cfg.uiTheme, theme_map[text]))
         setFont(theme_combox, 14)
         theme_combox.addItems(["浅色"])
         theme_card = CustomCardGroupWidget(title=self.tr("界面主题"), content=self.tr("选择您喜欢的界面风格"), parent=self)
@@ -748,7 +995,7 @@ class Settings(QWidget):
 
         language_combox = ComboBox()
         language_combox.setText(language_map[cfg.language.serialize()])
-        language_combox.currentTextChanged.connect(lambda text: setattr(cfg.language, "value", language_map[text]))
+        language_combox.currentTextChanged.connect(lambda text: cfg.set(cfg.language, language_map[text]))
         setFont(language_combox, 14)
         language_combox.addItems(["简体中文"])
         language_card = CustomCardGroupWidget(title=self.tr("语言设置"), content=self.tr("选择界面显示语言"), parent=self)
@@ -761,6 +1008,15 @@ class Settings(QWidget):
 
         return settings
     
+    def _create_chevron_btn(self, panel: ModelVariantPanel):
+        btn = ChevronButton()
+        btn.clicked.connect(lambda: self._toggle_chevron(btn, panel))
+        return btn
+
+    def _toggle_chevron(self, btn: ChevronButton, panel: ModelVariantPanel):
+        panel.toggle_expand()
+        btn.set_rotated(panel.is_expanded())
+
     def _create_local_ai_settings(self):
         self.ai_toggle_switchs: list[ToggleSwitch] = []
         ai_settings_cards = []
@@ -768,7 +1024,7 @@ class Settings(QWidget):
 
         localAIModelDeps_line_edit = QLineEdit()
         localAIModelDeps_line_edit.setText(cfg.get(cfg.localAIModelDeps))
-        localAIModelDeps_line_edit.textChanged.connect(lambda path: setattr(cfg.localAIModelDeps, "value", path))
+        localAIModelDeps_line_edit.textChanged.connect(lambda path: cfg.set(cfg.localAIModelDeps, path))
         localAIModelDeps_line_edit.textChanged.connect(self._update_toggle_switch_off)
         setFont(localAIModelDeps_line_edit, 14)
         localAIModelDeps_line_edit.setStyleSheet("""
@@ -795,7 +1051,7 @@ class Settings(QWidget):
         blind_watermark_switch = ToggleSwitch()
         self.ai_toggle_switchs.append(blind_watermark_switch)
         blind_watermark_switch.setActive(cfg.get(cfg.localBlindWatermarkEnabled))
-        blind_watermark_switch.toggled.connect(lambda flag: setattr(cfg.localBlindWatermarkEnabled, "value", flag))
+        blind_watermark_switch.toggled.connect(lambda flag: cfg.set(cfg.localBlindWatermarkEnabled, flag))
         blind_watermark_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="blind_watermark_addition")
         try:
             text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{blind_watermark_status.name}_status_info"]["text"]
@@ -803,21 +1059,26 @@ class Settings(QWidget):
             blind_watermark_status.setLabel(text=text, color=color)
         except Exception:
             pass
+        blind_watermark_panel = ModelVariantPanel(config_key="blind_watermark_addition", parent=self)
         self._bind_ai_toggle(
             switch=blind_watermark_switch,
             badge=blind_watermark_status,
-            local_ai_type="blind_watermark_addition"
+            local_ai_type="blind_watermark_addition",
+            panel=blind_watermark_panel
         )
+        blind_watermark_chevron = self._create_chevron_btn(blind_watermark_panel)
         blind_watermark_card = CustomCardGroupWidget(title=self.tr("盲水印AI能力"), content=self.tr("为图像添加不可见的数字水印，保护版权"), parent=self)
         blind_watermark_card.addWidget(blind_watermark_status, stretch=0)
         blind_watermark_card.addWidget(blind_watermark_switch, stretch=0)
+        blind_watermark_card.addWidget(blind_watermark_chevron, stretch=0)
+        blind_watermark_card.vBoxLayout.addWidget(blind_watermark_panel)
         blind_watermark_card.setSeparatorVisible(True)
         ai_settings_cards.append(blind_watermark_card)
 
         watermark_removal_switch = ToggleSwitch()
         self.ai_toggle_switchs.append(watermark_removal_switch)
         watermark_removal_switch.setActive(cfg.get(cfg.localWatermarkRemovalEnabled))
-        watermark_removal_switch.toggled.connect(lambda flag: setattr(cfg.localWatermarkRemovalEnabled, "value", flag))
+        watermark_removal_switch.toggled.connect(lambda flag: cfg.set(cfg.localWatermarkRemovalEnabled, flag))
         watermark_removal_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="watermark_removal")
         try:
             text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{watermark_removal_status.name}_status_info"]["text"]
@@ -825,21 +1086,26 @@ class Settings(QWidget):
             watermark_removal_status.setLabel(text=text, color=color)
         except Exception:
             pass
+        watermark_removal_panel = ModelVariantPanel(config_key="visible_watermark_removal", parent=self)
         self._bind_ai_toggle(
             switch=watermark_removal_switch,
             badge=watermark_removal_status,
-            local_ai_type="visible_watermark_removal"
+            local_ai_type="visible_watermark_removal",
+            panel=watermark_removal_panel
         )
+        watermark_removal_chevron = self._create_chevron_btn(watermark_removal_panel)
         watermark_removal_card = CustomCardGroupWidget(title=self.tr("水印去除AI能力"), content=self.tr("智能去除图像中的水印和标志"), parent=self)
         watermark_removal_card.addWidget(watermark_removal_status, stretch=0)
         watermark_removal_card.addWidget(watermark_removal_switch, stretch=0)
+        watermark_removal_card.addWidget(watermark_removal_chevron, stretch=0)
+        watermark_removal_card.vBoxLayout.addWidget(watermark_removal_panel)
         watermark_removal_card.setSeparatorVisible(True)
         ai_settings_cards.append(watermark_removal_card)
 
         object_segmentation_switch = ToggleSwitch()
         self.ai_toggle_switchs.append(object_segmentation_switch)
         object_segmentation_switch.setActive(cfg.get(cfg.localObjectSegmentationEnabled))
-        object_segmentation_switch.toggled.connect(lambda flag: setattr(cfg.localObjectSegmentationEnabled, "value", flag))
+        object_segmentation_switch.toggled.connect(lambda flag: cfg.set(cfg.localObjectSegmentationEnabled, flag))
         object_segmentation_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="object_segmentation")
         try:
             text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{object_segmentation_status.name}_status_info"]["text"]
@@ -847,21 +1113,26 @@ class Settings(QWidget):
             object_segmentation_status.setLabel(text=text, color=color)
         except Exception:
             pass
+        object_segmentation_panel = ModelVariantPanel(config_key="segment", parent=self)
         self._bind_ai_toggle(
             switch=object_segmentation_switch,
             badge=object_segmentation_status,
-            local_ai_type="segment"
+            local_ai_type="segment",
+            panel=object_segmentation_panel
         )
+        object_segmentation_chevron = self._create_chevron_btn(object_segmentation_panel)
         object_segmentation_card = CustomCardGroupWidget(title=self.tr("物体分割AI能力"), content=self.tr("智能分割图像中的物体"), parent=self)
         object_segmentation_card.addWidget(object_segmentation_status, stretch=0)
         object_segmentation_card.addWidget(object_segmentation_switch, stretch=0)
+        object_segmentation_card.addWidget(object_segmentation_chevron, stretch=0)
+        object_segmentation_card.vBoxLayout.addWidget(object_segmentation_panel)
         object_segmentation_card.setSeparatorVisible(True)
         ai_settings_cards.append(object_segmentation_card)
 
         ocr_switch = ToggleSwitch()
         self.ai_toggle_switchs.append(ocr_switch)
         ocr_switch.setActive(cfg.get(cfg.localOCREnabled))
-        ocr_switch.toggled.connect(lambda flag: setattr(cfg.localOCREnabled, "value", flag))
+        ocr_switch.toggled.connect(lambda flag: cfg.set(cfg.localOCREnabled, flag))
         ocr_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="ocr")
         try:
             text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{ocr_status.name}_status_info"]["text"]
@@ -869,21 +1140,26 @@ class Settings(QWidget):
             ocr_status.setLabel(text=text, color=color)
         except Exception:
             pass
+        ocr_panel = ModelVariantPanel(config_key="ocr", parent=self)
         self._bind_ai_toggle(
             switch=ocr_switch,
             badge=ocr_status,
-            local_ai_type="ocr"
+            local_ai_type="ocr",
+            panel=ocr_panel
         )
+        ocr_chevron = self._create_chevron_btn(ocr_panel)
         ocr_card = CustomCardGroupWidget(title=self.tr("OCR 能力"), content=self.tr("智能识别提取图片中的文字"), parent=self)
         ocr_card.addWidget(ocr_status, stretch=0)
         ocr_card.addWidget(ocr_switch, stretch=0)
+        ocr_card.addWidget(ocr_chevron, stretch=0)
+        ocr_card.vBoxLayout.addWidget(ocr_panel)
         ocr_card.setSeparatorVisible(True)
         ai_settings_cards.append(ocr_card)
 
         video_inpainting_switch = ToggleSwitch()
         self.ai_toggle_switchs.append(video_inpainting_switch)
         video_inpainting_switch.setActive(cfg.get(cfg.localVideoInpaintingEnabled))
-        video_inpainting_switch.toggled.connect(lambda flag: setattr(cfg.localVideoInpaintingEnabled, "value", flag))
+        video_inpainting_switch.toggled.connect(lambda flag: cfg.set(cfg.localVideoInpaintingEnabled, flag))
         video_inpainting_status = StatusBadge(text=self.tr("未启用"), color="#726e62", name="video_inpainting")
         try:
             text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{video_inpainting_status.name}_status_info"]["text"]
@@ -891,14 +1167,19 @@ class Settings(QWidget):
             video_inpainting_status.setLabel(text=text, color=color)
         except Exception:
             pass
+        video_inpainting_panel = ModelVariantPanel(config_key="video_inpainting", parent=self)
         self._bind_ai_toggle(
             switch=video_inpainting_switch,
             badge=video_inpainting_status,
-            local_ai_type="video_inpainting"
+            local_ai_type="video_inpainting",
+            panel=video_inpainting_panel
         )
+        video_inpainting_chevron = self._create_chevron_btn(video_inpainting_panel)
         video_inpainting_card = CustomCardGroupWidget(title=self.tr("视频修复AI能力"), content=self.tr("视频物体移除、水印去除等"), parent=self)
         video_inpainting_card.addWidget(video_inpainting_status, stretch=0)
         video_inpainting_card.addWidget(video_inpainting_switch, stretch=0)
+        video_inpainting_card.addWidget(video_inpainting_chevron, stretch=0)
+        video_inpainting_card.vBoxLayout.addWidget(video_inpainting_panel)
         video_inpainting_card.setSeparatorVisible(True)
         ai_settings_cards.append(video_inpainting_card)
 
@@ -915,7 +1196,7 @@ class Settings(QWidget):
         current_level = cfg.get(cfg.logLevel)
         setFont(log_level_combox, 14)
         log_level_combox.addItems(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
-        log_level_combox.currentTextChanged.connect(lambda text: setattr(cfg.logLevel, "value", text.upper()))
+        log_level_combox.currentTextChanged.connect(lambda text: cfg.set(cfg.logLevel, text.upper()))
         index = log_level_combox.findText(current_level.upper() if isinstance(current_level, str) else current_level)
         if index >= 0:
             log_level_combox.setCurrentIndex(index)
@@ -928,7 +1209,7 @@ class Settings(QWidget):
         current_number = int(cfg.get(cfg.taskParallelNumber))
         setFont(task_parallel_number_combox, 14)
         task_parallel_number_combox.addItems([str(n) for n in [1, 2, 4, 8, 16]])
-        task_parallel_number_combox.currentTextChanged.connect(lambda number: setattr(cfg.taskParallelNumber, "value", int(number)))
+        task_parallel_number_combox.currentTextChanged.connect(lambda number: cfg.set(cfg.taskParallelNumber, int(number)))
         index = task_parallel_number_combox.findText(str(current_number))
         if index >= 0:
             task_parallel_number_combox.setCurrentIndex(index)
@@ -936,6 +1217,19 @@ class Settings(QWidget):
         task_parallel_number_card.addWidget(task_parallel_number_combox, stretch=0)
         task_parallel_number_card.setSeparatorVisible(True)
         performance_settings_cards.append(task_parallel_number_card)
+
+        hardware_optimization_combox = ComboBox()
+        current_hardware = cfg.get(cfg.hardwareOptimizationType)
+        setFont(hardware_optimization_combox, 14)
+        hardware_optimization_combox.addItems(["Auto", "CPU", "GPU"])
+        index = hardware_optimization_combox.findText(current_hardware)
+        if index >= 0:
+            hardware_optimization_combox.setCurrentIndex(index)
+        hardware_optimization_combox.currentTextChanged.connect(self._on_hardware_type_changed)
+        hardware_optimization_card = CustomCardGroupWidget(title=self.tr("硬件加速"), content=self.tr("设置硬件加速类型"), parent=self)
+        hardware_optimization_card.addWidget(hardware_optimization_combox, stretch=0)
+        hardware_optimization_card.setSeparatorVisible(True)
+        performance_settings_cards.append(hardware_optimization_card)
 
         for card in performance_settings_cards:
             performance_settings.addCard(card=card)
@@ -981,25 +1275,26 @@ class Settings(QWidget):
             if old_active is False:
                 switch.toggled.emit(False)
     
-    def _bind_ai_toggle(self, switch: ToggleSwitch, badge: StatusBadge, local_ai_type: str):
+    def _bind_ai_toggle(self, switch: ToggleSwitch, badge: StatusBadge, local_ai_type: str, panel: ModelVariantPanel):
         switch.toggled.connect(
-            lambda flag, switch=switch, badge=badge, local_ai_type=local_ai_type: 
-            self._ai_switch_on_toggle(flag=flag, switch=switch, badge=badge, local_ai_type=local_ai_type)
+            lambda flag, switch=switch, badge=badge, local_ai_type=local_ai_type, panel=panel: 
+            self._ai_switch_on_toggle(flag=flag, switch=switch, badge=badge, local_ai_type=local_ai_type, panel=panel)
         )
 
-    def _ai_switch_on_toggle(self, flag: bool, switch: ToggleSwitch, badge: StatusBadge, local_ai_type: str):
+    def _ai_switch_on_toggle(self, flag: bool, switch: ToggleSwitch, badge: StatusBadge, local_ai_type: str, panel: ModelVariantPanel):
         if flag:
+            variant = panel.get_variant()
             badge.setLabel(text=self.tr("环境初始化中…"), color="#60a5fa")
 
-            progress_dialog = InitProgressDialog(title=self.tr("正在初始化环境..."), parent=self)
+            progress_dialog = InitProgressDialog(title=self.tr("正在初始化环境..."), variant=variant, parent=self)
             progress_dialog.disableCloseBtn()
             progress_dialog.show()
 
-            worker = InitWorker(task_name=local_ai_type, parent=progress_dialog)
+            worker = InitWorker(task_name=local_ai_type, variant=variant, use_mirror=panel.use_mirror(), parent=progress_dialog)
             worker.signals.progress.connect(progress_dialog.append_log)
             worker.signals.finished.connect(
                 lambda ok, msg, switch=switch, badge=badge, progress_dialog=progress_dialog: 
-                self._on_init_finished(ok, msg, switch, badge, progress_dialog)
+                self._on_init_finished(ok, msg, switch, badge, progress_dialog, panel)
             )
             InternalTaskManager.get_pool().start(worker)
         else:
@@ -1007,15 +1302,18 @@ class Settings(QWidget):
             tmp = cfg.get(cfg.additionalParams).get("LocalAISettings", {})
             tmp.update({f"{badge.name}_status_info": {"text": self.tr("未启用"), "color": "#eab308"}})
             cfg.additionalParams.value.update({"LocalAISettings": tmp})
+            panel.check_model_status()
 
     def _on_init_finished(
             self, ok: bool,
             error: str,
             switch: ToggleSwitch, 
             badge: StatusBadge, 
-            progress_dialog: InitProgressDialog
+            progress_dialog: InitProgressDialog,
+            panel: ModelVariantPanel
         ):
         if ok:
+            panel.check_model_status()
             badge.setLabel(text=self.tr("已启用"), color="#22c55e")
             tmp = cfg.get(cfg.additionalParams).get("LocalAISettings", {})
             tmp.update({f"{badge.name}_status_info": {"text": self.tr("已启用"), "color": "#22c55e"}})
@@ -1030,4 +1328,34 @@ class Settings(QWidget):
             progress_dialog.enableCloseBtn()
             progress_dialog.append_log(f"\n❌ 错误信息：{error}")
             progress_dialog.progress.setRange(0, 1)
+
+    def _on_hardware_type_changed(self, value: str):
+        cfg.set(cfg.hardwareOptimizationType, value)
+        if value == "CPU":
+            variant = "cpu"
+        elif value == "GPU":
+            variant = "gpu"
+        else:
+            status, _ = global_backend_info_cache.get()
+            variant = "gpu" if "GPU" in status else "cpu"
+        enabled_map = {
+            "blind_watermark_addition": ("盲水印AI能力", cfg.get(cfg.localBlindWatermarkEnabled)),
+            "visible_watermark_removal": ("水印去除AI能力", cfg.get(cfg.localWatermarkRemovalEnabled)),
+            "segment": ("物体分割AI能力", cfg.get(cfg.localObjectSegmentationEnabled)),
+            "ocr": ("OCR 能力", cfg.get(cfg.localOCREnabled)),
+            "video_inpainting": ("视频修复AI能力", cfg.get(cfg.localVideoInpaintingEnabled)),
+        }
+        deps_path = cfg.get(cfg.localAIModelDeps)
+        missing = []
+        for key, (name, enabled) in enabled_map.items():
+            if not enabled:
+                continue
+            model_path = os.path.join(deps_path, variant, key) if deps_path else ""
+            if not model_path or not os.path.exists(model_path) or not os.listdir(model_path):
+                missing.append(name)
+        if missing:
+            content = self.tr("以下已激活的AI能力尚未下载对应的 {variant} 模型：\n\n").format(variant=variant.upper())
+            content += "\n".join(f"  • {name}" for name in missing)
+            content += self.tr("\n\n请在各模型设置中下载对应硬件版本的模型，否则相关功能将无法正常使用。")
+            MessageBox(title=self.tr("模型缺失提醒"), content=content, parent=self.window()).exec()
 
