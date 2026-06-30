@@ -63,22 +63,30 @@
 3. 按上表完成安装或解压  
 4. 在解压目录中，双击启动 PowerTools
 
-下载 [`ffmpeg`](https://github.com/BtbN/FFmpeg-Builds/releases)，**下载包体积最大的**。在软件的设置页面设置【ffmpeg路径】为`ffmpeg`可执行文件所在的路径目录。例如设置`../ffmpeg/bin` 路径。
+**下载视频解析软件**
+- 下载 [`ffmpeg`](https://github.com/BtbN/FFmpeg-Builds/releases)，**下载包体积最大的**。在软件的设置页面设置【ffmpeg路径】为`ffmpeg`可执行文件所在的路径目录。例如设置`../ffmpeg/bin` 路径。
 
-**可选步骤（也可在设置页面开启对应功能，会自动下载模型文件，需要科学上网才可以下载）：**
-- 下载 【[OCR 模型-夸克网盘](https://pan.quark.cn/s/bd72574ee585)】   【[OCR 模型-谷歌云盘](https://drive.google.com/file/d/16BNBEEbuIazFIp2jCrkVQgJCnL2Bx_k7/view?usp=sharing)】
-- 下载 【[去水印模型-夸克网盘](https://pan.quark.cn/s/6317944f90f4)】   【[去水印模型-谷歌云盘](https://drive.google.com/file/d/11_MWFIk8tgKXOjRszVm8_GYnyaDJPYyx/view?usp=sharing)】
-- 下载 【[盲水印添加模型-夸克网盘](https://pan.quark.cn/s/047c6e883771)】   【[盲水印添加模型-谷歌云盘](https://drive.google.com/file/d/1K0TUa76B-EYQm8pdiyVVZvXhLT7jJUoc/view?usp=sharing)】
-- 下载 【[物体分割模型-夸克网盘](https://pan.quark.cn/s/a7ddd03cbd13)】   【[物体分割模型-谷歌云盘](https://drive.google.com/file/d/19-WHk4g9BCIAukQntt8lnI0n9cgh042g/view?usp=sharing)】
-- 下载 【[视频修复模型-夸克网盘](https://pan.quark.cn/s/d77a2957ce9d)】   【[视频修复模型-谷歌云盘](https://drive.google.com/file/d/1dwEBhZ465TcNXUBiSfCDsRSzRIpNKYqA/view?usp=sharing)】
+**可选步骤（也可在设置页面开启对应功能，会自动下载模型文件）：**
+- 下载 【[CPU 模型-夸克网盘](https://pan.quark.cn/s/59c585f21160)】
+- 下载 【[GPU 模型-夸克网盘](https://pan.quark.cn/s/5e273ec49ecf)】
 
 下载完解压后，启动软件，导航到设置界面，设置【AI模型依赖路径】为解压后的路径父目录。例如下面的 `../deps` 目录下的结构是
 ```bash
-├── blind_watermark_addition
-├── ocr
-├── segment
-├── video_inpainting
-└── visible_watermark_removal
+.
+├── cpu
+│   ├── blind_watermark_addition
+│   ├── blind_watermark_remove
+│   ├── ocr
+│   ├── segment
+│   ├── video_inpainting
+│   └── visible_watermark_removal
+├── GPU
+│   ├── blind_watermark_addition
+│   ├── blind_watermark_remove
+│   ├── ocr
+│   ├── segment
+│   ├── video_inpainting
+│   └── visible_watermark_removal
 ```
 ![AI 模型依赖路径设置示例](docs/screenshots/models_path.png)
 
