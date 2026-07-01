@@ -11,6 +11,22 @@ from app.ui.common.utils import global_backend_info_cache
 from app.ui.common.config import cfg
 
 
+def _add_cuda_cudnn_bin_search():
+    if platform.system() not in ["Windows"]:
+        return
+    cuda_bin = os.environ.get("POWERTOOLS_CUDA_BIN", None)
+    cudnn_bin = os.environ.get("POWERTOOLS_CUDNN_BIN", None)
+    if cuda_bin is None or cudnn_bin is None:
+        return
+    if not os.path.exists(cuda_bin) or not os.path.exists(cudnn_bin):
+        return
+    os.add_dll_directory(cuda_bin)
+    os.add_dll_directory(cudnn_bin)
+
+
+_add_cuda_cudnn_bin_search()
+ort.preload_dlls(directory="")
+
 
 def is_gpu_device():
     hw_type = cfg.get(cfg.hardwareOptimizationType)

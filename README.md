@@ -45,7 +45,10 @@
 
 ### 配置 GPU 环境（可选）
 - 安装 [cuda 12.x 版本](https://developer.nvidia.com/cuda/toolkit) + [cudnn 9.x](https://developer.nvidia.com/cudnn) 版本
-- ***CUDA bin*** 目录 和 ***cuDNN bin*** 目录 需要添加到系统的 ***PATH*** 环境变量中
+- ***CUDA*** 配置：创建系统环境变量 ***POWERTOOLS_CUDA_BIN***，其值指向 ***CUDA*** 的 ***bin*** 目
+- ***cuDNN*** 配置：创建系统环境变量 ***POWERTOOLS_CUDNN_BIN***，其值指向 ***cuDNN*** 的 ***bin*** 目录
+
+【**备注**】所配置的路径必须为 ***.dll*** 文件所在的绝对路径。若默认的 ***bin*** 目录下未包含 ***.dll*** 文件，程序将无法正常加载。此时请递归向下查找子目录，直至定位到真正的 ***.dll*** 存放目录，并以此目录作为环境变量的值。
 
 ### 下载 Release 安装包（推荐）
 

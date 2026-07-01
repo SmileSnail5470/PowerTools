@@ -1,16 +1,12 @@
 import copy
 import os
-import platform
 import re
-import sys
 import yaml
 os.environ["FLAGS_allocator_strategy"] = "auto_growth"
 import cv2
 import numpy as np
 import math
 import time
-import onnxruntime as ort
-ort.preload_dlls(directory="")
 import uuid
 from app.algorithms import general_inference_session, general_session, general_provider, ORTEnvironment
 ORTEnvironment.initialize()

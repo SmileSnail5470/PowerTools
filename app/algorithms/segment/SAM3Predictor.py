@@ -7,7 +7,6 @@ import numpy as np
 import onnxruntime as ort
 from app.algorithms.segment.SimpleTokenizer import SimpleTokenizer
 from app.algorithms.segment.preprocessing import preprocess_opencv
-ort.preload_dlls(directory="")
 from app.algorithms import general_inference_session, general_session, general_provider, is_gpu_device, ORTEnvironment, ortvalue_to_numpy
 ORTEnvironment.initialize()
 

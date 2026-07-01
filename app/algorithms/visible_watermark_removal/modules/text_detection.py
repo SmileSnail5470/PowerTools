@@ -1,5 +1,4 @@
 import os
-import platform
 import sys
 os.environ["FLAGS_allocator_strategy"] = "auto_growth"
 import copy
@@ -9,8 +8,6 @@ import cv2
 import time
 import pyclipper
 import numpy as np
-import onnxruntime as ort
-ort.preload_dlls(directory="")
 from shapely.geometry import Polygon
 from app.algorithms import general_inference_session, general_provider, general_session, ORTEnvironment
 ORTEnvironment.initialize()

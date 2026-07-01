@@ -1,10 +1,6 @@
 import os
-import platform
-import sys
 import cv2
 import numpy as np
-import onnxruntime as ort
-ort.preload_dlls(directory="")
 from PIL import Image
 from app.algorithms import general_inference_session, general_session, general_provider, ORTEnvironment
 ORTEnvironment.initialize()

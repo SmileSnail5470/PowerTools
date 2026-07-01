@@ -1,9 +1,5 @@
 import os
-import platform
-import sys
 import numpy as np
-import onnxruntime as ort
-ort.preload_dlls(directory="")
 from app.algorithms.blind_watermark_addition.ecc_utils import HammingECC
 import app.utils.ffmpeg as ffmpeg
 from app.algorithms import general_inference_session, general_provider, general_session, ORTEnvironment
