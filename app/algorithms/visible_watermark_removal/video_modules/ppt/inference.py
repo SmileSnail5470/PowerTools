@@ -101,7 +101,7 @@ class PPTInferenceORT:
                     ref_index.append(i)
         return ref_index
 
-    def inference(self, input_frames_dir, masks_dir, output_dir, debug=True):
+    def inference(self, input_frames_dir, masks_dir, output_dir, debug=False):
         frames, _, size = self._read_frame(frame_root=input_frames_dir)
         if self.width != -1 and self.height != -1:
             size = (self.width, self.height)

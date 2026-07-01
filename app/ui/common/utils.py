@@ -2,6 +2,7 @@ import os
 import sys
 import subprocess
 import onnxruntime as ort
+ort.preload_dlls(directory="")
 from PySide6.QtCore import QObject
 from app.ui.common.config import cfg
 
