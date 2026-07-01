@@ -389,7 +389,7 @@ class VideoWatermarkRemover:
             (
                 ffmpeg
                 .input(input_video_path)
-                .output(str(frames_dir / '%06d.png'), start_number=0, vsync="passthrough")
+                .output(str(frames_dir / '%06d.png'), start_number=0, fps_mode="passthrough")
                 .overwrite_output()
                 .run(capture_stdout=True, capture_stderr=True)
             )
