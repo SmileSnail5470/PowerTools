@@ -18,7 +18,6 @@ _POLL_INTERVAL = 0.05
 
 
 def _subprocess_target(func, msg_queue, cancel_event, log_dir, args, kwargs):
-    # 配置根 logger，使所有模块的 logging 输出都写入日志文件
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
     if log_dir:

@@ -339,7 +339,10 @@ class ImageWatermarkRemove():
         else:
             mask = self._read_mask(mask_path=mask_path)
         if progress_cb is not None:
-            mask_tmp_path = "{0}_mask.png".format(output_path.rsplit(".", 1)[0])
+            if "visible_mask_path" in kwargs and kwargs["visible_mask_path"]:
+                mask_tmp_path = kwargs["visible_mask_path"]
+            else:
+                mask_tmp_path = "{0}_mask.png".format(output_path.rsplit(".", 1)[0])
             self._save_mask_visualization(
                 img_path=image_path,
                 mask=mask,
@@ -387,13 +390,16 @@ class ImageWatermarkRemove():
             dilate_num: int = 2,
             **kwargs
         ):
-        progress_cb = kwargs.get("progress_cb", None)
+        progress_cb = kwargs.pop("progress_cb", None)
         if watermark_boxes:
             original_img = cv2.imread(image_path)
             if original_img is None:
                 raise ValueError(f"Failed to read image: {image_path}")
             result_img = original_img.copy()
             img_h, img_w = original_img.shape[:2]
+
+            if mask_path:
+                raise ValueError("Cannot provide both watermark_boxes and mask_path. Please choose one method for watermark removal.")
 
             if progress_cb is not None:
                 progress_cb("MaskStart", "")
@@ -411,6 +417,7 @@ class ImageWatermarkRemove():
                     crop_input_path = os.path.join(tmp_dir, f"crop_{idx}_input.png")
                     crop_output_path = os.path.join(tmp_dir, f"crop_{idx}_output.png")
                     cv2.imwrite(crop_input_path, cropped_region)
+                    kwargs["visible_mask_path"] = "{0}_mask.png".format(output_path.rsplit(".", 1)[0])
                     self._process_single_image(
                         image_path=crop_input_path,
                         output_path=crop_output_path,

@@ -814,6 +814,9 @@ class HeaderWidget(QWidget):
             task_params["output_path"] = params["output_path"]
             task_params["output_format"] = params["output_format"]
 
+        if "watermark_boxes" in params and params["watermark_boxes"]:
+            task_params["watermark_boxes"] = params["watermark_boxes"]
+
         if params["watermark_detect_type"] == "ai_auto_detect":
             task_params["watermark_content"] = params["watermark_content"]
             task_params["watermark_format"] = params["watermark_format"]

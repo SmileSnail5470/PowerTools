@@ -491,11 +491,9 @@ class VideoWatermarkRemover:
             callback_func=None,
             **kwargs
         ):
-        """
-        对每个 watermark_box 分别裁剪视频帧、送入处理、处理完逐个拼接回原帧。
-        支持 image model 和 video model 两种处理方式。
-        """
-        # 读取第一帧获取尺寸
+        if mask_path:
+            raise ValueError("Mask path should not be provided when using watermark boxes.")
+        
         first_frame = cv2.imread(str(frame_files[0]))
         if first_frame is None:
             raise ValueError(f"Failed to read frame: {frame_files[0]}")
@@ -504,7 +502,6 @@ class VideoWatermarkRemover:
         temp_base = os.path.dirname(str(processed_frames_dir))
         input_frames_dir = os.path.dirname(str(frame_files[0]))
 
-        # 逐个 box 处理，收集结果
         box_results = []  # [(bbox, cropped_output_dir), ...]
         for box_idx, box in enumerate(watermark_boxes):
             result = self._process_single_box(
@@ -540,12 +537,10 @@ class VideoWatermarkRemover:
             if result is not None:
                 box_results.append(result)
 
-        # 将所有 box 处理结果逐个拼回原帧
         for frame_file in frame_files:
             original_frame = cv2.imread(str(frame_file))
             if original_frame is None:
                 raise ValueError(f"Failed to read frame: {frame_file}")
-
             for bbox, cropped_output_dir in box_results:
                 xmin, ymin, xmax, ymax = bbox
                 cropped_result_path = os.path.join(cropped_output_dir, frame_file.name)
@@ -553,11 +548,8 @@ class VideoWatermarkRemover:
                     cropped_result = cv2.imread(cropped_result_path)
                     if cropped_result is not None:
                         original_frame[ymin:ymax, xmin:xmax] = cropped_result
-
             output_frame_path = str(processed_frames_dir / frame_file.name)
             cv2.imwrite(output_frame_path, original_frame)
-
-        # 清理所有 box 的 output 临时目录
         for _, cropped_output_dir in box_results:
             shutil.rmtree(cropped_output_dir, ignore_errors=True)
 
@@ -654,10 +646,10 @@ class VideoWatermarkRemover:
                     watermark_confidence=watermark_confidence,
                     dilate_num=dilate_num,
                     callback_func=callback_func,
+                    progress_cb=progress_cb,
                     **kwargs
                 )
                 if progress_cb is not None:
-                    progress_cb("MaskCompleted", "")
                     progress_cb("WaterRemoved", "")
             else:
                 tmp_mask_dir = temp_path / 'masks'
