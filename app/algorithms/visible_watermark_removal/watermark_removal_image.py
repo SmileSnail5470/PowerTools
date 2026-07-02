@@ -1,4 +1,5 @@
-from typing import List, Tuple
+import tempfile
+import os
 import cv2
 import numpy as np
 from app.algorithms.visible_watermark_removal.modules.sr_segment import SLBRSegment
@@ -297,14 +298,14 @@ class ImageWatermarkRemove():
         mask = ((mask > 0) * 255).astype(np.uint8)
         return mask
     
-    def run(
-            self, 
-            image_path, 
+    def _process_single_image(
+            self,
+            image_path,
             output_path,
             sr_segment_onnx_path,
             pt_segment_onnx_path,
-            pt_inpaint_onnx_path, 
-            cf_onnx_path, 
+            pt_inpaint_onnx_path,
+            cf_onnx_path,
             lama_onnx_path,
             emdf_onnx_path,
             grig_onnx_path,
@@ -312,21 +313,20 @@ class ImageWatermarkRemove():
             yolo_detection_onnx_path,
             segment_onnx_dir,
             mask_path: str = "",
-            refine_type: str = "patchwiper",                    # patchwiper/lama/transparent/cv2/coordfill/grig/emdf
-            watermark_type: str = "all",                        # text / all
-            ai_detect_type: str = "ai_interactive_detect",      # ai_interactive_detect/ai_auto_detect
-            ai_interactive_type: str = "semantic_detect",       # semantic_detect/space_detect
+            refine_type: str = "patchwiper",
+            watermark_type: str = "all",
+            ai_detect_type: str = "ai_interactive_detect",
+            ai_interactive_type: str = "semantic_detect",
             ai_interactive_prompt: str = "watermark",
             ai_interactive_boxes: list = [],
             watermark_confidence: float = 0.5,
             dilate_num: int = 2,
+            progress_cb=None,
             **kwargs
         ):
-        progress_cb = kwargs.get("progress_cb", None)
         if progress_cb is not None:
             progress_cb("MaskStart", "")
         if not mask_path:
-            # ai 选择水印掩码
             mask = WatermarkSegment(watermark_type, ai_detect_type, ai_interactive_type, ai_interactive_prompt, ai_interactive_boxes, watermark_confidence).segment(
                 image_path=image_path,
                 sr_onnx_path=sr_segment_onnx_path,
@@ -337,7 +337,6 @@ class ImageWatermarkRemove():
                 **kwargs
             )
         else:
-            # 读取人工标注的水印掩码
             mask = self._read_mask(mask_path=mask_path)
         if progress_cb is not None:
             mask_tmp_path = "{0}_mask.png".format(output_path.rsplit(".", 1)[0])
@@ -361,3 +360,109 @@ class ImageWatermarkRemove():
         image_inpainting.inpaint(image_path=image_path, output_path=output_path)
         if progress_cb is not None:
             progress_cb("WaterRemoved", "")
+
+    def run(
+            self, 
+            image_path, 
+            output_path,
+            sr_segment_onnx_path,
+            pt_segment_onnx_path,
+            pt_inpaint_onnx_path, 
+            cf_onnx_path, 
+            lama_onnx_path,
+            emdf_onnx_path,
+            grig_onnx_path,
+            text_detection_onnx_path,
+            yolo_detection_onnx_path,
+            segment_onnx_dir,
+            mask_path: str = "",
+            refine_type: str = "patchwiper",                    # patchwiper/lama/transparent/cv2/coordfill/grig/emdf
+            watermark_type: str = "all",                        # text / all
+            ai_detect_type: str = "ai_interactive_detect",      # ai_interactive_detect/ai_auto_detect
+            ai_interactive_type: str = "semantic_detect",       # semantic_detect/space_detect
+            ai_interactive_prompt: str = "watermark",
+            ai_interactive_boxes: list = [],
+            watermark_confidence: float = 0.5,
+            watermark_boxes: list = [],
+            dilate_num: int = 2,
+            **kwargs
+        ):
+        progress_cb = kwargs.get("progress_cb", None)
+        if watermark_boxes:
+            original_img = cv2.imread(image_path)
+            if original_img is None:
+                raise ValueError(f"Failed to read image: {image_path}")
+            result_img = original_img.copy()
+            img_h, img_w = original_img.shape[:2]
+
+            if progress_cb is not None:
+                progress_cb("MaskStart", "")
+
+            for idx, box in enumerate(watermark_boxes):
+                x1, y1, x2, y2 = box
+                x1 = max(0, int(x1))
+                y1 = max(0, int(y1))
+                x2 = min(img_w, int(x2))
+                y2 = min(img_h, int(y2))
+                if x2 <= x1 or y2 <= y1:
+                    continue
+                cropped_region = original_img[y1:y2, x1:x2]
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    crop_input_path = os.path.join(tmp_dir, f"crop_{idx}_input.png")
+                    crop_output_path = os.path.join(tmp_dir, f"crop_{idx}_output.png")
+                    cv2.imwrite(crop_input_path, cropped_region)
+                    self._process_single_image(
+                        image_path=crop_input_path,
+                        output_path=crop_output_path,
+                        sr_segment_onnx_path=sr_segment_onnx_path,
+                        pt_segment_onnx_path=pt_segment_onnx_path,
+                        pt_inpaint_onnx_path=pt_inpaint_onnx_path,
+                        cf_onnx_path=cf_onnx_path,
+                        lama_onnx_path=lama_onnx_path,
+                        emdf_onnx_path=emdf_onnx_path,
+                        grig_onnx_path=grig_onnx_path,
+                        text_detection_onnx_path=text_detection_onnx_path,
+                        yolo_detection_onnx_path=yolo_detection_onnx_path,
+                        segment_onnx_dir=segment_onnx_dir,
+                        mask_path=mask_path,
+                        refine_type=refine_type,
+                        watermark_type=watermark_type,
+                        ai_detect_type=ai_detect_type,
+                        ai_interactive_type=ai_interactive_type,
+                        ai_interactive_prompt=ai_interactive_prompt,
+                        ai_interactive_boxes=ai_interactive_boxes,
+                        watermark_confidence=watermark_confidence,
+                        dilate_num=dilate_num,
+                        progress_cb=progress_cb,
+                        **kwargs
+                    )
+                    processed_region = cv2.imread(crop_output_path)
+                    if processed_region is not None:
+                        result_img[y1:y2, x1:x2] = processed_region
+            cv2.imwrite(output_path, result_img)
+        else:
+            self._process_single_image(
+                image_path=image_path,
+                output_path=output_path,
+                sr_segment_onnx_path=sr_segment_onnx_path,
+                pt_segment_onnx_path=pt_segment_onnx_path,
+                pt_inpaint_onnx_path=pt_inpaint_onnx_path,
+                cf_onnx_path=cf_onnx_path,
+                lama_onnx_path=lama_onnx_path,
+                emdf_onnx_path=emdf_onnx_path,
+                grig_onnx_path=grig_onnx_path,
+                text_detection_onnx_path=text_detection_onnx_path,
+                yolo_detection_onnx_path=yolo_detection_onnx_path,
+                segment_onnx_dir=segment_onnx_dir,
+                mask_path=mask_path,
+                refine_type=refine_type,
+                watermark_type=watermark_type,
+                ai_detect_type=ai_detect_type,
+                ai_interactive_type=ai_interactive_type,
+                ai_interactive_prompt=ai_interactive_prompt,
+                ai_interactive_boxes=ai_interactive_boxes,
+                watermark_confidence=watermark_confidence,
+                dilate_num=dilate_num,
+                progress_cb=progress_cb,
+                **kwargs
+            )

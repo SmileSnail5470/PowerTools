@@ -73,7 +73,7 @@ class CoordItem(QFrame):
 
 
 class AreaSelectorDialog(QDialog):
-    def __init__(self, file_path=None, parent=None):
+    def __init__(self, file_path=None, single_area_only=False, parent=None):
         super().__init__(parent=parent)
         self.setWindowTitle(self.tr("水印框选器"))
         self.setMinimumSize(900, 800)
@@ -88,6 +88,7 @@ class AreaSelectorDialog(QDialog):
         self.saved_boxes = []
         self.is_drawing = False
         self.active_rect_item = None
+        self.single_area_only = single_area_only
 
         self.cap = None
         self.total_frames = 0
@@ -310,7 +311,10 @@ class AreaSelectorDialog(QDialog):
                         "w": int(rect.width()), 
                         "h": int(rect.height())
                     }
-                    self.saved_boxes.append(real_box)
+                    if self.single_area_only:
+                        self.saved_boxes = [real_box]
+                    else:
+                        self.saved_boxes.append(real_box)
                     self.render_all()
                 return True
         return super().eventFilter(source, event)

@@ -336,6 +336,231 @@ class VideoWatermarkRemover:
         else:
             raise ValueError(f"Unsupported video inpainting model: {refine_type}")
     
+    def _box_to_bbox(self, box: list, img_w: int, img_h: int) -> tuple | None:
+        x1, y1, x2, y2 = box
+        xmin = int(max(0, x1))
+        ymin = int(max(0, y1))
+        xmax = int(min(img_w, x2))
+        ymax = int(min(img_h, y2))
+        if xmax <= xmin or ymax <= ymin:
+            return None
+        return (xmin, ymin, xmax, ymax)
+
+    def _single_box_to_mask(self, box: list, bbox: tuple) -> np.ndarray:
+        xmin, ymin, xmax, ymax = bbox
+        crop_h = ymax - ymin
+        crop_w = xmax - xmin
+        mask = np.zeros((crop_h, crop_w), dtype=np.uint8)
+        x1, y1, x2, y2 = box
+        bx1 = max(0, int(x1) - xmin)
+        by1 = max(0, int(y1) - ymin)
+        bx2 = min(crop_w, int(x2) - xmin)
+        by2 = min(crop_h, int(y2) - ymin)
+        if bx2 > bx1 and by2 > by1:
+            mask[by1:by2, bx1:bx2] = 255
+        return mask
+
+    def _process_single_box(
+            self,
+            frame_files,
+            input_frames_dir,
+            box,
+            box_idx,
+            img_w,
+            img_h,
+            temp_base,
+            sr_segment_onnx_path,
+            pt_segment_onnx_path,
+            pt_inpaint_onnx_path,
+            cf_onnx_path,
+            lama_onnx_path,
+            emdf_onnx_path,
+            grig_onnx_path,
+            text_detection_onnx_path,
+            yolo_detection_onnx_path,
+            segment_onnx_dir,
+            ppt_onnx_basedir,
+            refine_type,
+            watermark_type,
+            ai_detect_type,
+            ai_interactive_type,
+            ai_interactive_prompt,
+            ai_interactive_boxes,
+            watermark_confidence,
+            dilate_num,
+            callback_func=None,
+            **kwargs
+        ):
+        bbox = self._box_to_bbox(box, img_w, img_h)
+        if bbox is None:
+            return None
+
+        xmin, ymin, xmax, ymax = bbox
+
+        cropped_frames_dir = os.path.join(temp_base, f"box_{box_idx}_frames")
+        cropped_masks_dir = os.path.join(temp_base, f"box_{box_idx}_masks")
+        cropped_output_dir = os.path.join(temp_base, f"box_{box_idx}_output")
+        os.makedirs(cropped_frames_dir, exist_ok=True)
+        os.makedirs(cropped_masks_dir, exist_ok=True)
+        os.makedirs(cropped_output_dir, exist_ok=True)
+
+        mask = self._single_box_to_mask(box, bbox)
+        frame_mask_map = {}
+        for frame_file in frame_files:
+            frame = cv2.imread(os.path.join(input_frames_dir, frame_file.name))
+            if frame is None:
+                raise ValueError(f"Failed to read frame: {frame_file}")
+            cropped_frame = frame[ymin:ymax, xmin:xmax]
+            cropped_frame_path = os.path.join(cropped_frames_dir, frame_file.name)
+            cv2.imwrite(cropped_frame_path, cropped_frame)
+
+            mask_save_path = os.path.join(cropped_masks_dir, frame_file.name)
+            cv2.imwrite(mask_save_path, mask)
+            frame_mask_map[cropped_frame_path] = mask_save_path
+
+        cropped_frame_files = sorted([Path(os.path.join(cropped_frames_dir, f)) for f in os.listdir(cropped_frames_dir) if f.endswith('.png')])
+        cropped_output_path = Path(cropped_output_dir)
+
+        if refine_type in self.video_models_name:
+            args = {
+                "frame_files": cropped_frame_files,
+                "processed_frames_dir": cropped_output_path,
+                "frame_mask_map": frame_mask_map,
+                "dilate_num": dilate_num,
+                "refine_type": refine_type,
+                "ppt_onnx_basedir": ppt_onnx_basedir
+            }
+            self._video_model_inpainting(args)
+        else:
+            args = {
+                "frame_files": cropped_frame_files,
+                "processed_frames_dir": cropped_output_path,
+                "frame_mask_map": frame_mask_map,
+                "sr_segment_onnx_path": sr_segment_onnx_path,
+                "pt_segment_onnx_path": pt_segment_onnx_path,
+                "pt_inpaint_onnx_path": pt_inpaint_onnx_path,
+                "cf_onnx_path": cf_onnx_path,
+                "lama_onnx_path": lama_onnx_path,
+                "emdf_onnx_path": emdf_onnx_path,
+                "grig_onnx_path": grig_onnx_path,
+                "text_detection_onnx_path": text_detection_onnx_path,
+                "yolo_detection_onnx_path": yolo_detection_onnx_path,
+                "segment_onnx_dir": segment_onnx_dir,
+                "refine_type": refine_type,
+                "watermark_type": watermark_type,
+                "ai_detect_type": ai_detect_type,
+                "ai_interactive_type": ai_interactive_type,
+                "ai_interactive_prompt": ai_interactive_prompt,
+                "ai_interactive_boxes": ai_interactive_boxes,
+                "watermark_confidence": watermark_confidence,
+                "dilate_num": dilate_num,
+                "callback_func": callback_func,
+                "kwargs": kwargs
+            }
+            self._image_model_inpainting(args)
+
+        shutil.rmtree(cropped_frames_dir, ignore_errors=True)
+        shutil.rmtree(cropped_masks_dir, ignore_errors=True)
+        return bbox, cropped_output_dir
+
+    def _process_frames_with_boxes(
+            self,
+            frame_files,
+            processed_frames_dir,
+            watermark_boxes,
+            sr_segment_onnx_path,
+            pt_segment_onnx_path,
+            pt_inpaint_onnx_path,
+            cf_onnx_path,
+            lama_onnx_path,
+            emdf_onnx_path,
+            grig_onnx_path,
+            text_detection_onnx_path,
+            yolo_detection_onnx_path,
+            segment_onnx_dir,
+            ppt_onnx_basedir,
+            mask_path,
+            refine_type,
+            watermark_type,
+            ai_detect_type,
+            ai_interactive_type,
+            ai_interactive_prompt,
+            ai_interactive_boxes,
+            watermark_confidence,
+            dilate_num,
+            callback_func=None,
+            **kwargs
+        ):
+        """
+        对每个 watermark_box 分别裁剪视频帧、送入处理、处理完逐个拼接回原帧。
+        支持 image model 和 video model 两种处理方式。
+        """
+        # 读取第一帧获取尺寸
+        first_frame = cv2.imread(str(frame_files[0]))
+        if first_frame is None:
+            raise ValueError(f"Failed to read frame: {frame_files[0]}")
+        img_h, img_w = first_frame.shape[:2]
+
+        temp_base = os.path.dirname(str(processed_frames_dir))
+        input_frames_dir = os.path.dirname(str(frame_files[0]))
+
+        # 逐个 box 处理，收集结果
+        box_results = []  # [(bbox, cropped_output_dir), ...]
+        for box_idx, box in enumerate(watermark_boxes):
+            result = self._process_single_box(
+                frame_files=frame_files,
+                input_frames_dir=input_frames_dir,
+                box=box,
+                box_idx=box_idx,
+                img_w=img_w,
+                img_h=img_h,
+                temp_base=temp_base,
+                sr_segment_onnx_path=sr_segment_onnx_path,
+                pt_segment_onnx_path=pt_segment_onnx_path,
+                pt_inpaint_onnx_path=pt_inpaint_onnx_path,
+                cf_onnx_path=cf_onnx_path,
+                lama_onnx_path=lama_onnx_path,
+                emdf_onnx_path=emdf_onnx_path,
+                grig_onnx_path=grig_onnx_path,
+                text_detection_onnx_path=text_detection_onnx_path,
+                yolo_detection_onnx_path=yolo_detection_onnx_path,
+                segment_onnx_dir=segment_onnx_dir,
+                ppt_onnx_basedir=ppt_onnx_basedir,
+                refine_type=refine_type,
+                watermark_type=watermark_type,
+                ai_detect_type=ai_detect_type,
+                ai_interactive_type=ai_interactive_type,
+                ai_interactive_prompt=ai_interactive_prompt,
+                ai_interactive_boxes=ai_interactive_boxes,
+                watermark_confidence=watermark_confidence,
+                dilate_num=dilate_num,
+                callback_func=callback_func,
+                **kwargs
+            )
+            if result is not None:
+                box_results.append(result)
+
+        # 将所有 box 处理结果逐个拼回原帧
+        for frame_file in frame_files:
+            original_frame = cv2.imread(str(frame_file))
+            if original_frame is None:
+                raise ValueError(f"Failed to read frame: {frame_file}")
+
+            for bbox, cropped_output_dir in box_results:
+                xmin, ymin, xmax, ymax = bbox
+                cropped_result_path = os.path.join(cropped_output_dir, frame_file.name)
+                if os.path.exists(cropped_result_path):
+                    cropped_result = cv2.imread(cropped_result_path)
+                    if cropped_result is not None:
+                        original_frame[ymin:ymax, xmin:xmax] = cropped_result
+
+            output_frame_path = str(processed_frames_dir / frame_file.name)
+            cv2.imwrite(output_frame_path, original_frame)
+
+        # 清理所有 box 的 output 临时目录
+        for _, cropped_output_dir in box_results:
+            shutil.rmtree(cropped_output_dir, ignore_errors=True)
+
     def process_video(
             self, 
             input_video_path, 
@@ -360,6 +585,7 @@ class VideoWatermarkRemover:
             ai_interactive_prompt: str = "watermark",
             ai_interactive_boxes: list = [],
             watermark_confidence: float = 0.5,
+            watermark_boxes: list = [],
             dilate_num: int = 2,
             ffmpeg_path: str = "",
             callback_func = None,
@@ -400,89 +626,123 @@ class VideoWatermarkRemover:
             # 处理每一帧
             processed_frames_dir = temp_path / 'processed_frames'
             processed_frames_dir.mkdir()
-            tmp_mask_dir = temp_path / 'masks'
-            tmp_mask_dir.mkdir()
-
-            if progress_cb is not None:
-                progress_cb("MaskStart", "")
-            frame_mask_map = {}
-            self._prepare_masks(
-                tmp_mask_dir=tmp_mask_dir, 
-                frame_mask_map=frame_mask_map, 
-                mask_path=mask_path, 
-                use_cache_mask=use_cache_mask, 
-                watermark_type=watermark_type,
-                ai_detect_type=ai_detect_type,
-                ai_interactive_type=ai_interactive_type,
-                ai_interactive_prompt=ai_interactive_prompt,
-                ai_interactive_boxes=ai_interactive_boxes,
-                watermark_confidence=watermark_confidence,
-                frame_files=frame_files,
-                sr_segment_onnx_path=sr_segment_onnx_path,
-                pt_segment_onnx_path=pt_segment_onnx_path,
-                text_detection_onnx_path=text_detection_onnx_path,
-                yolo_detection_onnx_path=yolo_detection_onnx_path,
-                segment_onnx_dir=segment_onnx_dir,
-                **kwargs
-            )
-            if progress_cb is not None:
-                tmp_visualzation_path = os.path.join(os.path.dirname(str(tmp_mask_dir)), "masks_visualization")
-                for frame_file, tmp_mask_path in frame_mask_map.items():
-                    os.makedirs(tmp_visualzation_path, exist_ok=True)
-                    self._save_mask_visualization(
-                        img_path=str(frame_file),
-                        mask=cv2.imread(tmp_mask_path, cv2.IMREAD_GRAYSCALE),
-                        file_path=os.path.join(tmp_visualzation_path, os.path.basename(str(frame_file)))
-                    )
-                output_video_tmp_path = "{0}_mask_visualization.mp4".format(output_video_path.rsplit(".", 1)[0])
-                self._merge_processed_frames(
-                    processed_frames_dir=Path(tmp_visualzation_path),
-                    has_audio=has_audio, 
-                    fps=fps,
-                    input_video_path=input_video_path,
-                    output_video_path=output_video_tmp_path
+            if watermark_boxes:
+                if progress_cb is not None:
+                    progress_cb("MaskStart", "")
+                self._process_frames_with_boxes(
+                    frame_files=frame_files,
+                    processed_frames_dir=processed_frames_dir,
+                    watermark_boxes=watermark_boxes,
+                    sr_segment_onnx_path=sr_segment_onnx_path,
+                    pt_segment_onnx_path=pt_segment_onnx_path,
+                    pt_inpaint_onnx_path=pt_inpaint_onnx_path,
+                    cf_onnx_path=cf_onnx_path,
+                    lama_onnx_path=lama_onnx_path,
+                    emdf_onnx_path=emdf_onnx_path,
+                    grig_onnx_path=grig_onnx_path,
+                    text_detection_onnx_path=text_detection_onnx_path,
+                    yolo_detection_onnx_path=yolo_detection_onnx_path,
+                    segment_onnx_dir=segment_onnx_dir,
+                    ppt_onnx_basedir=ppt_onnx_basedir,
+                    mask_path=mask_path,
+                    refine_type=refine_type,
+                    watermark_type=watermark_type,
+                    ai_detect_type=ai_detect_type,
+                    ai_interactive_type=ai_interactive_type,
+                    ai_interactive_prompt=ai_interactive_prompt,
+                    ai_interactive_boxes=ai_interactive_boxes,
+                    watermark_confidence=watermark_confidence,
+                    dilate_num=dilate_num,
+                    callback_func=callback_func,
+                    **kwargs
                 )
-                progress_cb("MaskCompleted", output_video_tmp_path)
-            
-            if refine_type not in self.video_models_name:
-                args = {
-                    "frame_files": frame_files,
-                    "processed_frames_dir": processed_frames_dir,
-                    "frame_mask_map": frame_mask_map,
-                    "sr_segment_onnx_path": sr_segment_onnx_path,
-                    "pt_segment_onnx_path": pt_segment_onnx_path,
-                    "pt_inpaint_onnx_path": pt_inpaint_onnx_path,
-                    "cf_onnx_path": cf_onnx_path,
-                    "lama_onnx_path": lama_onnx_path,
-                    "emdf_onnx_path": emdf_onnx_path,
-                    "grig_onnx_path": grig_onnx_path,
-                    "text_detection_onnx_path": text_detection_onnx_path,
-                    "yolo_detection_onnx_path": yolo_detection_onnx_path,
-                    "segment_onnx_dir": segment_onnx_dir,
-                    "refine_type": refine_type,
-                    "watermark_type": watermark_type,
-                    "ai_detect_type": ai_detect_type,
-                    "ai_interactive_type": ai_interactive_type,
-                    "ai_interactive_prompt": ai_interactive_prompt,
-                    "ai_interactive_boxes": ai_interactive_boxes,
-                    "watermark_confidence": watermark_confidence,
-                    "dilate_num": dilate_num,
-                    "callback_func": callback_func,
-                    "kwargs": kwargs
-                }
-                self._image_model_inpainting(args)
+                if progress_cb is not None:
+                    progress_cb("MaskCompleted", "")
+                    progress_cb("WaterRemoved", "")
             else:
-                args = {
-                    "frame_files": frame_files,
-                    "processed_frames_dir": processed_frames_dir,
-                    "frame_mask_map": frame_mask_map,
-                    "dilate_num": dilate_num,
-                    "refine_type": refine_type,
-                    "ppt_onnx_basedir": ppt_onnx_basedir
-                }
-                self._video_model_inpainting(args)
-            if progress_cb is not None:
-                progress_cb("WaterRemoved", "")
+                tmp_mask_dir = temp_path / 'masks'
+                tmp_mask_dir.mkdir()
+
+                if progress_cb is not None:
+                    progress_cb("MaskStart", "")
+                frame_mask_map = {}
+                self._prepare_masks(
+                    tmp_mask_dir=tmp_mask_dir, 
+                    frame_mask_map=frame_mask_map, 
+                    mask_path=mask_path, 
+                    use_cache_mask=use_cache_mask, 
+                    watermark_type=watermark_type,
+                    ai_detect_type=ai_detect_type,
+                    ai_interactive_type=ai_interactive_type,
+                    ai_interactive_prompt=ai_interactive_prompt,
+                    ai_interactive_boxes=ai_interactive_boxes,
+                    watermark_confidence=watermark_confidence,
+                    frame_files=frame_files,
+                    sr_segment_onnx_path=sr_segment_onnx_path,
+                    pt_segment_onnx_path=pt_segment_onnx_path,
+                    text_detection_onnx_path=text_detection_onnx_path,
+                    yolo_detection_onnx_path=yolo_detection_onnx_path,
+                    segment_onnx_dir=segment_onnx_dir,
+                    **kwargs
+                )
+                if progress_cb is not None:
+                    tmp_visualzation_path = os.path.join(os.path.dirname(str(tmp_mask_dir)), "masks_visualization")
+                    for frame_file, tmp_mask_path in frame_mask_map.items():
+                        os.makedirs(tmp_visualzation_path, exist_ok=True)
+                        self._save_mask_visualization(
+                            img_path=str(frame_file),
+                            mask=cv2.imread(tmp_mask_path, cv2.IMREAD_GRAYSCALE),
+                            file_path=os.path.join(tmp_visualzation_path, os.path.basename(str(frame_file)))
+                        )
+                    output_video_tmp_path = "{0}_mask_visualization.mp4".format(output_video_path.rsplit(".", 1)[0])
+                    self._merge_processed_frames(
+                        processed_frames_dir=Path(tmp_visualzation_path),
+                        has_audio=has_audio, 
+                        fps=fps,
+                        input_video_path=input_video_path,
+                        output_video_path=output_video_tmp_path
+                    )
+                    progress_cb("MaskCompleted", output_video_tmp_path)
+                
+                if refine_type not in self.video_models_name:
+                    args = {
+                        "frame_files": frame_files,
+                        "processed_frames_dir": processed_frames_dir,
+                        "frame_mask_map": frame_mask_map,
+                        "sr_segment_onnx_path": sr_segment_onnx_path,
+                        "pt_segment_onnx_path": pt_segment_onnx_path,
+                        "pt_inpaint_onnx_path": pt_inpaint_onnx_path,
+                        "cf_onnx_path": cf_onnx_path,
+                        "lama_onnx_path": lama_onnx_path,
+                        "emdf_onnx_path": emdf_onnx_path,
+                        "grig_onnx_path": grig_onnx_path,
+                        "text_detection_onnx_path": text_detection_onnx_path,
+                        "yolo_detection_onnx_path": yolo_detection_onnx_path,
+                        "segment_onnx_dir": segment_onnx_dir,
+                        "refine_type": refine_type,
+                        "watermark_type": watermark_type,
+                        "ai_detect_type": ai_detect_type,
+                        "ai_interactive_type": ai_interactive_type,
+                        "ai_interactive_prompt": ai_interactive_prompt,
+                        "ai_interactive_boxes": ai_interactive_boxes,
+                        "watermark_confidence": watermark_confidence,
+                        "dilate_num": dilate_num,
+                        "callback_func": callback_func,
+                        "kwargs": kwargs
+                    }
+                    self._image_model_inpainting(args)
+                else:
+                    args = {
+                        "frame_files": frame_files,
+                        "processed_frames_dir": processed_frames_dir,
+                        "frame_mask_map": frame_mask_map,
+                        "dilate_num": dilate_num,
+                        "refine_type": refine_type,
+                        "ppt_onnx_basedir": ppt_onnx_basedir
+                    }
+                    self._video_model_inpainting(args)
+                if progress_cb is not None:
+                    progress_cb("WaterRemoved", "")
 
             self._merge_processed_frames(
                 processed_frames_dir=processed_frames_dir,

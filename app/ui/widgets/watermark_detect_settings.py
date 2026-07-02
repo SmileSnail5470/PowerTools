@@ -155,6 +155,13 @@ class WatermarkDetectSettings(QWidget):
         c2_1.clicked.connect(lambda: self.watermarkFormat.emit("dynamic_watermark"))
         grid1_l.addWidget(c2_1)
         p0_l.addWidget(grid1)
+        p0_l.addSpacing(24)
+
+        p0_l.addWidget(self.create_label_group(self.tr("水印区域选择"), self.tr("可选：框选水印所在区域，辅助识别定位")))
+        self.auto_area_btn = QPushButton(self.tr("🖼 水印区域选择"))
+        self.auto_area_btn.setObjectName("secondaryBtn")
+        self.auto_area_btn.clicked.connect(lambda _: self._watermark_area_selector(single_area_only=True))
+        p0_l.addWidget(self.auto_area_btn)
 
         # AI 交互 ---
         p1 = QWidget()
@@ -213,6 +220,17 @@ class WatermarkDetectSettings(QWidget):
         spa_l.addWidget(sec_btn)
         self.sub_stack.addWidget(spa_w)
         p1_l.addWidget(self.sub_stack)
+        p1_l.addSpacing(20)
+
+        self.interactive_area_container = QWidget()
+        area_container_l = QVBoxLayout(self.interactive_area_container)
+        area_container_l.setContentsMargins(0, 0, 0, 0)
+        area_container_l.addWidget(self.create_label_group(self.tr("水印区域选择"), self.tr("可选：框选水印所在区域，辅助识别定位")))
+        self.interactive_area_btn = QPushButton(self.tr("🖼 水印区域选择"))
+        self.interactive_area_btn.setObjectName("secondaryBtn")
+        self.interactive_area_btn.clicked.connect(lambda _: self._watermark_area_selector(single_area_only=True))
+        area_container_l.addWidget(self.interactive_area_btn)
+        p1_l.addWidget(self.interactive_area_container)
         p1_l.addSpacing(20)
 
         conf_w = QWidget()
@@ -323,8 +341,8 @@ class WatermarkDetectSettings(QWidget):
         self.card_layout.addWidget(self.stack)
         self.main_layout.addWidget(self.card)
 
-        self.btn_sem.clicked.connect(lambda: [self.btn_spa.setChecked(False), self.sub_stack.setCurrentIndex(0)])
-        self.btn_spa.clicked.connect(lambda: [self.btn_sem.setChecked(False), self.sub_stack.setCurrentIndex(1)])
+        self.btn_sem.clicked.connect(lambda: [self.btn_spa.setChecked(False), self.sub_stack.setCurrentIndex(0), self.interactive_area_container.setVisible(True)])
+        self.btn_spa.clicked.connect(lambda: [self.btn_sem.setChecked(False), self.sub_stack.setCurrentIndex(1), self.interactive_area_container.setVisible(False)])
 
     def create_label_group(self, title, desc):
         w = QWidget()
@@ -517,10 +535,10 @@ class WatermarkDetectSettings(QWidget):
         else:
             self.file_path = os.path.join(file_path, os.listdir(file_path)[0])
 
-    def _watermark_area_selector(self):
+    def _watermark_area_selector(self, single_area_only=False):
         if not self.file_path:
             return
-        area_selector = AreaSelectorDialog(file_path=self.file_path, parent=self)
+        area_selector = AreaSelectorDialog(file_path=self.file_path, single_area_only=single_area_only, parent=self)
         area_selector.exec()
         boxes = []
         for item in area_selector.get_results():

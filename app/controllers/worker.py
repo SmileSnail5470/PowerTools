@@ -1,4 +1,5 @@
 import os
+import sys
 import logging
 import multiprocessing
 import queue
@@ -17,14 +18,20 @@ _POLL_INTERVAL = 0.05
 
 
 def _subprocess_target(func, msg_queue, cancel_event, log_dir, args, kwargs):
-    sub_logger = logging.getLogger("subprocess")
-    sub_logger.setLevel(logging.DEBUG)
+    # 配置根 logger，使所有模块的 logging 输出都写入日志文件
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
     if log_dir:
         os.makedirs(log_dir, exist_ok=True)
-        fh = logging.FileHandler(os.path.join(log_dir, "powertools.log"), encoding="utf-8")
+        log_file_path = os.path.join(log_dir, "powertools.log")
+        fh = logging.FileHandler(log_file_path, encoding="utf-8")
         fh.setLevel(logging.DEBUG)
-        fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] [subprocess] %(message)s"))
-        sub_logger.addHandler(fh)
+        fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] [%(name)s] %(message)s"))
+        root_logger.addHandler(fh)
+        # 重定向 stdout/stderr 到日志文件，捕获 print() 输出
+        log_stream = open(log_file_path, "a", encoding="utf-8")
+        sys.stdout = log_stream
+        sys.stderr = log_stream
     try:
         def progress_cb(v: str, msg: str):
             if cancel_event.is_set():
@@ -42,7 +49,7 @@ def _subprocess_target(func, msg_queue, cancel_event, log_dir, args, kwargs):
         msg_queue.put((_MSG_RESULT, result))
     except Exception as e:
         tb = traceback.format_exc()
-        sub_logger.error(f"Subprocess exception: {type(e).__name__}: {e}\n{tb}")
+        logging.getLogger("subprocess").error(f"Subprocess exception: {type(e).__name__}: {e}\n{tb}")
         msg_queue.put((_MSG_ERROR, type(e).__name__, str(e)))
 
 
