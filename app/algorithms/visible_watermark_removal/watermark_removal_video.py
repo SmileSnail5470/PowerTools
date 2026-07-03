@@ -206,14 +206,14 @@ class VideoWatermarkRemover:
                 audio_input,
                 output_video_path,
                 **output_kwargs
-            )
+            ).global_args("-hide_banner", "-loglevel", "error")
         else:
             stream = ffmpeg.output(
                 video_input,
                 output_video_path,
                 **output_kwargs
-            )
-        ffmpeg.run(stream, overwrite_output=True, quiet=True)
+            ).global_args("-hide_banner", "-loglevel", "error")
+        ffmpeg.run(stream, overwrite_output=True, quiet=False)
 
     def _image_model_inpainting(self, args: dict):
         frame_files = args.get("frame_files")
@@ -381,6 +381,7 @@ class VideoWatermarkRemover:
             segment_onnx_dir,
             ppt_onnx_basedir,
             refine_type,
+            use_cache_mask,
             watermark_type,
             ai_detect_type,
             ai_interactive_type,
@@ -404,7 +405,6 @@ class VideoWatermarkRemover:
         os.makedirs(cropped_masks_dir, exist_ok=True)
         os.makedirs(cropped_output_dir, exist_ok=True)
 
-        mask = self._single_box_to_mask(box, bbox)
         frame_mask_map = {}
         for frame_file in frame_files:
             frame = cv2.imread(os.path.join(input_frames_dir, frame_file.name))
@@ -414,13 +414,51 @@ class VideoWatermarkRemover:
             cropped_frame_path = os.path.join(cropped_frames_dir, frame_file.name)
             cv2.imwrite(cropped_frame_path, cropped_frame)
 
-            mask_save_path = os.path.join(cropped_masks_dir, frame_file.name)
-            cv2.imwrite(mask_save_path, mask)
-            frame_mask_map[cropped_frame_path] = mask_save_path
-
         cropped_frame_files = sorted([Path(os.path.join(cropped_frames_dir, f)) for f in os.listdir(cropped_frames_dir) if f.endswith('.png')])
-        cropped_output_path = Path(cropped_output_dir)
+        self._prepare_masks(
+            tmp_mask_dir=cropped_masks_dir,
+            frame_mask_map=frame_mask_map,
+            mask_path="",
+            use_cache_mask=use_cache_mask,
+            watermark_type=watermark_type,
+            ai_detect_type=ai_detect_type,
+            ai_interactive_type=ai_interactive_type,
+            ai_interactive_prompt=ai_interactive_prompt,
+            ai_interactive_boxes=ai_interactive_boxes,
+            watermark_confidence=watermark_confidence,
+            frame_files=cropped_frame_files,
+            sr_segment_onnx_path=sr_segment_onnx_path,
+            pt_segment_onnx_path=pt_segment_onnx_path,
+            text_detection_onnx_path=text_detection_onnx_path,
+            yolo_detection_onnx_path=yolo_detection_onnx_path,
+            segment_onnx_dir=segment_onnx_dir,
+            **kwargs
+        )
+        progress_cb = kwargs.pop("progress_cb", None)
+        fps = kwargs.pop("fps")
+        has_audio = kwargs.pop("has_audio")
+        input_video_path = kwargs.pop("input_video_path")
+        output_video_path = kwargs.pop("output_video_path")
+        if progress_cb is not None:
+            tmp_visualzation_path = os.path.join(os.path.dirname(str(cropped_masks_dir)), "masks_visualization")
+            for frame_file, tmp_mask_path in frame_mask_map.items():
+                os.makedirs(tmp_visualzation_path, exist_ok=True)
+                self._save_mask_visualization(
+                    img_path=str(frame_file),
+                    mask=cv2.imread(tmp_mask_path, cv2.IMREAD_GRAYSCALE),
+                    file_path=os.path.join(tmp_visualzation_path, os.path.basename(str(frame_file)))
+                )
+            output_video_tmp_path = "{0}_mask_visualization.mp4".format(output_video_path.rsplit(".", 1)[0])
+            self._merge_processed_frames(
+                processed_frames_dir=Path(tmp_visualzation_path),
+                has_audio=has_audio,
+                fps=fps,
+                input_video_path=input_video_path,
+                output_video_path=output_video_tmp_path
+            )
+            progress_cb("MaskCompleted", output_video_tmp_path)
 
+        cropped_output_path = Path(cropped_output_dir)
         if refine_type in self.video_models_name:
             args = {
                 "frame_files": cropped_frame_files,
@@ -481,6 +519,7 @@ class VideoWatermarkRemover:
             ppt_onnx_basedir,
             mask_path,
             refine_type,
+            use_cache_mask,
             watermark_type,
             ai_detect_type,
             ai_interactive_type,
@@ -524,6 +563,7 @@ class VideoWatermarkRemover:
                 segment_onnx_dir=segment_onnx_dir,
                 ppt_onnx_basedir=ppt_onnx_basedir,
                 refine_type=refine_type,
+                use_cache_mask=use_cache_mask,
                 watermark_type=watermark_type,
                 ai_detect_type=ai_detect_type,
                 ai_interactive_type=ai_interactive_type,
@@ -609,6 +649,7 @@ class VideoWatermarkRemover:
                 .input(input_video_path)
                 .output(str(frames_dir / '%06d.png'), start_number=0, fps_mode="passthrough")
                 .overwrite_output()
+                .global_args("-hide_banner", "-loglevel", "error")
                 .run(capture_stdout=True, capture_stderr=True)
             )
             
@@ -621,6 +662,11 @@ class VideoWatermarkRemover:
             if watermark_boxes:
                 if progress_cb is not None:
                     progress_cb("MaskStart", "")
+                kwargs["progress_cb"] = progress_cb
+                kwargs["fps"] = fps
+                kwargs["has_audio"] = has_audio
+                kwargs["input_video_path"] = input_video_path
+                kwargs["output_video_path"] = output_video_path
                 self._process_frames_with_boxes(
                     frame_files=frame_files,
                     processed_frames_dir=processed_frames_dir,
@@ -638,6 +684,7 @@ class VideoWatermarkRemover:
                     ppt_onnx_basedir=ppt_onnx_basedir,
                     mask_path=mask_path,
                     refine_type=refine_type,
+                    use_cache_mask=use_cache_mask,
                     watermark_type=watermark_type,
                     ai_detect_type=ai_detect_type,
                     ai_interactive_type=ai_interactive_type,
@@ -646,7 +693,6 @@ class VideoWatermarkRemover:
                     watermark_confidence=watermark_confidence,
                     dilate_num=dilate_num,
                     callback_func=callback_func,
-                    progress_cb=progress_cb,
                     **kwargs
                 )
                 if progress_cb is not None:

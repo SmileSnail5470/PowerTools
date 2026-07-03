@@ -101,7 +101,7 @@ class PPTInferenceORT:
                     ref_index.append(i)
         return ref_index
 
-    def inference(self, input_frames_dir, masks_dir, output_dir, debug=False):
+    def inference(self, input_frames_dir, masks_dir, output_dir, debug=True):
         frames, _, size = self._read_frame(frame_root=input_frames_dir)
         if self.width != -1 and self.height != -1:
             size = (self.width, self.height)
@@ -121,10 +121,10 @@ class PPTInferenceORT:
 
         video_length = frames_np.shape[1]
         if debug:
-            print(f'\nProcessing pure ONNX Pipeline: [{video_length} frames]...')
+            print(f'\nProcessing pure ONNX Pipeline: [{video_length} frames] and frame shape: {frames_np.shape} and use cupy: {self._use_cupy}')
             start_time = time.time()
 
-        raft_scale = 0.5
+        raft_scale = 0.5 if min(frames_np.shape[-2], frames_np.shape[-1]) >= 480 else 1.0
         short_clip_len = 12 if max(frames_np.shape) <= 1280 else 6
         if video_length > short_clip_len:
             gt_flows_f_list, gt_flows_b_list = [], []

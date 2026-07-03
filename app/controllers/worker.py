@@ -19,7 +19,7 @@ _POLL_INTERVAL = 0.05
 
 def _subprocess_target(func, msg_queue, cancel_event, log_dir, args, kwargs):
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    root_logger.setLevel(logging.INFO)
     if log_dir:
         os.makedirs(log_dir, exist_ok=True)
         log_file_path = os.path.join(log_dir, "powertools.log")

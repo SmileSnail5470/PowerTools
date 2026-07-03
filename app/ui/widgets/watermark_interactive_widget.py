@@ -308,8 +308,8 @@ class AreaSelectorDialog(QDialog):
                         "id": int(time.time()*1000), 
                         "x": int(rect.x()), 
                         "y": int(rect.y()), 
-                        "w": int(rect.width()), 
-                        "h": int(rect.height())
+                        "w": self._even_floor(rect.width()), 
+                        "h": self._even_floor(rect.height())
                     }
                     if self.single_area_only:
                         self.saved_boxes = [real_box]
@@ -318,6 +318,10 @@ class AreaSelectorDialog(QDialog):
                     self.render_all()
                 return True
         return super().eventFilter(source, event)
+    
+    def _even_floor(self, v):
+        # 将数值向下取整为偶数，确保宽高为偶数
+        return int(v) & ~1
 
     def delete_box(self, box_id):
         self.saved_boxes = [b for b in self.saved_boxes if b['id'] != box_id]
