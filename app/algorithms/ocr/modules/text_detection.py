@@ -628,7 +628,7 @@ class TextDetector(object):
 
         input_dict = {}
         input_dict[self.input_tensor.name] = img
-        outputs = self.predictor.run(self.output_tensors, input_dict)
+        outputs = self.predictor.run_with_iobinding_numpy(input_dict)
 
         preds = {}
         preds["maps"] = outputs[0]

@@ -46,6 +46,10 @@ _NP_TO_ORT_DTYPE = {
 }
 
 
+_SESSION_CACHE = {}
+_SESSION_CACHE_LOCK = threading.Lock()
+
+
 def _is_cuda_session(session):
     try:
         providers = session.get_providers()
@@ -280,24 +284,53 @@ class ORTEnvironment:
             cls._initialized = True
 
 
+def _session_cache_key(model_path, feature_name, providers, provider_options):
+    try:
+        opts_key = json.dumps(provider_options, sort_keys=True, default=str)
+    except Exception:
+        opts_key = repr(provider_options)
+    prov_key = tuple(providers) if providers else ()
+    return (os.path.abspath(model_path), feature_name, prov_key, opts_key)
+
+
 def general_inference_session(model_path: str, sess_options, providers, provider_options):
     model_name = os.environ["_feature_name_"]
-    lic_path = os.path.join(os.path.join(pathlib.Path.home(), ".PowerTools", "license"), "license.lic")
-    with open(lic_path, "r", encoding="utf-8") as f:
-        raw_data = json.load(f)
-    license_json = json.dumps(raw_data)
-    old_cwd = os.getcwd()
-    os.chdir(os.path.dirname(model_path))
-    sess = model_loader.load_model_auto(
-        model_path,
-        model_name, 
-        license_json, 
-        session_options=sess_options, 
-        providers=providers, 
-        provider_options=provider_options
-    )
-    os.chdir(old_cwd)
-    return IOBindingSession(sess)
+    cache_key = _session_cache_key(model_path, model_name, providers, provider_options)
+
+    cached = _SESSION_CACHE.get(cache_key)
+    if cached is not None:
+        print(f"Using cached session for {model_path} with feature {model_name}")
+        return cached
+
+    with _SESSION_CACHE_LOCK:
+        cached = _SESSION_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+        lic_path = os.path.join(os.path.join(pathlib.Path.home(), ".PowerTools", "license"), "license.lic")
+        with open(lic_path, "r", encoding="utf-8") as f:
+            raw_data = json.load(f)
+        license_json = json.dumps(raw_data)
+        old_cwd = os.getcwd()
+        os.chdir(os.path.dirname(model_path))
+        try:
+            sess = model_loader.load_model_auto(
+                model_path,
+                model_name,
+                license_json,
+                session_options=sess_options,
+                providers=providers,
+                provider_options=provider_options
+            )
+        finally:
+            os.chdir(old_cwd)
+        wrapped = IOBindingSession(sess)
+        _SESSION_CACHE[cache_key] = wrapped
+        return wrapped
+
+
+def clear_session_cache():
+    with _SESSION_CACHE_LOCK:
+        _SESSION_CACHE.clear()
 
 
 

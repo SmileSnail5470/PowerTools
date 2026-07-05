@@ -74,7 +74,7 @@ class SLBRSegment():
         for i in range(0, len(patches), batch_size):
             batch = np.concatenate(patches[i:i+batch_size], axis=0)
 
-            outputs = self.session.run(self.output_names, {self.input_name: batch})
+            outputs = self.session.run_with_iobinding_numpy({self.input_name: batch})
 
             immasks = outputs[1]
 

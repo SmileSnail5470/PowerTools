@@ -156,7 +156,7 @@ class TextClassifier(object):
 
             input_dict = {}
             input_dict[self.input_tensor.name] = norm_img_batch
-            outputs = self.predictor.run(self.output_tensors, input_dict)
+            outputs = self.predictor.run_with_iobinding_numpy(input_dict)
             prob_out = outputs[0]
             cls_result = self.postprocess_op(prob_out)
             elapse += time.time() - starttime

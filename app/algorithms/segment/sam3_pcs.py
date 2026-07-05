@@ -31,11 +31,6 @@ class SAM3_PCS:
         self._input_ids_name = self._find_input("input_ids")
         self._attention_mask_name = self._find_input("attention_mask")
 
-        self._out_semantic = self._find_output("semantic_seg")
-        self._out_instance = self._find_output("instance_masks")
-        self._out_boxes = self._find_output("pred_boxes")
-        self._out_logits = self._find_output("pred_logits")
-
         self._input_ids: Optional[np.ndarray] = None
         self._attention_mask: Optional[np.ndarray] = None
 
@@ -70,8 +65,7 @@ class SAM3_PCS:
             self._input_ids_name: self._input_ids,
             self._attention_mask_name: self._attention_mask,
         }
-        out_names = [self._out_instance, self._out_semantic, self._out_boxes, self._out_logits]
-        instance_masks, semantic_seg, pred_boxes, pred_logits = self.session.run(out_names, feeds)
+        instance_masks, semantic_seg, pred_boxes, pred_logits = self.session.run_with_iobinding_numpy(feeds)
         return semantic_seg
 
     def infer_on_image(self, image_bgr: np.ndarray):

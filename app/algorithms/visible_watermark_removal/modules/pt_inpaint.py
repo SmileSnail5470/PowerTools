@@ -143,8 +143,7 @@ class PatchWiperInpaint():
                 mask_tile = mask[:, :, y:y+self.tile_size, x:x+self.tile_size]
 
                 if self._tile_has_watermark(mask_tile):
-                    pred = self.session.run(
-                        [self.output_name],
+                    pred = self.session.run_with_iobinding_numpy(
                         {
                             self.image_input_name: img_tile,
                             self.mask_input_name: mask_tile
