@@ -57,6 +57,7 @@ class WatermarkDetectSettings(QWidget):
     watermarkFormat = Signal(str)             # 静态水印/动态水印
     manualWatermarktMaskPath = Signal(str)    # 手动标注 Mask 路径
     maskDirectoryChanged = Signal(str)        # 人工指定 Mask 路径
+    imageBoxes = Signal(list)                 # 人工选中输入区域
     # AI 交互检测信号
     watermarkAIInteractiveType = Signal(str)  # 语义检测/空间范围检测
     watermarkDetectPrompt = Signal(str)       # 语义检测提示词
@@ -160,7 +161,7 @@ class WatermarkDetectSettings(QWidget):
         p0_l.addWidget(self.create_label_group(self.tr("水印区域选择"), self.tr("可选：框选水印所在区域，辅助识别定位")))
         self.auto_area_btn = QPushButton(self.tr("🖼 水印区域选择"))
         self.auto_area_btn.setObjectName("secondaryBtn")
-        self.auto_area_btn.clicked.connect(lambda _: self._watermark_area_selector(single_area_only=True))
+        self.auto_area_btn.clicked.connect(lambda _: self._watermark_area_selector(single_area_only=True, image_boxes_only=True))
         p0_l.addWidget(self.auto_area_btn)
 
         # AI 交互 ---
@@ -228,7 +229,7 @@ class WatermarkDetectSettings(QWidget):
         area_container_l.addWidget(self.create_label_group(self.tr("水印区域选择"), self.tr("可选：框选水印所在区域，辅助识别定位")))
         self.interactive_area_btn = QPushButton(self.tr("🖼 水印区域选择"))
         self.interactive_area_btn.setObjectName("secondaryBtn")
-        self.interactive_area_btn.clicked.connect(lambda _: self._watermark_area_selector(single_area_only=True))
+        self.interactive_area_btn.clicked.connect(lambda _: self._watermark_area_selector(single_area_only=True, image_boxes_only=True))
         area_container_l.addWidget(self.interactive_area_btn)
         p1_l.addWidget(self.interactive_area_container)
         p1_l.addSpacing(20)
@@ -535,7 +536,7 @@ class WatermarkDetectSettings(QWidget):
         else:
             self.file_path = os.path.join(file_path, os.listdir(file_path)[0])
 
-    def _watermark_area_selector(self, single_area_only=False):
+    def _watermark_area_selector(self, single_area_only=False, image_boxes_only=False):
         if not self.file_path:
             return
         area_selector = AreaSelectorDialog(file_path=self.file_path, single_area_only=single_area_only, parent=self)
@@ -543,7 +544,10 @@ class WatermarkDetectSettings(QWidget):
         boxes = []
         for item in area_selector.get_results():
             boxes.append((item["x"], item["y"], item["x"] + item["w"], item["y"] + item["h"]))
-        self.watermarkBoxes.emit(boxes)
+        if not image_boxes_only:
+            self.watermarkBoxes.emit(boxes)
+        else:
+            self.imageBoxes.emit(boxes)
 
     def _process_manual_detect(self):
         if not self.file_path:

@@ -68,7 +68,7 @@ class WatermarkRemoveWork(BaseWorker):
                 "ai_interactive_prompt": kwargs["watermark_detect_prompt"] if "watermark_detect_prompt" in kwargs else "watermark",
                 "ai_interactive_boxes": kwargs["watermark_boxes"] if "watermark_boxes" in kwargs else [],
                 "watermark_confidence": kwargs["watermark_confidence"] if "watermark_confidence" in kwargs else 0.5,
-                "watermark_boxes": kwargs["watermark_boxes"] if "watermark_boxes" in kwargs else [],
+                "watermark_boxes": kwargs["image_boxes"] if "image_boxes" in kwargs else [],
                 "dilate_num": int(kwargs["mask_dilate"]),
                 "progress_cb": progress_cb,
             }
@@ -98,7 +98,7 @@ class WatermarkRemoveWork(BaseWorker):
                 "ai_interactive_prompt": kwargs["watermark_detect_prompt"] if "watermark_detect_prompt" in kwargs else "watermark",
                 "ai_interactive_boxes": kwargs["watermark_boxes"] if "watermark_boxes" in kwargs else [],
                 "watermark_confidence": kwargs["watermark_confidence"] if "watermark_confidence" in kwargs else 0.5,
-                "watermark_boxes": kwargs["watermark_boxes"] if "watermark_boxes" in kwargs else [],
+                "watermark_boxes": kwargs["image_boxes"] if "image_boxes" in kwargs else [],
                 "dilate_num": int(kwargs["mask_dilate"]),
                 "ffmpeg_path": os.getenv("POWERTOOLS_FFMPEG_BIN"),
                 "progress_cb": progress_cb,

@@ -101,6 +101,7 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
         bind_widget_to_param(watermark_detect_settings, "watermarkAIInteractiveType", watermark_remove_params, "watermark_ai_interactive_type", transform=None)
         bind_widget_to_param(watermark_detect_settings, "watermarkDetectPrompt", watermark_remove_params, "watermark_detect_prompt", transform=None)
         bind_widget_to_param(watermark_detect_settings, "watermarkBoxes", watermark_remove_params, "watermark_boxes", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "imageBoxes", watermark_remove_params, "image_boxes", transform=None)
         bind_widget_to_param(watermark_detect_settings, "watermarkContent", watermark_remove_params, "watermark_content", transform=None)
         bind_widget_to_param(watermark_detect_settings, "watermarkConfidence", watermark_remove_params, "watermark_confidence", transform=None)
         # 设置参数默认值
@@ -111,6 +112,7 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
         watermark_detect_settings.watermarkAIInteractiveType.emit("semantic_detect")
         watermark_detect_settings.watermarkDetectPrompt.emit("")
         watermark_detect_settings.watermarkBoxes.emit([])
+        watermark_detect_settings.imageBoxes.emit([])
         watermark_detect_settings.watermarkContent.emit("general_watermark")
         watermark_detect_settings.watermarkConfidence.emit(0.3)
 
@@ -118,6 +120,7 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
             lambda file_path: (
                 watermark_detect_settings.set_file_path(file_path=file_path),
                 None if file_path else watermark_detect_settings.watermarkBoxes.emit([]),
+                None if file_path else watermark_detect_settings.imageBoxes.emit([])
             )
         )
 
@@ -819,8 +822,8 @@ class HeaderWidget(QWidget):
             task_params["output_path"] = params["output_path"]
             task_params["output_format"] = params["output_format"]
 
-        if "watermark_boxes" in params and params["watermark_boxes"]:
-            task_params["watermark_boxes"] = params["watermark_boxes"]
+        if "image_boxes" in params and params["image_boxes"]:
+            task_params["image_boxes"] = params["image_boxes"]
 
         if params["watermark_detect_type"] == "ai_auto_detect":
             task_params["watermark_content"] = params["watermark_content"]
