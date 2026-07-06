@@ -9,6 +9,7 @@ from app.ui.library.qfluentwidgets import setFont
 from app.ui.common.utils import get_file_type
 from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
 from app.ui.widgets.watermark_manual_select_widget import WatermarkMaskTool
+from app.ui.widgets.video_watermark_tracking import VideoWatermarkTrackingDialog
 
 
 class OptionCard(QFrame):
@@ -65,6 +66,8 @@ class WatermarkDetectSettings(QWidget):
     watermarkConfidence = Signal(float)       # 水印置信度
     # AI 自动检测
     watermarkContent = Signal(str)            # 通用水印/文字水印
+    # 动态水印跟踪信号
+    watermarkTrackingData = Signal(dict)      # 跟踪数据: {keyframes, end_frame, fps, total_frames}
 
 
     def __init__(self, parent=None):
@@ -73,6 +76,8 @@ class WatermarkDetectSettings(QWidget):
         self.current_tab_index = 0
         self.file_path = None
         self.mask_dir_path = ""
+        self.is_video_file = False
+        self.is_dynamic_watermark = False
 
         self.setObjectName("WatermarkDetectSettings")
         self.init_ui()
@@ -149,14 +154,24 @@ class WatermarkDetectSettings(QWidget):
         grid1_l.setContentsMargins(0,0,0,0)
         c2 = OptionCard(self.tr("静态水印"), self.tr("固定位置不移动"))
         c2.clicked.connect(lambda: self.watermarkFormat.emit("static_watermark"))
+        c2.clicked.connect(lambda: self._on_auto_dynamic_selected(False))
         c2.selected = True
         c2.update_style()
         grid1_l.addWidget(c2)
         c2_1 = OptionCard(self.tr("动态水印"), self.tr("移动、缩放、淡入淡出"))
         c2_1.clicked.connect(lambda: self.watermarkFormat.emit("dynamic_watermark"))
+        c2_1.clicked.connect(lambda: self._on_auto_dynamic_selected(True))
         grid1_l.addWidget(c2_1)
         p0_l.addWidget(grid1)
         p0_l.addSpacing(24)
+
+        self.auto_tracking_btn = QPushButton(self.tr("🎯 启用跟踪设置(可选)"))
+        self.auto_tracking_btn.setObjectName("primaryBtn")
+        self.auto_tracking_btn.setCursor(Qt.PointingHandCursor)
+        self.auto_tracking_btn.clicked.connect(self._open_tracking_dialog)
+        self.auto_tracking_btn.setVisible(False)
+        p0_l.addWidget(self.auto_tracking_btn)
+        p0_l.addSpacing(12)
 
         p0_l.addWidget(self.create_label_group(self.tr("水印区域选择"), self.tr("可选：框选水印所在区域，辅助识别定位")))
         self.auto_area_btn = QPushButton(self.tr("🖼 水印区域选择"))
@@ -277,13 +292,22 @@ class WatermarkDetectSettings(QWidget):
         grid2_l.setContentsMargins(0,0,0,0)
         c3 = OptionCard(self.tr("静态水印"), self.tr("固定位置不移动"))
         c3.clicked.connect(lambda: self.watermarkFormat.emit("static_watermark"))
+        c3.clicked.connect(lambda: self._on_interactive_dynamic_selected(False))
         c3.selected = True
         c3.update_style()
         grid2_l.addWidget(c3)
         c3_1 = OptionCard(self.tr("动态水印"), self.tr("移动、缩放、淡入淡出"))
         c3_1.clicked.connect(lambda: self.watermarkFormat.emit("dynamic_watermark"))
+        c3_1.clicked.connect(lambda: self._on_interactive_dynamic_selected(True))
         grid2_l.addWidget(c3_1)
         p1_l.addWidget(grid2)
+
+        self.interactive_tracking_btn = QPushButton(self.tr("🎯 启用跟踪设置(可选)"))
+        self.interactive_tracking_btn.setObjectName("primaryBtn")
+        self.interactive_tracking_btn.setCursor(Qt.PointingHandCursor)
+        self.interactive_tracking_btn.clicked.connect(self._open_tracking_dialog)
+        self.interactive_tracking_btn.setVisible(False)
+        p1_l.addWidget(self.interactive_tracking_btn)
 
         # 手工标注 ---
         p2 = QWidget()
@@ -535,6 +559,8 @@ class WatermarkDetectSettings(QWidget):
             self.file_path = file_path
         else:
             self.file_path = os.path.join(file_path, os.listdir(file_path)[0])
+        self.is_video_file = get_file_type(self.file_path) == "video"
+        self._update_tracking_btn_visibility()
 
     def _watermark_area_selector(self, single_area_only=False, image_boxes_only=False):
         if not self.file_path:
@@ -557,3 +583,26 @@ class WatermarkDetectSettings(QWidget):
         watermarkMaskTool.exec()
         mask_path = watermarkMaskTool.get_mask_path()
         self.manualWatermarktMaskPath.emit(mask_path)
+
+    def _on_auto_dynamic_selected(self, is_dynamic):
+        self.is_dynamic_watermark = is_dynamic
+        self._update_tracking_btn_visibility()
+
+    def _on_interactive_dynamic_selected(self, is_dynamic):
+        self.is_dynamic_watermark = is_dynamic
+        self._update_tracking_btn_visibility()
+
+    def _update_tracking_btn_visibility(self):
+        should_show = self.is_video_file and self.is_dynamic_watermark
+        self.auto_tracking_btn.setVisible(should_show)
+        self.interactive_tracking_btn.setVisible(should_show)
+
+    def _open_tracking_dialog(self):
+        if not self.file_path:
+            return
+        dialog = VideoWatermarkTrackingDialog(file_path=self.file_path, parent=self.window())
+        dialog.trackingDataReady.connect(self._on_tracking_data_ready)
+        dialog.exec()
+
+    def _on_tracking_data_ready(self, data):
+        self.watermarkTrackingData.emit(data)
