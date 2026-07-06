@@ -571,7 +571,6 @@ class WatermarkDetectSettings(QWidget):
         else:
             self.file_path = os.path.join(file_path, os.listdir(file_path)[0])
         self.is_video_file = get_file_type(self.file_path) == "video"
-        self._update_tracking_btn_visibility()
 
     def _watermark_area_selector(self, single_area_only=False, image_boxes_only=False):
         if not self.file_path:
@@ -597,15 +596,12 @@ class WatermarkDetectSettings(QWidget):
 
     def _on_auto_dynamic_selected(self, is_dynamic):
         self.is_dynamic_watermark = is_dynamic
-        self._update_tracking_btn_visibility()
+        should_show = self.is_video_file and self.is_dynamic_watermark
+        self.auto_tracking_container.setVisible(should_show)
 
     def _on_interactive_dynamic_selected(self, is_dynamic):
         self.is_dynamic_watermark = is_dynamic
-        self._update_tracking_btn_visibility()
-
-    def _update_tracking_btn_visibility(self):
         should_show = self.is_video_file and self.is_dynamic_watermark
-        self.auto_tracking_container.setVisible(should_show)
         self.interactive_tracking_container.setVisible(should_show)
 
     def _open_tracking_dialog(self):
