@@ -165,12 +165,17 @@ class WatermarkDetectSettings(QWidget):
         p0_l.addWidget(grid1)
         p0_l.addSpacing(24)
 
-        self.auto_tracking_btn = QPushButton(self.tr("🎯 启用跟踪设置(可选)"))
-        self.auto_tracking_btn.setObjectName("primaryBtn")
+        self.auto_tracking_container = QWidget()
+        auto_tracking_container_l = QVBoxLayout(self.auto_tracking_container)
+        auto_tracking_container_l.setContentsMargins(0, 0, 0, 0)
+        auto_tracking_container_l.addWidget(self.create_label_group(self.tr("视频水印跟踪"), self.tr("可选：跟踪指定关键帧水印，极大提高水印检测速度")))
+        self.auto_tracking_btn = QPushButton(self.tr("🎯 启用跟踪(可选)"))
+        self.auto_tracking_btn.setObjectName("secondaryBtn")
         self.auto_tracking_btn.setCursor(Qt.PointingHandCursor)
         self.auto_tracking_btn.clicked.connect(self._open_tracking_dialog)
-        self.auto_tracking_btn.setVisible(False)
-        p0_l.addWidget(self.auto_tracking_btn)
+        auto_tracking_container_l.addWidget(self.auto_tracking_btn)
+        self.auto_tracking_container.setVisible(False)
+        p0_l.addWidget(self.auto_tracking_container)
         p0_l.addSpacing(12)
 
         p0_l.addWidget(self.create_label_group(self.tr("水印区域选择"), self.tr("可选：框选水印所在区域，辅助识别定位")))
@@ -301,13 +306,19 @@ class WatermarkDetectSettings(QWidget):
         c3_1.clicked.connect(lambda: self._on_interactive_dynamic_selected(True))
         grid2_l.addWidget(c3_1)
         p1_l.addWidget(grid2)
-
-        self.interactive_tracking_btn = QPushButton(self.tr("🎯 启用跟踪设置(可选)"))
-        self.interactive_tracking_btn.setObjectName("primaryBtn")
+        p1_l.addSpacing(20)
+        
+        self.interactive_tracking_container = QWidget()
+        tracking_container_l = QVBoxLayout(self.interactive_tracking_container)
+        tracking_container_l.setContentsMargins(0, 0, 0, 0)
+        tracking_container_l.addWidget(self.create_label_group(self.tr("视频水印跟踪"), self.tr("可选：跟踪指定关键帧水印，极大提高水印检测速度")))
+        self.interactive_tracking_btn = QPushButton(self.tr("🎯 启用跟踪(可选)"))
+        self.interactive_tracking_btn.setObjectName("secondaryBtn")
         self.interactive_tracking_btn.setCursor(Qt.PointingHandCursor)
         self.interactive_tracking_btn.clicked.connect(self._open_tracking_dialog)
-        self.interactive_tracking_btn.setVisible(False)
-        p1_l.addWidget(self.interactive_tracking_btn)
+        self.interactive_tracking_container.setVisible(False)
+        tracking_container_l.addWidget(self.interactive_tracking_btn)
+        p1_l.addWidget(self.interactive_tracking_container)
 
         # 手工标注 ---
         p2 = QWidget()
@@ -594,8 +605,8 @@ class WatermarkDetectSettings(QWidget):
 
     def _update_tracking_btn_visibility(self):
         should_show = self.is_video_file and self.is_dynamic_watermark
-        self.auto_tracking_btn.setVisible(should_show)
-        self.interactive_tracking_btn.setVisible(should_show)
+        self.auto_tracking_container.setVisible(should_show)
+        self.interactive_tracking_container.setVisible(should_show)
 
     def _open_tracking_dialog(self):
         if not self.file_path:
