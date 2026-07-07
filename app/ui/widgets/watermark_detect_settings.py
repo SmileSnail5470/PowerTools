@@ -417,6 +417,12 @@ class WatermarkDetectSettings(QWidget):
         self.height_anim.setEasingCurve(QEasingCurve.OutCubic)
         self.height_anim.start()
 
+    def update_layout_height(self):
+        content_height = self.get_current_page_height(self.current_tab_index)
+        extra_height = 90  # tabs + spacing + margins
+        target_height = content_height + extra_height
+        self.animate_height_change(target_height)
+
     def switch_tab(self, index, animated=True):
         self.current_tab_index = index
         btn_width = self.tabs_container.width() // 3
@@ -435,10 +441,7 @@ class WatermarkDetectSettings(QWidget):
         self.stack.setCurrentIndex(index)
         for i, btn in enumerate(self.tab_btns):
             btn.setChecked(i == index)
-        content_height = self.get_current_page_height(index)
-        extra_height = 90  # tabs + spacing + margins
-        target_height = content_height + extra_height
-        self.animate_height_change(target_height)
+        self.update_layout_height()
 
     def apply_styles(self):
         shadow = QGraphicsDropShadowEffect()
@@ -598,11 +601,13 @@ class WatermarkDetectSettings(QWidget):
         self.is_dynamic_watermark = is_dynamic
         should_show = self.is_video_file and self.is_dynamic_watermark
         self.auto_tracking_container.setVisible(should_show)
+        self.update_layout_height()
 
     def _on_interactive_dynamic_selected(self, is_dynamic):
         self.is_dynamic_watermark = is_dynamic
         should_show = self.is_video_file and self.is_dynamic_watermark
         self.interactive_tracking_container.setVisible(should_show)
+        self.update_layout_height()
 
     def _open_tracking_dialog(self):
         if not self.file_path:
