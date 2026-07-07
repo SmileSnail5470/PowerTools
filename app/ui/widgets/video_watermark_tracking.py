@@ -130,6 +130,8 @@ class VideoWatermarkTrackingDialog(QDialog):
 
         self.global_scroll_area = QScrollArea(self)
         self.global_scroll_area.setObjectName("globalScrollArea")
+        self.global_scroll_area.setFrameShape(QFrame.NoFrame)
+        self.global_scroll_area.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.global_scroll_area.setWidgetResizable(True)
         self.global_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.global_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
@@ -508,7 +510,7 @@ class VideoWatermarkTrackingDialog(QDialog):
                 background: #ffffff;
                 border: 1px solid #e2e8f0;
                 border-radius: 4px;
-                padding: 2px 6px;
+                padding: 2px 4px;
             }
             #keyframeTag QLabel {
                 color: #0f172a;
@@ -526,7 +528,7 @@ class VideoWatermarkTrackingDialog(QDialog):
                 background: #ecfdf5;
                 border: 1px solid #a7f3d0;
                 border-radius: 4px;
-                padding: 2px 6px;
+                padding: 2px 4px;
             }
             #endFrameTag QLabel {
                 color: #065f46;
