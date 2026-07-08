@@ -28,8 +28,8 @@ class MaskTrackerNano:
             raise RuntimeError(
                 "cv2.TrackerNano is unavailable. Install opencv-contrib-python."
             )
-        backbone_path = os.path.join(tacker_onnx_dir, "nanotrack_backbone_sim.encmodel")
-        head_path = os.path.join(tacker_onnx_dir, "nanotrack_head_sim.encmodel")
+        backbone_path = os.path.join(tacker_onnx_dir, "nanotrack_backbone_sim.onnx")
+        head_path = os.path.join(tacker_onnx_dir, "nanotrack_head_sim.onnx")
         params = cv2.TrackerNano_Params()
         params.backbone = backbone_path
         params.neckhead = head_path
@@ -92,7 +92,7 @@ class MaskTrackerNano:
         reliable = bool(ok) and score >= self.score_threshold
         mask = self._warp_mask_to_bbox(bbox, (H, W))
         if not reliable:
-            print(f"Warning: Tracking unreliable at frame {self._frame_index}, score={score:.3f}")
+            print(f"Warning: Tracking unreliable at frame {self._frame_index}, score={score:.3f}", flush=True)
             return False, None, None
 
         self._last_mask = mask

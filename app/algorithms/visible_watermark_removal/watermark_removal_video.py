@@ -186,7 +186,7 @@ class VideoWatermarkRemover:
             else:
                 keyframes = self.video_tracking_data.get("keyframes")
                 end_frame = self.video_tracking_data.get("end_frame")
-                print(f"Start track mask with keyframes {keyframes} and end frame {end_frame}")
+                print(f"Start track mask with keyframes {keyframes} and end frame {end_frame}", flush=True)
                 total_frames = len(frame_files)
                 effective_end = end_frame if end_frame else total_frames
                 for seg_idx, kf in enumerate(keyframes):
@@ -226,8 +226,8 @@ class VideoWatermarkRemover:
                             all_seg_files = [current_ref_frame] + remaining_frames
                             for frame_file in all_seg_files:
                                 dst = os.path.join(seg_frames_dir, frame_file.name)
-                                os.symlink(str(frame_file), dst)
-                            tracker_instance = MaskTrackerNano(tacker_onnx_dir=tacker_onnx_dir, score_threshold=0.8)
+                                shutil.copy2(str(frame_file), dst)
+                            tracker_instance = MaskTrackerNano(tacker_onnx_dir=tacker_onnx_dir, score_threshold=0.5)
                             fail_frame_idx = tracker_instance.inference(current_ref_mask_path, seg_frames_dir)
                             if fail_frame_idx == -1:
                                 for frame_file in remaining_frames:
@@ -247,7 +247,7 @@ class VideoWatermarkRemover:
                                 if failed_frame_offset >= len(remaining_frames):
                                     break
                                 failed_frame_file = remaining_frames[failed_frame_offset]
-                                print(f"Tracking failed at frame {failed_frame_file.name}, re-detecting as new keyframe")
+                                print(f"Tracking failed at frame {failed_frame_file.name}, re-detecting as new keyframe", flush=True)
                                 new_keyframe_mask = WatermarkSegment(watermark_type, ai_detect_type, ai_interactive_type, ai_interactive_prompt, ai_interactive_boxes, watermark_confidence).segment(
                                     image_path=str(failed_frame_file),
                                     sr_onnx_path=sr_segment_onnx_path,
