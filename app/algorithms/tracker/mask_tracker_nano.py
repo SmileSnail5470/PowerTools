@@ -16,20 +16,20 @@ class TrackResult:
 class MaskTrackerNano:
     def __init__(
         self,
-        backbone_path: Optional[str] = None,
-        head_path: Optional[str] = None,
+        tacker_onnx_dir: Optional[str] = None,
         score_threshold: float = 0.3,
         backend: int = cv2.dnn.DNN_BACKEND_DEFAULT,
         target: int = cv2.dnn.DNN_TARGET_CPU,
     ):
-        if backbone_path is None or head_path is None:
-            raise ValueError("Both backbone_path and head_path must be specified.")
+        if tacker_onnx_dir is None:
+            raise ValueError("tacker_onnx_dir must be specified.")
         
         if not hasattr(cv2, "TrackerNano_create"):
             raise RuntimeError(
                 "cv2.TrackerNano is unavailable. Install opencv-contrib-python."
             )
-
+        backbone_path = os.path.join(tacker_onnx_dir, "nanotrack_backbone_sim.encmodel")
+        head_path = os.path.join(tacker_onnx_dir, "nanotrack_head_sim.encmodel")
         params = cv2.TrackerNano_Params()
         params.backbone = backbone_path
         params.neckhead = head_path

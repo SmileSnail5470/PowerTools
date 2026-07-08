@@ -43,14 +43,14 @@ class TimelineSliderWithMarkers(QSlider):
         painter.setBrush(QBrush(QColor("#ef4444")))
 
         for frame in self._keyframes:
-            if self._total_frames > 0:
-                ratio = frame / self._total_frames
+            if self._total_frames > 1:
+                ratio = (frame - 1) / (self._total_frames - 1)
                 x = track_left + ratio * track_width
                 painter.drawEllipse(int(x) - 3, track_center_y - 3, 6, 6)
 
         if self._end_frame is not None:
             painter.setBrush(QBrush(QColor("#10b981")))
-            ratio = self._end_frame / self._total_frames
+            ratio = (self._end_frame - 1) / (self._total_frames - 1) if self._total_frames > 1 else 0
             x = track_left + ratio * track_width
             painter.drawEllipse(int(x) - 4, track_center_y - 4, 8, 8)
 
@@ -71,7 +71,7 @@ class KeyframeTag(QFrame):
         layout.setContentsMargins(8, 4, 8, 4)
         layout.setSpacing(6)
 
-        frame_label = QLabel(f"第 {frame + 1} 帧")
+        frame_label = QLabel(f"第 {frame} 帧")
         setFont(frame_label, 11, QFont.Bold)
         layout.addWidget(frame_label, alignment=Qt.AlignVCenter)
 
@@ -101,7 +101,7 @@ class VideoWatermarkTrackingDialog(QDialog):
         self.file_path = file_path
         self.fps = 30.0
         self.total_frames = 0
-        self.current_frame = 0
+        self.current_frame = 1
         self.video_width = 0
         self.video_height = 0
         self.keyframes_set = set()
@@ -220,8 +220,8 @@ class VideoWatermarkTrackingDialog(QDialog):
 
         self.timeline_slider = TimelineSliderWithMarkers(Qt.Horizontal)
         self.timeline_slider.setObjectName("timelineSlider")
-        self.timeline_slider.setRange(0, max(self.total_frames - 1, 1))
-        self.timeline_slider.setValue(0)
+        self.timeline_slider.setRange(1, max(self.total_frames, 1))
+        self.timeline_slider.setValue(1)
         self.timeline_slider.setFixedHeight(24)
         self.timeline_slider.setCursor(Qt.PointingHandCursor)
         self.timeline_slider.valueChanged.connect(self._on_slider_changed)
@@ -590,12 +590,12 @@ class VideoWatermarkTrackingDialog(QDialog):
         self._update_frame_display()
 
     def _prev_frame(self):
-        if self.current_frame > 0:
+        if self.current_frame > 1:
             self.current_frame -= 1
             self.timeline_slider.setValue(self.current_frame)
 
     def _next_frame(self):
-        if self.current_frame < self.total_frames - 1:
+        if self.current_frame < self.total_frames:
             self.current_frame += 1
             self.timeline_slider.setValue(self.current_frame)
 
@@ -629,7 +629,7 @@ class VideoWatermarkTrackingDialog(QDialog):
 
     def _update_frame_display(self):
         if self.cap and self.cap.isOpened():
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame - 1)
             ret, frame = self.cap.read()
             if ret:
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -647,7 +647,7 @@ class VideoWatermarkTrackingDialog(QDialog):
                     self.video_preview.setPixmap(scaled_pixmap)
                 else:
                     self.video_preview.setPixmap(pixmap.scaled(640, 360, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        self.frame_counter.setText(f"第 {self.current_frame + 1} 帧 / {self.total_frames} 帧")
+        self.frame_counter.setText(f"第 {self.current_frame} 帧 / {self.total_frames} 帧")
 
     def _render_status_tags(self):
         while self.end_frame_container.count():
@@ -691,19 +691,9 @@ class VideoWatermarkTrackingDialog(QDialog):
         data = {
             "keyframes": sorted(self.keyframes_set),
             "end_frame": self.end_frame,
-            "fps": self.fps,
-            "total_frames": self.total_frames,
         }
         self.trackingDataReady.emit(data)
         self.accept()
-
-    def get_tracking_data(self) -> dict:
-        return {
-            "keyframes": sorted(self.keyframes_set),
-            "end_frame": self.end_frame,
-            "fps": self.fps,
-            "total_frames": self.total_frames,
-        }
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

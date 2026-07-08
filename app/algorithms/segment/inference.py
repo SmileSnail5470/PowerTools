@@ -36,7 +36,7 @@ class SegmentationInference():
         return input_ids, attention_mask
     
     def prepare(self):
-        model_path = os.path.join(self.model_dir, "sam3.onnx")
+        model_path = os.path.join(self.model_dir, "sam3.encmodel")
         self.pcs = SAM3_PCS(model_path, self.threshold)
 
     def inference_image(self, input_image_path: str) -> np.ndarray:

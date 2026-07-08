@@ -67,7 +67,7 @@ class WatermarkDetectSettings(QWidget):
     # AI 自动检测
     watermarkContent = Signal(str)            # 通用水印/文字水印
     # 动态水印跟踪信号
-    watermarkTrackingData = Signal(dict)      # 跟踪数据: {keyframes, end_frame, fps, total_frames}
+    watermarkTrackingData = Signal(dict)      # 跟踪数据: {keyframes, end_frame}
 
 
     def __init__(self, parent=None):

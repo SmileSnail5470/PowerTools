@@ -104,6 +104,7 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
         bind_widget_to_param(watermark_detect_settings, "imageBoxes", watermark_remove_params, "image_boxes", transform=None)
         bind_widget_to_param(watermark_detect_settings, "watermarkContent", watermark_remove_params, "watermark_content", transform=None)
         bind_widget_to_param(watermark_detect_settings, "watermarkConfidence", watermark_remove_params, "watermark_confidence", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkTrackingData", watermark_remove_params, "watermark_tracking_data", transform=None)
         # 设置参数默认值
         watermark_detect_settings.watermarkDetectType.emit("ai_interactive_detect")
         watermark_detect_settings.watermarkFormat.emit("static_watermark")
@@ -115,12 +116,14 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
         watermark_detect_settings.imageBoxes.emit([])
         watermark_detect_settings.watermarkContent.emit("general_watermark")
         watermark_detect_settings.watermarkConfidence.emit(0.3)
+        watermark_detect_settings.watermarkTrackingData.emit({"keyframes": [], "end_frame": None})
 
         global_event_bus.watermarkRemove_InputFileUpdate.connect(
             lambda file_path: (
                 watermark_detect_settings.set_file_path(file_path=file_path),
                 None if file_path else watermark_detect_settings.watermarkBoxes.emit([]),
-                None if file_path else watermark_detect_settings.imageBoxes.emit([])
+                None if file_path else watermark_detect_settings.imageBoxes.emit([]),
+                None if file_path else watermark_detect_settings.watermarkTrackingData.emit({"keyframes": [], "end_frame": None})
             )
         )
 
@@ -824,6 +827,8 @@ class HeaderWidget(QWidget):
 
         if "image_boxes" in params and params["image_boxes"]:
             task_params["image_boxes"] = params["image_boxes"]
+        if "watermark_tracking_data" in params and params["watermark_tracking_data"]:
+            task_params["watermark_tracking_data"] = params["watermark_tracking_data"]
 
         if params["watermark_detect_type"] == "ai_auto_detect":
             task_params["watermark_content"] = params["watermark_content"]
