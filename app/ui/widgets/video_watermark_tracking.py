@@ -75,10 +75,11 @@ class KeyframeTag(QFrame):
         setFont(frame_label, 11, QFont.Bold)
         layout.addWidget(frame_label, alignment=Qt.AlignVCenter)
 
-        remove_btn = QPushButton("×")
+        remove_btn = QPushButton("x")
+        remove_btn.setFixedSize(16, 16)
         remove_btn.setCursor(Qt.PointingHandCursor)
         remove_btn.setObjectName("tagRemoveBtn")
-        setFont(remove_btn, 10)
+        setFont(remove_btn, 11)
         remove_btn.clicked.connect(lambda: self.removed.emit(self.frame))
         layout.addWidget(remove_btn, alignment=Qt.AlignVCenter)
 
@@ -109,7 +110,7 @@ class VideoWatermarkTrackingDialog(QDialog):
 
         self.setWindowTitle(self.tr("视频水印自动跟踪设置"))
         self.setMinimumSize(800, 600)
-        self.resize(1150, 800)
+        self.resize(1150, 850)
 
         self._init_video()
         self._init_ui()
@@ -127,21 +128,25 @@ class VideoWatermarkTrackingDialog(QDialog):
     def _init_ui(self):
         dialog_main_layout = QVBoxLayout(self)
         dialog_main_layout.setContentsMargins(0, 0, 0, 0)
+        dialog_main_layout.setSpacing(0)
+        dialog_main_layout.setAlignment(Qt.AlignTop)
 
-        self.global_scroll_area = QScrollArea(self)
+        self.global_scroll_area = QScrollArea()
         self.global_scroll_area.setObjectName("globalScrollArea")
         self.global_scroll_area.setFrameShape(QFrame.NoFrame)
-        self.global_scroll_area.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.global_scroll_area.setAlignment(Qt.AlignTop)
         self.global_scroll_area.setWidgetResizable(True)
         self.global_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.global_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.global_scroll_area.setViewportMargins(0, 0, 0, 0)
         dialog_main_layout.addWidget(self.global_scroll_area)
 
         scroll_central_widget = QWidget()
         scroll_central_widget.setObjectName("scrollCentralWidget")
+        scroll_central_widget.setContentsMargins(0, 0, 0, 0)
         
         main_layout = QHBoxLayout(scroll_central_widget)
-        main_layout.setContentsMargins(20, 0, 20, 0)
+        main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
 
         left_panel = QFrame()
@@ -280,6 +285,8 @@ class VideoWatermarkTrackingDialog(QDialog):
 
         self.end_frame_container = QHBoxLayout()
         self.end_frame_container.setSpacing(8)
+        self.end_frame_container.setContentsMargins(0, 0, 0, 0)
+        self.end_frame_container.setAlignment(Qt.AlignVCenter)
         self.end_frame_placeholder = QLabel(self.tr("暂未设置结束帧"))
         self.end_frame_placeholder.setObjectName("noData")
         setFont(self.end_frame_placeholder, 12)
@@ -509,8 +516,7 @@ class VideoWatermarkTrackingDialog(QDialog):
             #keyframeTag {
                 background: #ffffff;
                 border: 1px solid #e2e8f0;
-                border-radius: 4px;
-                padding: 2px 4px;
+                border-radius: 6px;
             }
             #keyframeTag QLabel {
                 color: #0f172a;
@@ -527,8 +533,7 @@ class VideoWatermarkTrackingDialog(QDialog):
             #endFrameTag {
                 background: #ecfdf5;
                 border: 1px solid #a7f3d0;
-                border-radius: 4px;
-                padding: 2px 4px;
+                border-radius: 6px;
             }
             #endFrameTag QLabel {
                 color: #065f46;
