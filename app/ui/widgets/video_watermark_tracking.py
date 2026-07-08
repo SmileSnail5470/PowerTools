@@ -71,7 +71,7 @@ class KeyframeTag(QFrame):
         layout.setContentsMargins(8, 4, 8, 4)
         layout.setSpacing(6)
 
-        frame_label = QLabel(f"第 {frame} 帧")
+        frame_label = QLabel(f"第 {frame + 1} 帧")
         setFont(frame_label, 11, QFont.Bold)
         layout.addWidget(frame_label, alignment=Qt.AlignVCenter)
 
@@ -262,7 +262,7 @@ class VideoWatermarkTrackingDialog(QDialog):
 
         action_bar.addStretch()
 
-        self.frame_counter = QLabel(f"第 0 帧 / {self.total_frames} 帧")
+        self.frame_counter = QLabel(f"第 1 帧 / {self.total_frames} 帧")
         self.frame_counter.setObjectName("frameCounter")
         setFont(self.frame_counter, 14, QFont.Medium)
         action_bar.addWidget(self.frame_counter)
@@ -647,7 +647,7 @@ class VideoWatermarkTrackingDialog(QDialog):
                     self.video_preview.setPixmap(scaled_pixmap)
                 else:
                     self.video_preview.setPixmap(pixmap.scaled(640, 360, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        self.frame_counter.setText(f"第 {self.current_frame} 帧 / {self.total_frames} 帧")
+        self.frame_counter.setText(f"第 {self.current_frame + 1} 帧 / {self.total_frames} 帧")
 
     def _render_status_tags(self):
         while self.end_frame_container.count():
