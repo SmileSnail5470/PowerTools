@@ -1,3 +1,4 @@
+import logging
 import cv2
 import numpy as np
 import app.utils.ffmpeg as ffmpeg
@@ -186,7 +187,7 @@ class VideoWatermarkRemover:
             else:
                 keyframes = self.video_tracking_data.get("keyframes")
                 end_frame = self.video_tracking_data.get("end_frame")
-                print(f"Start track mask with keyframes {keyframes} and end frame {end_frame}", flush=True)
+                logging.getLogger("subprocess").info(f"Start track mask with keyframes {keyframes} and end frame {end_frame}", flush=True)
                 total_frames = len(frame_files)
                 effective_end = end_frame if end_frame else total_frames
                 for seg_idx, kf in enumerate(keyframes):
@@ -247,7 +248,7 @@ class VideoWatermarkRemover:
                                 if failed_frame_offset >= len(remaining_frames):
                                     break
                                 failed_frame_file = remaining_frames[failed_frame_offset]
-                                print(f"Tracking failed at frame {failed_frame_file.name}, re-detecting as new keyframe", flush=True)
+                                logging.getLogger("subprocess").warning(f"Tracking failed at frame {failed_frame_file.name}, re-detecting as new keyframe", flush=True)
                                 new_keyframe_mask = WatermarkSegment(watermark_type, ai_detect_type, ai_interactive_type, ai_interactive_prompt, ai_interactive_boxes, watermark_confidence).segment(
                                     image_path=str(failed_frame_file),
                                     sr_onnx_path=sr_segment_onnx_path,
@@ -301,7 +302,6 @@ class VideoWatermarkRemover:
         ffmpeg.run(stream, overwrite_output=True, quiet=False)
 
     def _image_model_inpainting(self, args: dict):
-        frame_files = args.get("frame_files")
         processed_frames_dir = args.get("processed_frames_dir")
         frame_mask_map = args.get("frame_mask_map")
         sr_segment_onnx_path = args.get("sr_segment_onnx_path")
@@ -324,9 +324,9 @@ class VideoWatermarkRemover:
         dilate_num = args.get("dilate_num")
         callback_func = args.get("callback_func", None)
         kwargs = args.get("kwargs", {})
-        total_frames = len(frame_files)
+        total_frames = len(frame_mask_map.keys())
 
-        for _, frame_file in enumerate(frame_files):
+        for frame_file, tmp_mask_path in frame_mask_map.items():
             output_frame_path = processed_frames_dir / frame_file.name
             ImageWatermarkRemove().run(
                 frame_file,
@@ -341,7 +341,7 @@ class VideoWatermarkRemover:
                 text_detection_onnx_path=text_detection_onnx_path,
                 yolo_detection_onnx_path=yolo_detection_onnx_path,
                 segment_onnx_dir=segment_onnx_dir,
-                mask_path=frame_mask_map[str(frame_file)],
+                mask_path=str(tmp_mask_path),
                 refine_type=refine_type,
                 watermark_type=watermark_type,
                 ai_detect_type=ai_detect_type,
@@ -389,6 +389,14 @@ class VideoWatermarkRemover:
             }
             input_frames_dir = os.path.dirname(str(frame_files[0]))
             masks_dir = os.path.dirname(frame_mask_map[str(frame_files[0])])
+            if len(frame_mask_map.keys()) < len(frame_files):
+                input_frames_dir = os.path.join(os.path.dirname(input_frames_dir), "real_{0}_tmp".format(os.path.basename(input_frames_dir)))
+                masks_dir = os.path.join(os.path.dirname(masks_dir), "real_{0}_tmp".format(os.path.basename(masks_dir)))
+                os.makedirs(input_frames_dir, exist_ok=True)
+                os.makedirs(masks_dir, exist_ok=True)
+                for frame_file, mask_file in frame_mask_map.items():
+                    shutil.copy2(str(frame_file), os.path.join(input_frames_dir, os.path.basename(str(frame_file))))
+                    shutil.copy2(str(mask_file), os.path.join(masks_dir, os.path.basename(str(mask_file))))
             output_dir = str(processed_frames_dir)
             cropped_out_dir = os.path.join(os.path.dirname(output_dir), "{0}_cropped".format(os.path.basename(output_dir)))
             bbox = self._get_roi(masks_dir)
@@ -536,6 +544,7 @@ class VideoWatermarkRemover:
                     file_path=os.path.join(tmp_visualzation_path, os.path.basename(str(frame_file)))
                 )
             output_video_tmp_path = "{0}_mask_visualization.mp4".format(output_video_path.rsplit(".", 1)[0])
+            self._merge_video_prepare(cropped_frame_files, frame_mask_map, tmp_visualzation_path)
             self._merge_processed_frames(
                 processed_frames_dir=Path(tmp_visualzation_path),
                 has_audio=has_audio,
@@ -558,7 +567,6 @@ class VideoWatermarkRemover:
             self._video_model_inpainting(args)
         else:
             args = {
-                "frame_files": cropped_frame_files,
                 "processed_frames_dir": cropped_output_path,
                 "frame_mask_map": frame_mask_map,
                 "sr_segment_onnx_path": sr_segment_onnx_path,
@@ -665,22 +673,28 @@ class VideoWatermarkRemover:
             )
             if result is not None:
                 box_results.append(result)
-
-        for frame_file in frame_files:
-            original_frame = cv2.imread(str(frame_file))
-            if original_frame is None:
-                raise ValueError(f"Failed to read frame: {frame_file}")
-            for bbox, cropped_output_dir in box_results:
-                xmin, ymin, xmax, ymax = bbox
-                cropped_result_path = os.path.join(cropped_output_dir, frame_file.name)
-                if os.path.exists(cropped_result_path):
-                    cropped_result = cv2.imread(cropped_result_path)
-                    if cropped_result is not None:
-                        original_frame[ymin:ymax, xmin:xmax] = cropped_result
-            output_frame_path = str(processed_frames_dir / frame_file.name)
+        for bbox, cropped_output_dir in box_results:
+            xmin, ymin, xmax, ymax = bbox
+            origin_frames_dir = os.path.dirname(str(frame_files[0]))
+            for frame_file in os.listdir(cropped_output_dir):
+                origin_frame_path = os.path.join(origin_frames_dir, frame_file)
+                original_frame = cv2.imread(str(origin_frame_path))
+                if original_frame is None:
+                    raise ValueError(f"Failed to read frame: {frame_file}")
+                cropped_result_path = os.path.join(cropped_output_dir, frame_file)
+                cropped_result = cv2.imread(cropped_result_path)
+                if cropped_result is not None:
+                    original_frame[ymin:ymax, xmin:xmax] = cropped_result
+            output_frame_path = str(processed_frames_dir / frame_file)
             cv2.imwrite(output_frame_path, original_frame)
         for _, cropped_output_dir in box_results:
             shutil.rmtree(cropped_output_dir, ignore_errors=True)
+
+    def _merge_video_prepare(self, all_frame_files: list, frame_mask_map: dict, output_dir):
+        for one_frame_file in all_frame_files:
+            if str(one_frame_file) in frame_mask_map.keys():
+                continue
+            shutil.copy2(str(one_frame_file), os.path.join(output_dir, one_frame_file.name))
 
     def process_video(
             self, 
@@ -699,9 +713,9 @@ class VideoWatermarkRemover:
             ppt_onnx_basedir,
             tacker_onnx_dir,
             mask_path: str = "",
-            refine_type: str = "coordfill",  # patchwiper/lama/transparent/cv2/coordfill
+            refine_type: str = "coordfill",
             use_cache_mask: bool = False,
-            watermark_type: str = "all",      # text / all
+            watermark_type: str = "all",
             ai_detect_type: str = "ai_interactive_detect",      # ai_interactive_detect/ai_auto_detect
             ai_interactive_type: str = "semantic_detect",       # semantic_detect/space_detect
             ai_interactive_prompt: str = "watermark",
@@ -738,8 +752,6 @@ class VideoWatermarkRemover:
             temp_path = Path(temp_dir)
             frames_dir = temp_path / 'frames'
             frames_dir.mkdir()
-            
-            # 提取所有帧
             (
                 ffmpeg
                 .input(input_video_path)
@@ -748,11 +760,7 @@ class VideoWatermarkRemover:
                 .global_args("-hide_banner", "-loglevel", "error")
                 .run(capture_stdout=True, capture_stderr=True)
             )
-            
-            # 获取所有帧文件
             frame_files = sorted([f for f in frames_dir.iterdir() if f.suffix == '.png'])
-            
-            # 处理每一帧
             processed_frames_dir = temp_path / 'processed_frames'
             processed_frames_dir.mkdir()
             if watermark_boxes:
@@ -797,7 +805,6 @@ class VideoWatermarkRemover:
             else:
                 tmp_mask_dir = temp_path / 'masks'
                 tmp_mask_dir.mkdir()
-
                 if progress_cb is not None:
                     progress_cb("MaskStart", "")
                 frame_mask_map = {}
@@ -831,6 +838,7 @@ class VideoWatermarkRemover:
                             file_path=os.path.join(tmp_visualzation_path, os.path.basename(str(frame_file)))
                         )
                     output_video_tmp_path = "{0}_mask_visualization.mp4".format(output_video_path.rsplit(".", 1)[0])
+                    self._merge_video_prepare(frame_files, frame_mask_map, tmp_visualzation_path)
                     self._merge_processed_frames(
                         processed_frames_dir=Path(tmp_visualzation_path),
                         has_audio=has_audio, 
@@ -842,7 +850,6 @@ class VideoWatermarkRemover:
                 
                 if refine_type not in self.video_models_name:
                     args = {
-                        "frame_files": frame_files,
                         "processed_frames_dir": processed_frames_dir,
                         "frame_mask_map": frame_mask_map,
                         "sr_segment_onnx_path": sr_segment_onnx_path,
@@ -879,7 +886,7 @@ class VideoWatermarkRemover:
                     self._video_model_inpainting(args)
                 if progress_cb is not None:
                     progress_cb("WaterRemoved", "")
-
+            self._merge_video_prepare(frame_files, frame_mask_map, processed_frames_dir)
             self._merge_processed_frames(
                 processed_frames_dir=processed_frames_dir,
                 has_audio=has_audio, 
