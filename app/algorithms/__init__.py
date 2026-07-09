@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import pathlib
 import sys
@@ -299,7 +300,7 @@ def general_inference_session(model_path: str, sess_options, providers, provider
 
     cached = _SESSION_CACHE.get(cache_key)
     if cached is not None:
-        print(f"Using cached session for {model_path} with feature {model_name}")
+        logging.getLogger("subprocess").info(f"Using cached session for {model_path}")
         return cached
 
     with _SESSION_CACHE_LOCK:

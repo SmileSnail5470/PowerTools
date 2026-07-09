@@ -187,7 +187,7 @@ class VideoWatermarkRemover:
             else:
                 keyframes = self.video_tracking_data.get("keyframes")
                 end_frame = self.video_tracking_data.get("end_frame")
-                logging.getLogger("subprocess").info(f"Start track mask with keyframes {keyframes} and end frame {end_frame}", flush=True)
+                logging.getLogger("subprocess").info(f"Start track mask with keyframes {keyframes} and end frame {end_frame}")
                 total_frames = len(frame_files)
                 effective_end = end_frame if end_frame else total_frames
                 for seg_idx, kf in enumerate(keyframes):
@@ -248,7 +248,7 @@ class VideoWatermarkRemover:
                                 if failed_frame_offset >= len(remaining_frames):
                                     break
                                 failed_frame_file = remaining_frames[failed_frame_offset]
-                                logging.getLogger("subprocess").warning(f"Tracking failed at frame {failed_frame_file.name}, re-detecting as new keyframe", flush=True)
+                                logging.getLogger("subprocess").warning(f"Tracking failed at frame {failed_frame_file.name}, re-detecting as new keyframe")
                                 new_keyframe_mask = WatermarkSegment(watermark_type, ai_detect_type, ai_interactive_type, ai_interactive_prompt, ai_interactive_boxes, watermark_confidence).segment(
                                     image_path=str(failed_frame_file),
                                     sr_onnx_path=sr_segment_onnx_path,
@@ -387,9 +387,9 @@ class VideoWatermarkRemover:
                     }
                 }
             }
-            input_frames_dir = os.path.dirname(str(frame_files[0]))
-            masks_dir = os.path.dirname(frame_mask_map[str(frame_files[0])])
             if len(frame_mask_map.keys()) < len(frame_files):
+                input_frames_dir = os.path.dirname(str(frame_files[0]))
+                masks_dir = os.path.dirname(str(list(frame_mask_map.values())[0]))
                 input_frames_dir = os.path.join(os.path.dirname(input_frames_dir), "real_{0}_tmp".format(os.path.basename(input_frames_dir)))
                 masks_dir = os.path.join(os.path.dirname(masks_dir), "real_{0}_tmp".format(os.path.basename(masks_dir)))
                 os.makedirs(input_frames_dir, exist_ok=True)
@@ -397,6 +397,9 @@ class VideoWatermarkRemover:
                 for frame_file, mask_file in frame_mask_map.items():
                     shutil.copy2(str(frame_file), os.path.join(input_frames_dir, os.path.basename(str(frame_file))))
                     shutil.copy2(str(mask_file), os.path.join(masks_dir, os.path.basename(str(mask_file))))
+            else:
+                input_frames_dir = os.path.dirname(str(frame_files[0]))
+                masks_dir = os.path.dirname(frame_mask_map[str(frame_files[0])])
             output_dir = str(processed_frames_dir)
             cropped_out_dir = os.path.join(os.path.dirname(output_dir), "{0}_cropped".format(os.path.basename(output_dir)))
             bbox = self._get_roi(masks_dir)

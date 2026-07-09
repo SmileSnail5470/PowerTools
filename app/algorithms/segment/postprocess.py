@@ -6,7 +6,13 @@ SAM3_OUTMASK_HEIGHT = 288
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:
-    return 1.0 / (1.0 + np.exp(-x))
+    out = np.empty_like(x, dtype=np.float32)
+    pos = x >= 0
+    neg = ~pos
+    out[pos] = 1.0 / (1.0 + np.exp(-x[pos]))
+    exp_x = np.exp(x[neg])
+    out[neg] = exp_x / (1.0 + exp_x)
+    return out
 
 
 def _mask_index_map(src_size: int, mask_size: int) -> np.ndarray:

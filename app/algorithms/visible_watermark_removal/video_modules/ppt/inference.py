@@ -102,6 +102,7 @@ class PPTInferenceORT:
         return ref_index
 
     def inference(self, input_frames_dir, masks_dir, output_dir, debug=True):
+        self.frames_name = sorted(os.listdir(input_frames_dir))
         frames, _, size = self._read_frame(frame_root=input_frames_dir)
         if self.width != -1 and self.height != -1:
             size = (self.width, self.height)
@@ -247,7 +248,7 @@ class PPTInferenceORT:
         for idx in range(video_length):
             f = cv2.resize(comp_frames[idx], out_size, interpolation=cv2.INTER_CUBIC)
             f = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
-            self._imwrite(f, os.path.join(output_dir, str(idx).zfill(6) + '.png'))
+            self._imwrite(f, os.path.join(output_dir, self.frames_name[idx]))
 
     def _transformer_loop_cupy(self, video_length, updated_frames, updated_masks, masks_dilated_np, pred_flows_bi, ori_frames, out_size, output_dir):
         uf_gpu = cp.asarray(updated_frames)
@@ -293,4 +294,4 @@ class PPTInferenceORT:
             f = cp.asnumpy(comp_frames_gpu[idx])
             f = cv2.resize(f, out_size, interpolation=cv2.INTER_CUBIC)
             f = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
-            self._imwrite(f, os.path.join(output_dir, str(idx).zfill(6) + '.png'))
+            self._imwrite(f, os.path.join(output_dir, self.frames_name[idx]))
