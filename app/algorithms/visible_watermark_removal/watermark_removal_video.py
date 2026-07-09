@@ -547,7 +547,7 @@ class VideoWatermarkRemover:
                     file_path=os.path.join(tmp_visualzation_path, os.path.basename(str(frame_file)))
                 )
             output_video_tmp_path = "{0}_mask_visualization.mp4".format(output_video_path.rsplit(".", 1)[0])
-            self._merge_video_prepare(cropped_frame_files, frame_mask_map, tmp_visualzation_path)
+            self._merge_video_prepare(cropped_frame_files, tmp_visualzation_path)
             self._merge_processed_frames(
                 processed_frames_dir=Path(tmp_visualzation_path),
                 has_audio=has_audio,
@@ -693,9 +693,10 @@ class VideoWatermarkRemover:
         for _, cropped_output_dir in box_results:
             shutil.rmtree(cropped_output_dir, ignore_errors=True)
 
-    def _merge_video_prepare(self, all_frame_files: list, frame_mask_map: dict, output_dir):
+    def _merge_video_prepare(self, all_frame_files: list, output_dir):
+        processed_frames_name = os.listdir(output_dir)
         for one_frame_file in all_frame_files:
-            if str(one_frame_file) in frame_mask_map.keys():
+            if one_frame_file.name in processed_frames_name:
                 continue
             shutil.copy2(str(one_frame_file), os.path.join(output_dir, one_frame_file.name))
 
@@ -841,7 +842,7 @@ class VideoWatermarkRemover:
                             file_path=os.path.join(tmp_visualzation_path, os.path.basename(str(frame_file)))
                         )
                     output_video_tmp_path = "{0}_mask_visualization.mp4".format(output_video_path.rsplit(".", 1)[0])
-                    self._merge_video_prepare(frame_files, frame_mask_map, tmp_visualzation_path)
+                    self._merge_video_prepare(frame_files, tmp_visualzation_path)
                     self._merge_processed_frames(
                         processed_frames_dir=Path(tmp_visualzation_path),
                         has_audio=has_audio, 
@@ -889,7 +890,7 @@ class VideoWatermarkRemover:
                     self._video_model_inpainting(args)
                 if progress_cb is not None:
                     progress_cb("WaterRemoved", "")
-            self._merge_video_prepare(frame_files, frame_mask_map, processed_frames_dir)
+            self._merge_video_prepare(frame_files, processed_frames_dir)
             self._merge_processed_frames(
                 processed_frames_dir=processed_frames_dir,
                 has_audio=has_audio, 
