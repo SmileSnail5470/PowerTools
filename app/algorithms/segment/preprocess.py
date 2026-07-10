@@ -1,32 +1,33 @@
 import numpy as np
-
-RESCALE_FACTOR = 0.00392156862745098  # 1/255
-IMG_MEAN = 0.5
-IMG_STD = 0.5
-
-
-def _nearest_index_map(src_size: int, dst_size: int) -> np.ndarray:
-    dst = np.arange(dst_size, dtype=np.int64)
-    src = (src_size * dst) // dst_size
-    np.minimum(src, src_size - 1, out=src)
-    return src
+import cv2
 
 
 def preprocess_bgr(image_bgr: np.ndarray, dst_width: int, dst_height: int) -> np.ndarray:
-    if image_bgr.ndim != 3 or image_bgr.shape[2] < 3:
-        raise ValueError("Expected an HxWx3 BGR image")
-    src_h, src_w = image_bgr.shape[:2]
-    x_map = _nearest_index_map(src_w, dst_width)
-    y_map = _nearest_index_map(src_h, dst_height)
+    """
+    CPU preprocessing using OpenCV (equivalent to the CPU fallback path in C++).
 
-    resized = image_bgr[np.ix_(y_map, x_map)][:, :, :3]
+    Replicates:
+        cv::cvtColor(bgr_img, rgb_img, cv::COLOR_BGR2RGB);
+        cv::dnn::blobFromImage(rgb_img, 1.0/127.5, Size(1008,1008),
+                               Scalar(127.5,127.5,127.5), true, false, CV_32F);
 
-    b = resized[:, :, 0].astype(np.float32)
-    g = resized[:, :, 1].astype(np.float32)
-    r = resized[:, :, 2].astype(np.float32)
+    Args:
+        image: HWC BGR uint8 image
+        target_size: (width, height) for resize
 
-    r = (r * RESCALE_FACTOR - IMG_MEAN) / IMG_STD
-    g = (g * RESCALE_FACTOR - IMG_MEAN) / IMG_STD
-    b = (b * RESCALE_FACTOR - IMG_MEAN) / IMG_STD
-    chw = np.stack([r, g, b], axis=0)
-    return chw[np.newaxis, ...].astype(np.float32, copy=False)
+    Returns:
+        CHW float32 blob (1, 3, H, W)
+    """
+    target_size = (dst_width, dst_height)
+    print(target_size)
+    rgb_img = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+    blob = cv2.dnn.blobFromImage(
+        rgb_img,
+        scalefactor=1.0 / 127.5,
+        size=target_size,
+        mean=(127.5, 127.5, 127.5),
+        swapRB=True,
+        crop=False,
+        ddepth=cv2.CV_32F,
+    )
+    return blob
