@@ -300,7 +300,6 @@ def general_inference_session(model_path: str, sess_options, providers, provider
 
     cached = _SESSION_CACHE.get(cache_key)
     if cached is not None:
-        logging.getLogger("subprocess").info(f"Using cached session for {model_path}")
         return cached
 
     with _SESSION_CACHE_LOCK:

@@ -181,7 +181,7 @@ class WatermarkDetectSettings(QWidget):
         p0_l.addWidget(self.create_label_group(self.tr("水印区域选择"), self.tr("可选：框选水印所在区域，辅助识别定位")))
         self.auto_area_btn = QPushButton(self.tr("🖼 水印区域选择"))
         self.auto_area_btn.setObjectName("secondaryBtn")
-        self.auto_area_btn.clicked.connect(lambda _: self._watermark_area_selector(single_area_only=True, image_boxes_only=True))
+        self.auto_area_btn.clicked.connect(lambda _: self._watermark_area_selector(image_boxes_only=True))
         p0_l.addWidget(self.auto_area_btn)
 
         # AI 交互 ---
@@ -249,7 +249,7 @@ class WatermarkDetectSettings(QWidget):
         area_container_l.addWidget(self.create_label_group(self.tr("水印区域选择"), self.tr("可选：框选水印所在区域，辅助识别定位")))
         self.interactive_area_btn = QPushButton(self.tr("🖼 水印区域选择"))
         self.interactive_area_btn.setObjectName("secondaryBtn")
-        self.interactive_area_btn.clicked.connect(lambda _: self._watermark_area_selector(single_area_only=True, image_boxes_only=True))
+        self.interactive_area_btn.clicked.connect(lambda _: self._watermark_area_selector(image_boxes_only=True))
         area_container_l.addWidget(self.interactive_area_btn)
         p1_l.addWidget(self.interactive_area_container)
         p1_l.addSpacing(20)
