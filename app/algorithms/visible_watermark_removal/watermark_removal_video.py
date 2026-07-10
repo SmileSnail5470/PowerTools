@@ -120,7 +120,7 @@ class VideoWatermarkRemover:
             cv2.imwrite(os.path.join(out_path_dir, os.path.basename(c_path)), canvas)
 
     def _postprocess_mask(self, mask):
-        h, w = mask.shape[-2]
+        h, w = mask.shape
         mask_image = np.zeros((h, w), dtype=np.uint8)
         for bbox in self.watermark_boxes:
             xmin, ymin, xmax, ymax = bbox

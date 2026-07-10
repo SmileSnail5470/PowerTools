@@ -338,7 +338,7 @@ class ImageWatermarkRemove():
                 **kwargs
             )
             if watermark_boxes and not (ai_detect_type == "ai_interactive_detect" and ai_interactive_type == "space_detect"):
-                h, w = mask.shape[-2]
+                h, w = mask.shape
                 mask_image = np.zeros((h, w), dtype=np.uint8)
                 for bbox in watermark_boxes:
                     xmin, ymin, xmax, ymax = bbox
