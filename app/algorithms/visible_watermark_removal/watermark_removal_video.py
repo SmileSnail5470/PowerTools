@@ -327,7 +327,7 @@ class VideoWatermarkRemover:
         total_frames = len(frame_mask_map.keys())
 
         for frame_file, tmp_mask_path in frame_mask_map.items():
-            output_frame_path = processed_frames_dir / frame_file.name
+            output_frame_path = os.path.join(str(processed_frames_dir), os.path.basename(str(frame_file)))
             ImageWatermarkRemove().run(
                 frame_file,
                 output_frame_path,
