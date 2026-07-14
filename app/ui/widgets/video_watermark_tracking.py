@@ -230,19 +230,19 @@ class VideoWatermarkTrackingDialog(QDialog):
         action_bar = QHBoxLayout()
         action_bar.setSpacing(12)
 
-        self.set_end_frame_btn = QPushButton(self.tr("→ 设为结束帧"))
-        self.set_end_frame_btn.setObjectName("btnSuccess")
-        self.set_end_frame_btn.setCursor(Qt.PointingHandCursor)
-        setFont(self.set_end_frame_btn, 14, QFont.DemiBold)
-        self.set_end_frame_btn.clicked.connect(self._set_end_frame)
-        action_bar.addWidget(self.set_end_frame_btn)
-
         self.add_keyframe_btn = QPushButton(self.tr("+ 标记为关键帧"))
         self.add_keyframe_btn.setObjectName("btnPrimary")
         self.add_keyframe_btn.setCursor(Qt.PointingHandCursor)
         setFont(self.add_keyframe_btn, 14, QFont.DemiBold)
         self.add_keyframe_btn.clicked.connect(self._add_keyframe)
         action_bar.addWidget(self.add_keyframe_btn)
+
+        self.set_end_frame_btn = QPushButton(self.tr("→ 设为结束帧"))
+        self.set_end_frame_btn.setObjectName("btnSuccess")
+        self.set_end_frame_btn.setCursor(Qt.PointingHandCursor)
+        setFont(self.set_end_frame_btn, 14, QFont.DemiBold)
+        self.set_end_frame_btn.clicked.connect(self._set_end_frame)
+        action_bar.addWidget(self.set_end_frame_btn)
 
         self.prev_frame_btn = QPushButton("◀")
         self.prev_frame_btn.setObjectName("btnNav")

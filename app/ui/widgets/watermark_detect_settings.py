@@ -405,16 +405,23 @@ class WatermarkDetectSettings(QWidget):
 
     def get_current_page_height(self, index: int):
         widget = self.stack.widget(index)
+        layout = widget.layout()
+        if layout:
+            width = self.card.width() if self.card.width() > 0 else widget.width()
+            if width > 0:
+                return layout.heightForWidth(width) if layout.heightForWidth(width) > 0 else widget.sizeHint().height()
         widget.adjustSize()
         return widget.sizeHint().height()
     
     def animate_height_change(self, target_height: int):
         start_height = self.card.height()
+        self.card.setMinimumWidth(self.card.width())
         self.height_anim = QPropertyAnimation(self.card, b"maximumHeight")
         self.height_anim.setDuration(250)
         self.height_anim.setStartValue(start_height)
         self.height_anim.setEndValue(target_height)
         self.height_anim.setEasingCurve(QEasingCurve.OutCubic)
+        self.height_anim.finished.connect(lambda: self.card.setMinimumWidth(0))
         self.height_anim.start()
 
     def update_layout_height(self):
@@ -574,6 +581,7 @@ class WatermarkDetectSettings(QWidget):
         else:
             self.file_path = os.path.join(file_path, os.listdir(file_path)[0])
         self.is_video_file = get_file_type(self.file_path) == "video"
+        self._update_tracking_visibility()
 
     def _watermark_area_selector(self, single_area_only=False, image_boxes_only=False):
         if not self.file_path:
@@ -599,13 +607,15 @@ class WatermarkDetectSettings(QWidget):
 
     def _on_auto_dynamic_selected(self, is_dynamic):
         self.is_dynamic_watermark = is_dynamic
-        should_show = self.is_video_file and self.is_dynamic_watermark
-        self.auto_tracking_container.setVisible(should_show)
-        self.update_layout_height()
+        self._update_tracking_visibility()
 
     def _on_interactive_dynamic_selected(self, is_dynamic):
         self.is_dynamic_watermark = is_dynamic
+        self._update_tracking_visibility()
+
+    def _update_tracking_visibility(self):
         should_show = self.is_video_file and self.is_dynamic_watermark
+        self.auto_tracking_container.setVisible(should_show)
         self.interactive_tracking_container.setVisible(should_show)
         self.update_layout_height()
 
