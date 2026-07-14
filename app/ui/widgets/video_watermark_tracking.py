@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QLabel, QPushButton, QFrame, QGraphicsDropShadowEffect,
     QSizePolicy, QScrollArea, QWidget
 )
-from app.ui.library.qfluentwidgets import setFont, FlowLayout
+from app.ui.library.qfluentwidgets import setFont, FlowLayout, SwitchButton, IndicatorPosition
 
 
 class TimelineSliderWithMarkers(QSlider):
@@ -106,6 +106,7 @@ class VideoWatermarkTrackingDialog(QDialog):
         self.video_height = 0
         self.keyframes_set = set()
         self.end_frame = None
+        self.tracking_enabled = True
         self.cap = None
 
         self.setWindowTitle(self.tr("视频水印自动跟踪设置"))
@@ -335,6 +336,18 @@ class VideoWatermarkTrackingDialog(QDialog):
         setFont(self.confirm_btn, 12, QFont.DemiBold)
         self.confirm_btn.clicked.connect(self._on_confirm)
         bottom_action_bar.addWidget(self.confirm_btn)
+
+        self.tracking_switch_label = QLabel(self.tr("启用跟踪"))
+        self.tracking_switch_label.setObjectName("trackingSwitchLabel")
+        setFont(self.tracking_switch_label, 12)
+        bottom_action_bar.addSpacing(16)
+        bottom_action_bar.addWidget(self.tracking_switch_label)
+
+        self.tracking_switch = SwitchButton(parent=self, indicatorPos=IndicatorPosition.RIGHT)
+        self.tracking_switch.setChecked(True)
+        self.tracking_switch.checkedChanged.connect(self._on_tracking_enabled_changed)
+        bottom_action_bar.addWidget(self.tracking_switch)
+
         left_layout.addLayout(bottom_action_bar)
         main_layout.addWidget(left_panel, 1)
 
@@ -580,6 +593,9 @@ class VideoWatermarkTrackingDialog(QDialog):
                 background: #cbd5e1;
                 color: #94a3b8;
             }
+            #trackingSwitchLabel {
+                color: #0f172a;
+            }
             #instructionCard {
                 background: #ffffff;
                 border-radius: 12px;
@@ -784,10 +800,15 @@ class VideoWatermarkTrackingDialog(QDialog):
 
         self.frame_counter.setText(f"第 {frame_index} 帧 / {self.total_frames} 帧 (跟踪结果)")
 
+    def _on_tracking_enabled_changed(self, is_checked: bool):
+        """Handle tracking switch toggle."""
+        self.tracking_enabled = is_checked
+
     def _on_confirm(self):
         data = {
             "keyframes": sorted(self.keyframes_set),
             "end_frame": self.end_frame,
+            "tracking_enabled": self.tracking_enabled,
         }
         self.trackingDataReady.emit(data)
         self.accept()
