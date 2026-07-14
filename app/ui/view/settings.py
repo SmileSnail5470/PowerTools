@@ -166,13 +166,13 @@ class InitWorker(QRunnable):
             )
         except Exception:
             cache_dir = os.path.join(variant_deps_path, ".cache")
-            if os.path.exists():
+            if os.path.exists(cache_dir):
                 shutil.rmtree(cache_dir)
             CPU_dir = os.path.join(variant_deps_path, "CPU")
-            if os.path.exists():
+            if os.path.exists(CPU_dir):
                 shutil.rmtree(CPU_dir)
             GPU_dir = os.path.join(variant_deps_path, "GPU")
-            if os.path.exists():
+            if os.path.exists(GPU_dir):
                 shutil.rmtree(GPU_dir)
             raise Exception(f"Download {dir_path} failed")
 
