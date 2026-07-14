@@ -126,7 +126,7 @@ class PPTInferenceORT:
             start_time = time.time()
 
         raft_scale = 0.5 if min(frames_np.shape[-2], frames_np.shape[-1]) >= 480 else 1.0
-        short_clip_len = 12 if max(frames_np.shape) <= 1280 else 6
+        short_clip_len = 12 if max(frames_np.shape[-2:]) <= 1280 else 6
         if video_length > short_clip_len:
             gt_flows_f_list, gt_flows_b_list = [], []
             for f in range(0, video_length, short_clip_len):
@@ -218,7 +218,7 @@ class PPTInferenceORT:
 
     def _transformer_loop_cpu(self, video_length, updated_frames, updated_masks, masks_dilated_np, pred_flows_bi, ori_frames, out_size, output_dir):
         comp_frames = [None] * video_length
-        neighbor_stride = self.neighbor_length // 2 if max(updated_frames.shape) > 540 else self.neighbor_length
+        neighbor_stride = self.neighbor_length // 2 if max(updated_frames.shape[-2:]) > 540 else self.neighbor_length
         ref_num = self.subvideo_length // self.ref_stride if video_length > self.subvideo_length else -1
         for f in range(0, video_length, neighbor_stride):
             neighbor_ids = [i for i in range(max(0, f - neighbor_stride), min(video_length, f + neighbor_stride + 1))]
@@ -259,7 +259,7 @@ class PPTInferenceORT:
         ori_gpu = cp.asarray(np.stack(ori_frames, axis=0).astype(np.float32))  # (T, H, W, C)
 
         comp_frames_gpu = [None] * video_length
-        neighbor_stride = self.neighbor_length // 2 if max(updated_frames.shape) > 540 else self.neighbor_length
+        neighbor_stride = self.neighbor_length // 2 if max([updated_frames.shape[-2:]]) > 540 else self.neighbor_length
         ref_num = self.subvideo_length // self.ref_stride if video_length > self.subvideo_length else -1
         for f in range(0, video_length, neighbor_stride):
             neighbor_ids = list(range(max(0, f - neighbor_stride), min(video_length, f + neighbor_stride + 1)))
