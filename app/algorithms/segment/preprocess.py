@@ -19,7 +19,6 @@ def preprocess_bgr(image_bgr: np.ndarray, dst_width: int, dst_height: int) -> np
         CHW float32 blob (1, 3, H, W)
     """
     target_size = (dst_width, dst_height)
-    print(target_size)
     rgb_img = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
     blob = cv2.dnn.blobFromImage(
         rgb_img,

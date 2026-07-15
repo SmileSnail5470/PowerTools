@@ -1,5 +1,8 @@
 import os
 import sys
+import time
+import shutil
+import tempfile
 import logging
 import multiprocessing
 import queue
@@ -15,9 +18,18 @@ _MSG_PROGRESS = "progress"
 _MSG_RESULT = "result"
 _MSG_ERROR = "error"
 _POLL_INTERVAL = 0.05
+_CANCEL_GRACE_SEC = 2.0
 
 
-def _subprocess_target(func, msg_queue, cancel_event, log_dir, args, kwargs):
+def _subprocess_target(func, msg_queue, cancel_event, log_dir, task_tmp_dir, args, kwargs):
+    if task_tmp_dir:
+        try:
+            os.makedirs(task_tmp_dir, exist_ok=True)
+            tempfile.tempdir = task_tmp_dir
+            os.environ["POWERTOOLS_TASK_TMPDIR"] = task_tmp_dir
+        except Exception:
+            pass
+
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
     if log_dir:
@@ -73,13 +85,18 @@ class Worker(QRunnable):
 
         self.future.set_state(TaskStatus.RUNNING.value)
 
+        try:
+            task_tmp_dir = tempfile.mkdtemp(prefix=f"pt_task_{self.future.job_id}_")
+        except Exception:
+            task_tmp_dir = None
+
         ctx = multiprocessing.get_context("spawn")
         msg_queue = ctx.Queue()
         cancel_event = ctx.Event()
 
         process = ctx.Process(
             target=_subprocess_target,
-            args=(self.func, msg_queue, cancel_event, self._get_log_dir(), self.args, self.kwargs),
+            args=(self.func, msg_queue, cancel_event, self._get_log_dir(), task_tmp_dir, self.args, self.kwargs),
             daemon=True,
         )
         process.start()
@@ -87,12 +104,18 @@ class Worker(QRunnable):
         try:
             self._monitor_loop(process, msg_queue, cancel_event)
         finally:
-            self._cleanup(process, msg_queue)
+            self._cleanup(process, msg_queue, task_tmp_dir)
 
     def _monitor_loop(self, process, msg_queue, cancel_event):
+        cancel_deadline = None
         while process.is_alive():
             if self.future.cancelled_requested():
-                cancel_event.set()
+                if not cancel_event.is_set():
+                    cancel_event.set()
+                    cancel_deadline = time.monotonic() + _CANCEL_GRACE_SEC
+                elif cancel_deadline is not None and time.monotonic() >= cancel_deadline:
+                    logger.warning(f"Task cancel grace period elapsed, force terminating, func={self.func.__name__}")
+                    break
             self._drain_queue(msg_queue)
             process.join(timeout=_POLL_INTERVAL)
         self._drain_queue(msg_queue)
@@ -125,7 +148,7 @@ class Worker(QRunnable):
                 logger.error(f"Subprocess error: {exc_name}: {exc_msg}, func={self.func.__name__}")
                 self.future.set_exception(RuntimeError(f"{exc_name}: {exc_msg}"))
 
-    def _cleanup(self, process, msg_queue):
+    def _cleanup(self, process, msg_queue, task_tmp_dir=None):
         if process.is_alive():
             process.terminate()
             process.join(timeout=3)
@@ -140,3 +163,5 @@ class Worker(QRunnable):
             pass
         msg_queue.close()
         msg_queue.join_thread()
+        if task_tmp_dir:
+            shutil.rmtree(task_tmp_dir, ignore_errors=True)
