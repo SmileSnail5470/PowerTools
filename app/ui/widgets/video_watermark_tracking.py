@@ -321,15 +321,7 @@ class VideoWatermarkTrackingDialog(QDialog):
         bottom_action_bar = QHBoxLayout()
         bottom_action_bar.setContentsMargins(24, 6, 24, 6)
 
-        self.preview_tracking_btn = QPushButton(self.tr("▶ 预览跟踪结果"))
-        self.preview_tracking_btn.setObjectName("previewTrackingBtn")
-        self.preview_tracking_btn.setCursor(Qt.PointingHandCursor)
-        setFont(self.preview_tracking_btn, 12, QFont.DemiBold)
-        self.preview_tracking_btn.clicked.connect(self._on_preview_tracking)
-        bottom_action_bar.addWidget(self.preview_tracking_btn)
-
         bottom_action_bar.addStretch()
-
         self.confirm_btn = QPushButton(self.tr("✓ 确认标注"))
         self.confirm_btn.setObjectName("confirmBtn")
         self.confirm_btn.setCursor(Qt.PointingHandCursor)
@@ -342,10 +334,10 @@ class VideoWatermarkTrackingDialog(QDialog):
         setFont(self.tracking_switch_label, 12)
         bottom_action_bar.addSpacing(16)
         bottom_action_bar.addWidget(self.tracking_switch_label)
-
-        self.tracking_switch = SwitchButton(parent=self, indicatorPos=IndicatorPosition.RIGHT)
+        self.tracking_switch = SwitchButton(parent=self, indicatorPos=IndicatorPosition.LEFT)
         self.tracking_switch.setChecked(True)
         self.tracking_switch.checkedChanged.connect(self._on_tracking_enabled_changed)
+        bottom_action_bar.addSpacing(6)
         bottom_action_bar.addWidget(self.tracking_switch)
 
         left_layout.addLayout(bottom_action_bar)
@@ -676,13 +668,10 @@ class VideoWatermarkTrackingDialog(QDialog):
                 bytes_per_line = ch * w
                 q_img = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
                 pixmap = QPixmap.fromImage(q_img)
-
                 # 使用当前预览标签的实际大小进行缩放
                 preview_size = self.video_preview.size()
                 if preview_size.width() > 0 and preview_size.height() > 0:
-                    scaled_pixmap = pixmap.scaled(
-                        preview_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
-                    )
+                    scaled_pixmap = pixmap.scaled(preview_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                     self.video_preview.setPixmap(scaled_pixmap)
                 else:
                     self.video_preview.setPixmap(pixmap.scaled(640, 360, Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -726,82 +715,7 @@ class VideoWatermarkTrackingDialog(QDialog):
                 tag.clicked.connect(self._jump_to_frame)
                 self.keyframes_flow_layout.addWidget(tag)
 
-    def _on_preview_tracking(self):
-        """Preview tracking results by running the tracking algorithm and displaying result frames."""
-        if not self.keyframes_set:
-            return
-
-        tracking_data = {
-            "file_path": self.file_path,
-            "keyframes": sorted(self.keyframes_set),
-            "end_frame": self.end_frame,
-            "total_frames": self.total_frames,
-            "fps": self.fps,
-        }
-
-        self.preview_tracking_btn.setEnabled(False)
-        self.preview_tracking_btn.setText(self.tr("⏳ 跟踪中..."))
-
-        # Call tracking algorithm interface - returns list of (frame_index, numpy_image) tuples
-        tracked_frames = self._run_tracking_algorithm(tracking_data)
-
-        self.preview_tracking_btn.setEnabled(True)
-        self.preview_tracking_btn.setText(self.tr("▶ 预览跟踪结果"))
-
-        if tracked_frames:
-            self._display_tracked_frame(tracked_frames[0])
-            self._tracked_results = tracked_frames
-            self._tracked_preview_index = 0
-
-    def _run_tracking_algorithm(self, tracking_data: dict):
-        """
-        Interface for the tracking algorithm.
-        
-        Args:
-            tracking_data: dict containing:
-                - file_path: str, path to the video file
-                - keyframes: list[int], sorted list of keyframe indices
-                - end_frame: int or None, the end frame index
-                - total_frames: int, total number of frames in the video
-                - fps: float, frames per second
-        
-        Returns:
-            list of tuples: [(frame_index, numpy_bgr_image), ...] 
-            Each tuple contains the frame number and the tracked result image (BGR numpy array).
-            Returns empty list if tracking fails or is not implemented.
-        """
-        # TODO: Integrate actual tracking algorithm here
-        # Example implementation placeholder:
-        # from app.algorithms.tracker import run_watermark_tracking
-        # return run_watermark_tracking(tracking_data)
-        return []
-
-    def _display_tracked_frame(self, tracked_frame):
-        """Display a single tracked result frame in the video preview area.
-        
-        Args:
-            tracked_frame: tuple of (frame_index, numpy_bgr_image)
-        """
-        frame_index, frame_bgr = tracked_frame
-        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        h, w, ch = frame_rgb.shape
-        bytes_per_line = ch * w
-        q_img = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
-        pixmap = QPixmap.fromImage(q_img)
-
-        preview_size = self.video_preview.size()
-        if preview_size.width() > 0 and preview_size.height() > 0:
-            scaled_pixmap = pixmap.scaled(
-                preview_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            self.video_preview.setPixmap(scaled_pixmap)
-        else:
-            self.video_preview.setPixmap(pixmap.scaled(640, 360, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-
-        self.frame_counter.setText(f"第 {frame_index} 帧 / {self.total_frames} 帧 (跟踪结果)")
-
     def _on_tracking_enabled_changed(self, is_checked: bool):
-        """Handle tracking switch toggle."""
         self.tracking_enabled = is_checked
 
     def _on_confirm(self):
