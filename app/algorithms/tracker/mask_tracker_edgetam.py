@@ -115,7 +115,7 @@ class MaskTrackerEdgeTAM:
             return self.image_decoder.run_with_iobinding_numpy(feed)
         return self.image_decoder.run(None, feed)
 
-    def run(self, mask_path, frames_dir):
+    def inference(self, mask_path, frames_dir):
         frames_list = sorted([os.path.join(frames_dir, item) for item in os.listdir(frames_dir)])
         assert len(frames_list) >= 1
         bank = {}
@@ -127,7 +127,7 @@ class MaskTrackerEdgeTAM:
         high_res = mask * 20.0 - 10.0
         mm, mmpos = self._enc_mem(high_res, pix_feat)
         bank[0] = {"mm": mm, "mmpos": mmpos, "obj_ptr": obj_ptr, "cond": True}
-        Image.fromarray((self._mask_to_orig(mask[0, 0], (H0, W0)) * 255).astype(np.uint8)).save(os.path.join(mask_out, f"{os.path.splitext(frames_list[0])[0]}.png"))
+        Image.fromarray((self._mask_to_orig(mask[0, 0], (H0, W0)) * 255).astype(np.uint8)).save(os.path.join(mask_out, f"{os.path.splitext(os.path.basename(frames_list[0]))[0]}.png"))
         
         for frame_idx in range(1, len(frames_list)):
             image, (H, W) = self._load_frame(frames_list[frame_idx])
@@ -145,7 +145,7 @@ class MaskTrackerEdgeTAM:
             bank[frame_idx] = {"mm": mm, "mmpos": mmpos, "obj_ptr": obj_ptr, "cond": False}
             logits = _resize_bilinear(high_res[0, 0], (H, W))
             tmp_mask = logits > 0
-            Image.fromarray((tmp_mask * 255).astype(np.uint8)).save(os.path.join(mask_out, f"{os.path.splitext(frames_list[frame_idx])[0]}.png"))
+            Image.fromarray((tmp_mask * 255).astype(np.uint8)).save(os.path.join(mask_out, f"{os.path.splitext(os.path.basename(frames_list[frame_idx]))[0]}.png"))
         return -1
 
     def _mask_to_orig(self, mask_s, out_hw):
