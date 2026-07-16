@@ -259,7 +259,7 @@ class PPTInferenceORT:
         ori_gpu = cp.asarray(np.stack(ori_frames, axis=0).astype(np.float32))  # (T, H, W, C)
 
         comp_frames_gpu = [None] * video_length
-        neighbor_stride = self.neighbor_length // 2 if max([updated_frames.shape[-2:]]) > 540 else self.neighbor_length
+        neighbor_stride = self.neighbor_length // 2 if max(updated_frames.shape[-2:]) > 540 else self.neighbor_length
         ref_num = self.subvideo_length // self.ref_stride if video_length > self.subvideo_length else -1
         for f in range(0, video_length, neighbor_stride):
             neighbor_ids = list(range(max(0, f - neighbor_stride), min(video_length, f + neighbor_stride + 1)))
