@@ -291,11 +291,19 @@ class MaskTrackerEdgeTAM:
             quality.uncertain_ratio,
         )
 
-    def inference(self, mask_path, frames_dir):
-        frames_list = sorted(os.path.join(frames_dir, item) for item in os.listdir(frames_dir) if os.path.isfile(os.path.join(frames_dir, item)))
+    def inference(self, mask_path, frames_dir, reverse: bool = False, output_dir: Optional[str] = None):
+        frames_list = sorted(
+            (
+                os.path.join(frames_dir, item)
+                for item in os.listdir(frames_dir)
+                if os.path.isfile(os.path.join(frames_dir, item))
+            ),
+            reverse=reverse,
+        )
         assert len(frames_list) >= 1
         bank = {}
-        mask_out = os.path.dirname(mask_path)
+        mask_out = output_dir or os.path.dirname(mask_path)
+        os.makedirs(mask_out, exist_ok=True)
         image, (height0, width0) = self._load_frame(frames_list[0])
         mask = self._load_mask(mask_path)
         initial_mask = mask[0, 0].astype(bool)

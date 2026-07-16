@@ -118,14 +118,14 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
         watermark_detect_settings.imageBoxes.emit([])
         watermark_detect_settings.watermarkContent.emit("general_watermark")
         watermark_detect_settings.watermarkConfidence.emit(0.3)
-        watermark_detect_settings.watermarkTrackingData.emit({"keyframes": [], "end_frame": None})
+        watermark_detect_settings.watermarkTrackingData.emit({"keyframes": [], "end_frame": None, "reverse_tracking_frames": 8})
 
         global_event_bus.watermarkRemove_InputFileUpdate.connect(
             lambda file_path: (
                 watermark_detect_settings.set_file_path(file_path=file_path),
                 None if file_path else watermark_detect_settings.watermarkBoxes.emit([]),
                 None if file_path else watermark_detect_settings.imageBoxes.emit([]),
-                None if file_path else watermark_detect_settings.watermarkTrackingData.emit({"keyframes": [], "end_frame": None})
+                None if file_path else watermark_detect_settings.watermarkTrackingData.emit({"keyframes": [], "end_frame": None, "reverse_tracking_frames": 8})
             )
         )
 

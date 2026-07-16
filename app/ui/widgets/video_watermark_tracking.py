@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QLabel, QPushButton, QFrame, QGraphicsDropShadowEffect,
     QSizePolicy, QScrollArea, QWidget
 )
-from app.ui.library.qfluentwidgets import setFont, FlowLayout, SwitchButton, IndicatorPosition
+from app.ui.library.qfluentwidgets import setFont, FlowLayout, SwitchButton, IndicatorPosition, CompactSpinBox
 
 
 class TimelineSliderWithMarkers(QSlider):
@@ -107,6 +107,7 @@ class VideoWatermarkTrackingDialog(QDialog):
         self.keyframes_set = set()
         self.end_frame = None
         self.tracking_enabled = True
+        self.reverse_tracking_frames = 8
         self.cap = None
 
         self.setWindowTitle(self.tr("视频水印自动跟踪设置"))
@@ -328,6 +329,22 @@ class VideoWatermarkTrackingDialog(QDialog):
         setFont(self.confirm_btn, 12, QFont.DemiBold)
         self.confirm_btn.clicked.connect(self._on_confirm)
         bottom_action_bar.addWidget(self.confirm_btn)
+
+        self.reverse_tracking_label = QLabel(self.tr("反向跟踪"))
+        self.reverse_tracking_label.setObjectName("trackingSwitchLabel")
+        self.reverse_tracking_label.setToolTip(self.tr("场景切换跟丢后，向前回溯并合并 Mask 的帧数；设为 0 可关闭"))
+        setFont(self.reverse_tracking_label, 12)
+        bottom_action_bar.addSpacing(16)
+        bottom_action_bar.addWidget(self.reverse_tracking_label)
+        self.reverse_tracking_spin = CompactSpinBox(self)
+        setFont(self.reverse_tracking_spin, 11)
+        self.reverse_tracking_spin.setRange(0, 120)
+        self.reverse_tracking_spin.setValue(self.reverse_tracking_frames)
+        self.reverse_tracking_spin.setSuffix(self.tr(" 帧"))
+        self.reverse_tracking_spin.setToolTip(self.reverse_tracking_label.toolTip())
+        self.reverse_tracking_spin.valueChanged.connect(self._on_reverse_tracking_frames_changed)
+        bottom_action_bar.addSpacing(6)
+        bottom_action_bar.addWidget(self.reverse_tracking_spin)
 
         self.tracking_switch_label = QLabel(self.tr("启用跟踪"))
         self.tracking_switch_label.setObjectName("trackingSwitchLabel")
@@ -717,12 +734,18 @@ class VideoWatermarkTrackingDialog(QDialog):
 
     def _on_tracking_enabled_changed(self, is_checked: bool):
         self.tracking_enabled = is_checked
+        self.reverse_tracking_label.setEnabled(is_checked)
+        self.reverse_tracking_spin.setEnabled(is_checked)
+
+    def _on_reverse_tracking_frames_changed(self, value: int):
+        self.reverse_tracking_frames = value
 
     def _on_confirm(self):
         data = {
             "keyframes": sorted(self.keyframes_set),
             "end_frame": self.end_frame,
             "tracking_enabled": self.tracking_enabled,
+            "reverse_tracking_frames": self.reverse_tracking_frames,
         }
         self.trackingDataReady.emit(data)
         self.accept()

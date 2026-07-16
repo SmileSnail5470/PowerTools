@@ -203,7 +203,16 @@ class VideoWatermarkRemover:
                 keyframes = self.video_tracking_data.get("keyframes")
                 end_frame = self.video_tracking_data.get("end_frame")
                 tracking_enabled = self.video_tracking_data.get("tracking_enabled")
-                logging.getLogger("subprocess").info(f"Start track mask with keyframes {keyframes} and end frame {end_frame} and tracking_enabled {tracking_enabled}")
+                tracking_logger = logging.getLogger("subprocess")
+                reverse_tracking_frames = max(0, int(self.video_tracking_data.get("reverse_tracking_frames", 8) or 0))
+                tracking_logger.info(
+                    "Start track mask with keyframes %s and end frame %s, "
+                    "tracking_enabled %s and reverse_tracking_frames %d",
+                    keyframes,
+                    end_frame,
+                    tracking_enabled,
+                    reverse_tracking_frames,
+                )
                 total_frames = len(frame_files)
                 effective_end = end_frame if end_frame else total_frames
                 if not tracking_enabled:
@@ -227,7 +236,6 @@ class VideoWatermarkRemover:
                         Image.fromarray(mask).convert("L").save(tmp_mask_path)
                         frame_mask_map[str(frame_file)] = tmp_mask_path
                 else:
-                    tracking_logger = logging.getLogger("subprocess")
                     def _segment_tracking_frame(frame_file):
                         detected_mask = WatermarkSegment(
                             watermark_type,
@@ -252,6 +260,66 @@ class VideoWatermarkRemover:
                         Image.fromarray(detected_mask).convert("L").save(detected_mask_path)
                         frame_mask_map[str(frame_file)] = detected_mask_path
                         return detected_mask, detected_mask_path
+
+                    def _merge_reverse_transition_masks(tracker_instance, all_seg_files, fail_frame_idx, reference_mask_path):
+                        if reverse_tracking_frames <= 0 or fail_frame_idx <= 0:
+                            return
+                        reverse_start_idx = max(0, fail_frame_idx - reverse_tracking_frames)
+                        reverse_frame_files = all_seg_files[reverse_start_idx:fail_frame_idx + 1]
+                        if len(reverse_frame_files) <= 1:
+                            return
+                        reverse_frames_dir = tempfile.mkdtemp(prefix="track_reverse_frames_")
+                        reverse_masks_dir = tempfile.mkdtemp(prefix="track_reverse_masks_")
+                        try:
+                            for frame_file in reverse_frame_files:
+                                shutil.copy2(str(frame_file), os.path.join(reverse_frames_dir, frame_file.name))
+                            tracking_logger.info(
+                                "Reverse EdgeTAM from frame %s over %d previous frames to repair transition",
+                                reverse_frame_files[-1].name,
+                                len(reverse_frame_files) - 1,
+                            )
+                            reverse_fail_idx = tracker_instance.inference(
+                                reference_mask_path,
+                                reverse_frames_dir,
+                                reverse=True,
+                                output_dir=reverse_masks_dir,
+                            )
+                            reverse_traversal = list(reversed(reverse_frame_files))
+                            if reverse_fail_idx == -1:
+                                reliable_reverse_frames = reverse_traversal
+                            else:
+                                reliable_reverse_frames = reverse_traversal[:reverse_fail_idx]
+                            merged_count = 0
+                            for frame_file in reliable_reverse_frames:
+                                reverse_mask_path = os.path.join(reverse_masks_dir, frame_file.name)
+                                if not os.path.exists(reverse_mask_path):
+                                    continue
+                                reverse_mask = np.asarray(Image.open(reverse_mask_path).convert("L"), dtype=np.uint8)
+                                output_mask_path = os.path.join(str(tmp_mask_dir), frame_file.name)
+                                if os.path.exists(output_mask_path):
+                                    forward_mask = np.asarray(Image.open(output_mask_path).convert("L"), dtype=np.uint8)
+                                    merged_mask = np.maximum(forward_mask, reverse_mask)
+                                else:
+                                    merged_mask = reverse_mask
+                                Image.fromarray(merged_mask).convert("L").save(output_mask_path)
+                                frame_mask_map[str(frame_file)] = output_mask_path
+                                merged_count += 1
+
+                            tracking_logger.info(
+                                "Reverse EdgeTAM repair completed at frame %s: merged %d frames%s",
+                                reverse_frame_files[-1].name,
+                                merged_count,
+                                " before reverse tracking became unreliable"
+                                if reverse_fail_idx != -1 else "",
+                            )
+                        except Exception:
+                            tracking_logger.exception(
+                                "Reverse EdgeTAM repair failed at frame %s; continuing with forward restart",
+                                reverse_frame_files[-1].name,
+                            )
+                        finally:
+                            shutil.rmtree(reverse_frames_dir, ignore_errors=True)
+                            shutil.rmtree(reverse_masks_dir, ignore_errors=True)
 
                     for seg_idx, kf in enumerate(keyframes):
                         if seg_idx + 1 < len(keyframes):
@@ -328,6 +396,12 @@ class VideoWatermarkRemover:
                                     tracking_logger.info("No mask found at frame %s; entering ABSENT state", failed_frame_file.name)
                                     continue
                                 tracking_state = "REACQUIRE"
+                                _merge_reverse_transition_masks(
+                                    tracker_instance=tracker_instance,
+                                    all_seg_files=all_seg_files,
+                                    fail_frame_idx=fail_frame_idx,
+                                    reference_mask_path=verified_mask_path,
+                                )
                                 current_ref_mask_path = verified_mask_path
                                 current_ref_frame = failed_frame_file
                                 tracking_logger.info("Mask verified at frame %s; restarting EdgeTAM", failed_frame_file.name)
