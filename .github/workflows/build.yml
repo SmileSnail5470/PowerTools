@@ -54,7 +54,7 @@ jobs:
           else
             ASSET_NAME="core-extensions-windows-x86_64.zip"
           fi
-          gh release download license_core-v0.0.1 --pattern "$ASSET_NAME" --dir .
+          gh release download license_core-v0.0.2 --pattern "$ASSET_NAME" --dir .
           unzip -o "$ASSET_NAME" -d app/library
           rm -f "$ASSET_NAME"
         shell: bash
