@@ -110,6 +110,9 @@ class IOBindingSession:
             return value.astype(expected)
         return value
 
+    def clear_persistent_inputs(self):
+        self._persist_inputs.clear()
+
     def run(self, output_names, input_feed, **kwargs):
         casted_feed = {}
         for name, value in input_feed.items():
@@ -328,9 +331,28 @@ def general_inference_session(model_path: str, sess_options, providers, provider
         return wrapped
 
 
-def clear_session_cache():
+def evict_session_cache(model_paths):
+    normalized_paths = {os.path.abspath(os.fspath(path)) for path in model_paths}
+    removed = []
     with _SESSION_CACHE_LOCK:
+        keys = [key for key in _SESSION_CACHE if key[0] in normalized_paths]
+        for key in keys:
+            wrapped = _SESSION_CACHE.pop(key)
+            wrapped.clear_persistent_inputs()
+            removed.append(wrapped)
+    count = len(removed)
+    removed.clear()
+    return count
+
+
+def clear_session_cache():
+    removed = []
+    with _SESSION_CACHE_LOCK:
+        for wrapped in _SESSION_CACHE.values():
+            wrapped.clear_persistent_inputs()
+            removed.append(wrapped)
         _SESSION_CACHE.clear()
+    removed.clear()
 
 
 

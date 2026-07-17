@@ -1,7 +1,8 @@
 import cv2
 import numpy as np
 import onnxruntime as ort
-from app.algorithms import ORTEnvironment, general_session, general_provider, ortvalue_to_numpy, is_gpu_device
+from app.algorithms import ORTEnvironment, general_provider, ortvalue_to_numpy
+from app.algorithms.visible_watermark_removal.video_modules.ppt.runtime import ppt_run_options, ppt_session_options
 ORTEnvironment.initialize()
 from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_transformer.bidirectional_propagation import BidirectionalPropagationORT, ImgPropStepORT
 from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_transformer.decoder import DecoderORT
@@ -92,7 +93,7 @@ class PropagationTransformerORT:
         self.prepare_models()
 
     def _get_session_options(self) -> ort.SessionOptions:
-        return general_session()
+        return ppt_session_options()
 
     def __del__(self):
         for attr in ('encoder', 'decoder', 'feat_prop', 'ss', 'sc', 'transformers', 'img_prop'):
@@ -104,11 +105,7 @@ class PropagationTransformerORT:
             return
         sess_options = self._get_session_options()
         providers, provider_options = general_provider()
-        run_options = ort.RunOptions()
-        if is_gpu_device():
-            run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "gpu:0")
-        else:
-            run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "cpu")
+        run_options = ppt_run_options()
 
         self.encoder = EncoderORT(self.onnx_paths['encoder'], providers=providers, provider_options=provider_options, sess_options=sess_options, run_options=run_options)
         self.decoder = DecoderORT(self.onnx_paths['decoder'], providers=providers, provider_options=provider_options, sess_options=sess_options, run_options=run_options)
@@ -136,15 +133,56 @@ class PropagationTransformerORT:
         )
         self.img_prop = ImgPropStepORT(self.onnx_paths["image_prop_step"], providers=providers, provider_options=provider_options, sess_options=sess_options, run_options=run_options)
         self._use_cupy = self.encoder._use_cupy
+        self.shrink_run_options = ppt_run_options(shrink_memory=True, use_cuda=self.encoder._use_iobinding)
 
-    def forward(self, masked_frames, completed_flows_f, completed_flows_b, masks_in, masks_updated, num_local_frames, t_dilation=2):
+    def forward(
+        self,
+        masked_frames,
+        completed_flows_f,
+        completed_flows_b,
+        masks_in,
+        masks_updated,
+        num_local_frames,
+        t_dilation=2,
+        shrink_memory=False,
+    ):
         if self._use_cupy:
-            return self._forward_cupy(masked_frames, completed_flows_f, completed_flows_b, masks_in, masks_updated, num_local_frames, t_dilation)
-        return self._forward_cpu(masked_frames, completed_flows_f, completed_flows_b, masks_in, masks_updated, num_local_frames, t_dilation)
+            return self._forward_cupy(
+                masked_frames,
+                completed_flows_f,
+                completed_flows_b,
+                masks_in,
+                masks_updated,
+                num_local_frames,
+                t_dilation,
+                shrink_memory,
+            )
+        return self._forward_cpu(
+            masked_frames,
+            completed_flows_f,
+            completed_flows_b,
+            masks_in,
+            masks_updated,
+            num_local_frames,
+            t_dilation,
+            shrink_memory,
+        )
 
-    def _forward_cpu(self, masked_frames, completed_flows_f, completed_flows_b, masks_in, masks_updated, num_local_frames, t_dilation=2):
+    def _forward_cpu(
+        self,
+        masked_frames,
+        completed_flows_f,
+        completed_flows_b,
+        masks_in,
+        masks_updated,
+        num_local_frames,
+        t_dilation=2,
+        shrink_memory=False,
+    ):
         l_t = num_local_frames
         b, t, _, ori_h, ori_w = masked_frames.shape
+        masks_in = np.asarray(masks_in, dtype=np.float32)
+        masks_updated = np.asarray(masks_updated, dtype=np.float32)
 
         enc_feat = self.encoder(masked_frames.reshape(b * t, 3, ori_h, ori_w),
                                 masks_in.reshape(b * t, 1, ori_h, ori_w),
@@ -175,16 +213,29 @@ class PropagationTransformerORT:
         trans_feat = trans_feat.reshape(b, t, -1, h, w)
         enc_feat_updated = enc_feat_updated + trans_feat
 
-        output = self.decoder(enc_feat_updated[:, :l_t].reshape(-1, c, h, w))
+        output = self.decoder(
+            enc_feat_updated[:, :l_t].reshape(-1, c, h, w),
+            run_options=(self.shrink_run_options if shrink_memory else None),
+        )
         return np.tanh(output).reshape(b, l_t, 3, ori_h, ori_w)
 
-    def _forward_cupy(self, masked_frames, completed_flows_f, completed_flows_b, masks_in, masks_updated, num_local_frames, t_dilation=2):
+    def _forward_cupy(
+        self,
+        masked_frames,
+        completed_flows_f,
+        completed_flows_b,
+        masks_in,
+        masks_updated,
+        num_local_frames,
+        t_dilation=2,
+        shrink_memory=False,
+    ):
         l_t = num_local_frames
         b, t, _, ori_h, ori_w = masked_frames.shape
 
         mf = cp.asarray(masked_frames)
-        mi = cp.asarray(masks_in)
-        mu = cp.asarray(masks_updated)
+        mi = cp.asarray(masks_in, dtype=cp.float32)
+        mu = cp.asarray(masks_updated, dtype=cp.float32)
 
         enc_feat = self.encoder(mf.reshape(b * t, 3, ori_h, ori_w),
                                 mi.reshape(b * t, 1, ori_h, ori_w),
@@ -224,18 +275,22 @@ class PropagationTransformerORT:
         enc_feat_updated = enc_feat_updated + trans_feat
         del trans_feat
 
-        output = self.decoder(enc_feat_updated[:, :l_t].reshape(-1, c, h, w))
+        output = self.decoder(
+            enc_feat_updated[:, :l_t].reshape(-1, c, h, w),
+            run_options=(self.shrink_run_options if shrink_memory else None),
+        )
         del enc_feat_updated
         output = cp.tanh(output).reshape(b, l_t, 3, ori_h, ori_w)
-        return cp.asnumpy(output)
+        return output
 
-    def img_propagation(self, masked_frames, completed_flows, masks):
+    def img_propagation(self, masked_frames, completed_flows, masks, shrink_memory=False):
         if self._use_cupy:
-            return self._img_propagation_cupy(masked_frames, completed_flows, masks)
-        return self._img_propagation_cpu(masked_frames, completed_flows, masks)
+            return self._img_propagation_cupy(masked_frames, completed_flows, masks, shrink_memory)
+        return self._img_propagation_cpu(masked_frames, completed_flows, masks, shrink_memory)
 
-    def _img_propagation_cpu(self, masked_frames, completed_flows, masks):
+    def _img_propagation_cpu(self, masked_frames, completed_flows, masks, shrink_memory=False):
         flows_forward, flows_backward = completed_flows
+        masks = np.asarray(masks, dtype=np.float32)
         b, t, c, h, w = masked_frames.shape
         feats_input = [np.ascontiguousarray(masked_frames[:, i]) for i in range(t)]
         masks_input = [np.ascontiguousarray(masks[:, i]) for i in range(t)]
@@ -277,17 +332,29 @@ class PropagationTransformerORT:
             else:
                 flow_prop = np.ascontiguousarray(flows_backward[:, i - 1])
                 flow_check = np.ascontiguousarray(flows_forward[:, i - 1])
-                feat_prop, mask_prop = self.img_prop(feats_b[idx], feat_prop, masks_b[idx], mask_prop, flow_prop, flow_check)
+                feat_prop, mask_prop = self.img_prop(
+                    feats_b[idx],
+                    feat_prop,
+                    masks_b[idx],
+                    mask_prop,
+                    flow_prop,
+                    flow_check,
+                    run_options=(
+                        self.shrink_run_options
+                        if shrink_memory and idx == t - 1
+                        else None
+                    ),
+                )
             feats_f[idx] = ortvalue_to_numpy(feat_prop)
             masks_f[idx] = ortvalue_to_numpy(mask_prop)
 
         return np.stack(feats_f, axis=1).reshape(b, t, c, h, w), np.stack(masks_f, axis=1)
 
-    def _img_propagation_cupy(self, masked_frames, completed_flows, masks):
+    def _img_propagation_cupy(self, masked_frames, completed_flows, masks, shrink_memory=False):
         flows_forward, flows_backward = completed_flows
         b, t, c, h, w = masked_frames.shape
         mf_cp = cp.asarray(masked_frames)
-        masks_cp = cp.asarray(masks)
+        masks_cp = cp.asarray(masks, dtype=cp.float32)
         flows_f_cp = cp.asarray(flows_forward)
         flows_b_cp = cp.asarray(flows_backward)
 
@@ -319,7 +386,19 @@ class PropagationTransformerORT:
             else:
                 flow_prop = cp.ascontiguousarray(flows_b_cp[:, i - 1])
                 flow_check = cp.ascontiguousarray(flows_f_cp[:, i - 1])
-                feat_prop, mask_prop = self.img_prop(feat_current, feat_prop, mask_current, mask_prop, flow_prop, flow_check)
+                feat_prop, mask_prop = self.img_prop(
+                    feat_current,
+                    feat_prop,
+                    mask_current,
+                    mask_prop,
+                    flow_prop,
+                    flow_check,
+                    run_options=(
+                        self.shrink_run_options
+                        if shrink_memory and idx == t - 1
+                        else None
+                    ),
+                )
             feats_f_ort[idx] = feat_prop
             masks_f_ort[idx] = mask_prop
 

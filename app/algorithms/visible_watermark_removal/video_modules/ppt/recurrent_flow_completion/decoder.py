@@ -1,5 +1,3 @@
-import numpy as np
-import onnxruntime as ort
 from app.algorithms import general_inference_session
 try:
     import cupy as cp
@@ -16,20 +14,21 @@ class DecoderORT:
         self._use_iobinding = self.session.use_cuda
         self._use_cupy = self._use_iobinding and _HAS_CUPY
 
-    def __call__(self, feat_prop, feat_e1, x):
+    def __call__(self, feat_prop, feat_e1, x, run_options=None):
+        run_options = self.run_options if run_options is None else run_options
         if self._use_cupy:
             feed = {
                 "feat_prop": _cupy_to_ortvalue(feat_prop) if isinstance(feat_prop, cp.ndarray) else feat_prop,
                 "feat_e1": _cupy_to_ortvalue(feat_e1) if isinstance(feat_e1, cp.ndarray) else feat_e1,
                 "x": _cupy_to_ortvalue(x) if isinstance(x, cp.ndarray) else x,
             }
-            ort_outputs = self.session.run_with_iobinding(feed, run_options=self.run_options)
+            ort_outputs = self.session.run_with_iobinding(feed, run_options=run_options)
             return _ortvalue_to_cupy(ort_outputs[0]), _ortvalue_to_cupy(ort_outputs[1])
         feed = {"feat_prop": feat_prop, "feat_e1": feat_e1, "x": x}
         if self._use_iobinding:
-            ort_outputs = self.session.run_with_iobinding_numpy(feed, run_options=self.run_options)
+            ort_outputs = self.session.run_with_iobinding_numpy(feed, run_options=run_options)
             return ort_outputs[0], ort_outputs[1]
-        outputs = self.session.run(None, feed, run_options=self.run_options)
+        outputs = self.session.run(None, feed, run_options=run_options)
         return outputs[0], outputs[1]
 
     def __del__(self):
