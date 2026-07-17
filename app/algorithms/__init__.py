@@ -386,7 +386,7 @@ def general_session():
     sess = ort.SessionOptions()
     sess.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
     sess.add_session_config_entry("session.use_env_allocators", "1")
-    sess.execution_mode = ort.ExecutionMode.ORT_PARALLEL
-    sess.inter_op_num_threads = 0
+    sess.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+    sess.inter_op_num_threads = 1
     sess.intra_op_num_threads = 0
     return sess
