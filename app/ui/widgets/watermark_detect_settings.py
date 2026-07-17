@@ -5,8 +5,9 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSlider, QFile
                              QFrame, QGraphicsDropShadowEffect)
 from PySide6.QtCore import Qt, QPropertyAnimation, QPoint, QEasingCurve, QTimer, Signal
 from PySide6.QtGui import QColor, QFont
-from app.ui.library.qfluentwidgets import setFont
+from app.ui.library.qfluentwidgets import setFont, MessageBox
 from app.ui.common.utils import get_file_type
+from app.ui.common.config import cfg
 from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
 from app.ui.widgets.watermark_manual_select_widget import WatermarkMaskTool
 from app.ui.widgets.video_watermark_tracking import VideoWatermarkTrackingDialog
@@ -621,6 +622,13 @@ class WatermarkDetectSettings(QWidget):
 
     def _open_tracking_dialog(self):
         if not self.file_path:
+            return
+        if not cfg.get(cfg.localObjectTrackingEnabled):
+            MessageBox(
+                title=self.tr("提醒"),
+                content=self.tr("请先在设置页面打开 '对象跟踪AI能力' 开关并下载对应模型"),
+                parent=self.window()
+            ).exec()
             return
         dialog = VideoWatermarkTrackingDialog(file_path=self.file_path, parent=self.window())
         dialog.trackingDataReady.connect(self._on_tracking_data_ready)
