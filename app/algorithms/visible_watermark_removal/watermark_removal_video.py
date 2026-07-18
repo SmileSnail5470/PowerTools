@@ -548,15 +548,16 @@ class VideoWatermarkRemover:
             new_input_frames_dir, new_masks_dir = self._crop_frames_and_masks(input_frames_dir, masks_dir, bbox)
             xmin, ymin, xmax, ymax = bbox
             process_w, process_h = xmax - xmin, ymax - ymin
+            init_subvideo_length = int(os.environ.get("POWERTOOLS_SUBVIDEO_LENGTH", 100))
             if max(process_h, process_w) < 540:
                 resize_ratio = 1.0
-                subvideo_length = 80
+                subvideo_length = min(80, init_subvideo_length)
             elif max(process_h, process_w) < 720:
                 resize_ratio = 540.0 / max(process_h, process_w)
-                subvideo_length = 70
+                subvideo_length = min(70, init_subvideo_length)
             else:
                 resize_ratio = 720.0 / max(process_h, process_w)
-                subvideo_length = 60
+                subvideo_length = min(60, init_subvideo_length)
             logging.getLogger("subprocess").info(f"Process video resize ratio {resize_ratio} and subvideo length {subvideo_length} and process size {(process_w, process_h)}")
             pipeline = PPTInferenceORT(
                 onnx_paths=ONNX_PATHS,
