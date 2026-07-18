@@ -1,6 +1,6 @@
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout
 from app.ui.library.qfluentwidgets import setFont, ScrollArea
 from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.license_widget import LicenseWidget
@@ -26,8 +26,6 @@ class LicenseView(QWidget):
 
     def _setup_header(self, main_layout: QVBoxLayout):
         header = GradientHeader(parent=self)
-
-        from PySide6.QtWidgets import QHBoxLayout
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(30, 20, 30, 20)
         header_layout.setSpacing(10)
