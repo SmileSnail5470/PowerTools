@@ -274,7 +274,7 @@ class MaskTrackerEdgeTAM:
     @staticmethod
     def _quality_log(frame_idx: int, decision: MaskDecision, quality: MaskQuality):
         logging.getLogger("subprocess").warning(
-            "EdgeTAM frame=%d status=%s reasons=%s area=%d area_ratio=%.3f "
+            "Tracker frame=%d status=%s reasons=%s area=%d area_ratio=%.3f "
             "iou=%.3f centroid_shift=%.3f components=%d largest_component=%.3f "
             "max_logit=%.3f topk_logit=%.3f uncertain_ratio=%.3f",
             frame_idx,
@@ -309,7 +309,7 @@ class MaskTrackerEdgeTAM:
         initial_mask = mask[0, 0].astype(bool)
         initial_area = int(np.count_nonzero(initial_mask))
         if initial_area == 0:
-            raise ValueError("EdgeTAM reference mask must not be empty")
+            raise ValueError("Tracker reference mask must not be empty")
         pix_feat, _, _, _, _ = self._enc_image(image)
         obj_ptr = self._enc_mask(mask, pix_feat)
         high_res = mask * 20.0 - 10.0

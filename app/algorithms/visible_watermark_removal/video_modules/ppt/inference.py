@@ -2,6 +2,7 @@ import gc
 import os
 import time
 import cv2
+import logging
 import numpy as np
 import scipy.ndimage
 from PIL import Image
@@ -16,6 +17,9 @@ try:
     _HAS_CUPY = True
 except ImportError:
     _HAS_CUPY = False
+
+
+ppt_logger = logging.getLogger("subprocess")
 
 
 class PPTInferenceORT:
@@ -230,7 +234,7 @@ class PPTInferenceORT:
         video_length = frames_np.shape[1]
         self._prepare_raft()
         if debug:
-            print(f"\nProcessing pipeline: [{video_length} frames] and frame shape: {frames_np.shape} and low memory: {self.low_memory} and use cupy {self._use_cupy}")
+            ppt_logger.info(f"\nProcessing pipeline: [{video_length} frames] and frame shape: {frames_np.shape} and low memory: {self.low_memory} and use cupy {self._use_cupy}")
             start_time = time.time()
         raft_scale = (0.5 if min(frames_np.shape[-2], frames_np.shape[-1]) >= 480 else 1.0)
         short_clip_len = 12 if max(frames_np.shape[-2:]) <= 1280 else 6
@@ -265,7 +269,7 @@ class PPTInferenceORT:
             gt_flows_bi = self.raft_model.forward(frames_np, scale_factor=raft_scale, shrink_memory=True)
         self._release_stage("raft_model", [self.onnx_paths["raft"]])
         if debug:
-            print(f"RAFT ONNX Inference Cost: {time.time() - start_time:.4f}s")
+            ppt_logger.info(f"RAFT ONNX Inference Cost: {time.time() - start_time:.4f}s")
             start_time = time.time()
         self._prepare_flow_complete()
         flow_length = gt_flows_bi[0].shape[1]
@@ -316,7 +320,7 @@ class PPTInferenceORT:
         del gt_flows_bi, flow_masks_np
         gc.collect()
         if debug:
-            print(f"Flow Completion ONNX Inference Cost: {time.time() - start_time:.4f}s")
+            ppt_logger.info(f"Flow Completion ONNX Inference Cost: {time.time() - start_time:.4f}s")
             start_time = time.time()
         for frame_start in range(0, video_length, self.subvideo_length):
             frame_end = min(video_length, frame_start + self.subvideo_length)
@@ -372,7 +376,7 @@ class PPTInferenceORT:
         del masked_frames_np
         gc.collect()
         if debug:
-            print(f"Image Propagation ONNX Inference Cost: {time.time() - start_time:.4f}s")
+            ppt_logger.info(f"Image Propagation ONNX Inference Cost: {time.time() - start_time:.4f}s")
             start_time = time.time()
 
         if self._use_cupy:
@@ -399,7 +403,7 @@ class PPTInferenceORT:
             )
 
         if debug:
-            print(f"Propagation Transformer ONNX Inference Cost: {time.time() - start_time:.4f}s")
+            ppt_logger.info(f"Propagation Transformer ONNX Inference Cost: {time.time() - start_time:.4f}s")
         self._release_stage("ppt_pipeline", self._flatten_model_paths(self.onnx_paths["ppt"]))
         del updated_frames, updated_masks, masks_dilated_np, pred_flows_bi
         gc.collect()

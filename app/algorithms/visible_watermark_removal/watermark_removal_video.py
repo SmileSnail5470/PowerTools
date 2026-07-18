@@ -274,7 +274,7 @@ class VideoWatermarkRemover:
                             for frame_file in reverse_frame_files:
                                 shutil.copy2(str(frame_file), os.path.join(reverse_frames_dir, frame_file.name))
                             tracking_logger.info(
-                                "Reverse EdgeTAM from frame %s over %d previous frames to repair transition",
+                                "Reverse tracker from frame %s over %d previous frames to repair transition",
                                 reverse_frame_files[-1].name,
                                 len(reverse_frame_files) - 1,
                             )
@@ -306,7 +306,7 @@ class VideoWatermarkRemover:
                                 merged_count += 1
 
                             tracking_logger.info(
-                                "Reverse EdgeTAM repair completed at frame %s: merged %d frames%s",
+                                "Reverse tracker repair completed at frame %s: merged %d frames%s",
                                 reverse_frame_files[-1].name,
                                 merged_count,
                                 " before reverse tracking became unreliable"
@@ -314,7 +314,7 @@ class VideoWatermarkRemover:
                             )
                         except Exception:
                             tracking_logger.exception(
-                                "Reverse EdgeTAM repair failed at frame %s; continuing with forward restart",
+                                "Reverse tracker repair failed at frame %s; continuing with forward restart",
                                 reverse_frame_files[-1].name,
                             )
                         finally:
@@ -356,7 +356,7 @@ class VideoWatermarkRemover:
                                 tracking_state = "REACQUIRE"
                                 current_ref_mask_path = probe_mask_path
                                 current_ref_frame = probe_frame
-                                tracking_logger.info("Mask reacquired at frame %s; restarting EdgeTAM", probe_frame.name)
+                                tracking_logger.info("Mask reacquired at frame %s; restarting tracker", probe_frame.name)
                                 tracking_state = "TRACKING"
                                 continue
                             remaining_frames = frame_files[current_track_start:seg_frame_end]
@@ -404,7 +404,7 @@ class VideoWatermarkRemover:
                                 )
                                 current_ref_mask_path = verified_mask_path
                                 current_ref_frame = failed_frame_file
-                                tracking_logger.info("Mask verified at frame %s; restarting EdgeTAM", failed_frame_file.name)
+                                tracking_logger.info("Mask verified at frame %s; restarting tracker", failed_frame_file.name)
                                 tracking_state = "TRACKING"
                             finally:
                                 shutil.rmtree(seg_frames_dir, ignore_errors=True)
@@ -557,6 +557,7 @@ class VideoWatermarkRemover:
             else:
                 resize_ratio = 720.0 / max(process_h, process_w)
                 subvideo_length = 60
+            logging.getLogger("subprocess").info(f"Process video resize ratio {resize_ratio} and subvideo length {subvideo_length} and process size {(process_w, process_h)}")
             pipeline = PPTInferenceORT(
                 onnx_paths=ONNX_PATHS,
                 resize_ratio=resize_ratio,
