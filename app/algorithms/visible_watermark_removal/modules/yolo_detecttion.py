@@ -286,7 +286,7 @@ class YOLODetection():
 
         inp, orig_size, scaled_size = prepare_input(pil_image, resolution)
 
-        outp = sess.run(['output0'], {'images': inp})
+        outp = sess.run_with_iobinding_numpy({'images': inp})
 
         boxes, scores, class_ids = post_process(outp, conf_thres=self.confidence, iou_thres=self.iou_threshold)
 

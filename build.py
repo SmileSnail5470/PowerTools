@@ -7,7 +7,7 @@ import platform
 
 
 APP_NAME = "PowerTools"
-VERSION = "1.0.5"
+VERSION = "1.0.6"
 COPYRIGHT = "SmileSnail5470"
 MAIN_ENTRY = "main.py"
 ICON_PATH_MAC = "app/ui/resources/images/logo.icns"
@@ -58,6 +58,9 @@ def build_windows_command(args, project_root, outdir):
     cmd.append('--mode=standalone')
     
     cmd.extend([
+        '--include-package=cupy',
+        '--include-package-data=cupy',
+        '--include-package=cupy_backends',
         '--windows-console-mode=disable',
         f'--company-name={COPYRIGHT}',
         f'--product-name={APP_NAME}',

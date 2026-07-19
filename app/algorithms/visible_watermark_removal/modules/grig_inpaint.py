@@ -290,8 +290,7 @@ class GRIGInpaint():
                     residual_input = img * (1 - mask)
                     output = img
                     for _ in range(iterations):
-                        residual_out = self.session.run(
-                            [self.output_name],
+                        residual_out = self.session.run_with_iobinding_numpy(
                             {
                                 self.image_input_name: residual_input,
                                 self.mask_input_name: mask

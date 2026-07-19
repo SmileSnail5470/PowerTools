@@ -38,6 +38,8 @@ from app.license.globals import feature_gate
 
 watermark_remove_params = TaskParams()
 watermark_remove_task_status_model = TaskStatusModel()
+# 当前批次已提交的任务 future，用于支持一次性取消
+watermark_remove_active_futures = []
 
 class FileSelectorCard(HeaderCardWidget):
     def __init__(self, parent=None):
@@ -101,8 +103,10 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
         bind_widget_to_param(watermark_detect_settings, "watermarkAIInteractiveType", watermark_remove_params, "watermark_ai_interactive_type", transform=None)
         bind_widget_to_param(watermark_detect_settings, "watermarkDetectPrompt", watermark_remove_params, "watermark_detect_prompt", transform=None)
         bind_widget_to_param(watermark_detect_settings, "watermarkBoxes", watermark_remove_params, "watermark_boxes", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "imageBoxes", watermark_remove_params, "image_boxes", transform=None)
         bind_widget_to_param(watermark_detect_settings, "watermarkContent", watermark_remove_params, "watermark_content", transform=None)
         bind_widget_to_param(watermark_detect_settings, "watermarkConfidence", watermark_remove_params, "watermark_confidence", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkTrackingData", watermark_remove_params, "watermark_tracking_data", transform=None)
         # 设置参数默认值
         watermark_detect_settings.watermarkDetectType.emit("ai_interactive_detect")
         watermark_detect_settings.watermarkFormat.emit("static_watermark")
@@ -111,10 +115,19 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
         watermark_detect_settings.watermarkAIInteractiveType.emit("semantic_detect")
         watermark_detect_settings.watermarkDetectPrompt.emit("")
         watermark_detect_settings.watermarkBoxes.emit([])
+        watermark_detect_settings.imageBoxes.emit([])
         watermark_detect_settings.watermarkContent.emit("general_watermark")
         watermark_detect_settings.watermarkConfidence.emit(0.3)
+        watermark_detect_settings.watermarkTrackingData.emit({"keyframes": [], "end_frame": None, "reverse_tracking_frames": 8})
 
-        global_event_bus.watermarkRemove_InputFileUpdate.connect(lambda file_path: watermark_detect_settings.set_file_path(file_path=file_path))
+        global_event_bus.watermarkRemove_InputFileUpdate.connect(
+            lambda file_path: (
+                watermark_detect_settings.set_file_path(file_path=file_path),
+                None if file_path else watermark_detect_settings.watermarkBoxes.emit([]),
+                None if file_path else watermark_detect_settings.imageBoxes.emit([]),
+                None if file_path else watermark_detect_settings.watermarkTrackingData.emit({"keyframes": [], "end_frame": None, "reverse_tracking_frames": 8})
+            )
+        )
 
         main_layout.addWidget(watermark_detect_settings)
 
@@ -532,6 +545,7 @@ class PreviewWidget(QWidget):
         # 底部状态栏
         self.status_info_widget = StatusInfoWidget(watermark_remove_task_status_model, self)
         self.status_info_widget.model.set_pipeline_steps(names=[self.tr('准备任务'), self.tr('检测水印'), self.tr('去除水印'), self.tr('导出文件')])
+        self.status_info_widget.cancel_requested.connect(self._cancel_tasks)
         bottom_layout.addWidget(self.status_info_widget, 2)
 
         main_layout.addLayout(bottom_layout)
@@ -620,6 +634,22 @@ class PreviewWidget(QWidget):
         elif self.media_type=="video" and out and widget and hasattr(widget, "setVideos"):
             widget.setVideos(main_path=path, sub_path=out)
 
+    def _cancel_tasks(self):
+        cancelled = 0
+        for future in list(watermark_remove_active_futures):
+            if not future.done and global_task_manager.cancel(future.job_id):
+                cancelled += 1
+        TeachingTip.create(
+            target=self.status_info_widget,
+            icon=InfoBarIcon.WARNING,
+            title=self.tr("通知"),
+            content=self.tr("正在取消 {0} 个任务，正在运行的任务将被强制结束").format(cancelled),
+            isClosable=True,
+            tailPosition=TeachingTipTailPosition.BOTTOM,
+            duration=2500,
+            parent=self
+        )
+
 
 class HeaderWidget(QWidget):
     def __init__(self, parent=None):
@@ -703,9 +733,11 @@ class HeaderWidget(QWidget):
         if not self.is_batch_task:
             watermark_remove_task_status_model.start_step(name=self.tr("准备任务"))
 
+        watermark_remove_active_futures.clear()
         for func, args, kwargs in total_tasks:
             input_path = kwargs["input_path"]
             future = global_task_manager.submit(func, *args, **kwargs)
+            watermark_remove_active_futures.append(future)
             
             future.finished.connect(
                 lambda result, path=input_path: self._task_finished(path, result)
@@ -813,6 +845,11 @@ class HeaderWidget(QWidget):
                 return self.tr("输出路径: 不支持非英文路径"), task_params
             task_params["output_path"] = params["output_path"]
             task_params["output_format"] = params["output_format"]
+
+        if "image_boxes" in params and params["image_boxes"]:
+            task_params["image_boxes"] = params["image_boxes"]
+        if "watermark_tracking_data" in params and params["watermark_tracking_data"]:
+            task_params["watermark_tracking_data"] = params["watermark_tracking_data"]
 
         if params["watermark_detect_type"] == "ai_auto_detect":
             task_params["watermark_content"] = params["watermark_content"]

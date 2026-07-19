@@ -766,6 +766,8 @@ class HorizontalSeparator(QFrame):
 
 
 class StatusInfoWidget(QFrame):
+    cancel_requested = Signal()
+
     def __init__(self, model: TaskStatusModel, parent=None):
         super().__init__(parent)
         self.setObjectName("StatusInfoWidget")
@@ -817,6 +819,32 @@ class StatusInfoWidget(QFrame):
 
         self.progress_ring = ProgressRing(ring_size=66)
 
+        self.cancel_btn = QPushButton(self.tr("⏹ 取消任务"))
+        self.cancel_btn.setCursor(Qt.PointingHandCursor)
+        self.cancel_btn.setEnabled(False)
+        setFont(self.cancel_btn, 10)
+        self.cancel_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f1f3f5;
+                color: #dc3545;
+                padding: 2px 6px;
+                border-radius: 3px;
+                border: 1px solid #f0c2c7;
+            }
+            QPushButton:hover {
+                background-color: #f8d7da;
+            }
+            QPushButton:pressed {
+                background-color: #f1aeb5;
+            }
+            QPushButton:disabled {
+                background-color: #f1f3f5;
+                color: #adb5bd;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        self.cancel_btn.clicked.connect(self._on_cancel_clicked)
+
         self.total_card.clicked.connect(self.on_stat_clicked)
         self.processed_card.clicked.connect(self.on_stat_clicked)
         self.success_card.clicked.connect(self.on_stat_clicked)
@@ -837,6 +865,7 @@ class StatusInfoWidget(QFrame):
         status_layout.addWidget(self.gpu_info)
         status_layout.addStretch(1)
         status_layout.addWidget(self.progress_ring)
+        status_layout.addWidget(self.cancel_btn, 0, Qt.AlignHCenter)
 
         self.failure_popup = FailurePopupWidget()
 
@@ -857,6 +886,10 @@ class StatusInfoWidget(QFrame):
     def on_stat_clicked(self, stat_name):
         if stat_name == "failed":
             self.toggle_failure_popup()
+
+    def _on_cancel_clicked(self):
+        self.cancel_btn.setEnabled(False)
+        self.cancel_requested.emit()
 
     def toggle_failure_popup(self):
         if self.failure_popup.isVisible():
@@ -891,8 +924,10 @@ class StatusInfoWidget(QFrame):
         self.progress_ring.set_percentage_animated(self.model.progress_percent)
         if status.state == TaskState.RUNNING:
             self.progress_ring.start_spin()
+            self.cancel_btn.setEnabled(True)
         else:
             self.progress_ring.stop_spin()
+            self.cancel_btn.setEnabled(False)
         self.batch_pipeline_widget.update_eta(int(status.performance.eta_seconds))
         avg = status.performance.avg_seconds_per_file
         if avg > 60:

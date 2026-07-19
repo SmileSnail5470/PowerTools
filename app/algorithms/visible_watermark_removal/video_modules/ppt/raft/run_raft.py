@@ -1,9 +1,9 @@
 import cv2
 import numpy as np
-import onnxruntime as ort
 from app.algorithms import ORTEnvironment
 ORTEnvironment.initialize()
-from app.algorithms import general_inference_session, general_session, general_provider, is_gpu_device
+from app.algorithms import general_inference_session, general_provider
+from app.algorithms.visible_watermark_removal.video_modules.ppt.runtime import ppt_run_options, ppt_session_options
 
 
 class RAFTBiONNX:
@@ -13,7 +13,7 @@ class RAFTBiONNX:
         self.prepare_model()
 
     def _get_session_options(self):
-        return general_session()
+        return ppt_session_options()
 
     def __del__(self):
         if hasattr(self, 'session'):
@@ -30,14 +30,12 @@ class RAFTBiONNX:
         self.input_name_2 = self.session.get_inputs()[1].name
         self.output_name = self.session.get_outputs()[0].name
         self._use_iobinding = self.session.use_cuda
-        self.run_options = ort.RunOptions()
-        if is_gpu_device():
-            self.run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "gpu:0")
-        else:
-            self.run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "cpu")
+        self.run_options = ppt_run_options()
+        self.shrink_run_options = ppt_run_options(shrink_memory=True, use_cuda=self.session.use_cuda)
 
-    def forward(self, gt_local_frames: np.ndarray, scale_factor: float = 1.0):
+    def forward(self, gt_local_frames: np.ndarray, scale_factor: float = 1.0, shrink_memory: bool = False):
         b, l_t, c, h, w = gt_local_frames.shape
+        final_run_options = (self.shrink_run_options if shrink_memory else self.run_options)
         if scale_factor < 1.0:
             new_h = int(h * scale_factor) - int(h * scale_factor) % 8
             new_w = int(w * scale_factor) - int(w * scale_factor) % 8
@@ -62,7 +60,7 @@ class RAFTBiONNX:
             )[0]
             flow_up_backward = self.session.run_with_iobinding_numpy(
                 {self.input_name_1: gtlf_2_flat, self.input_name_2: gtlf_1_flat},
-                run_options=self.run_options
+                run_options=final_run_options
             )[0]
         else:
             flow_up_forward = self.session.run(
@@ -73,7 +71,7 @@ class RAFTBiONNX:
             flow_up_backward = self.session.run(
                 [self.output_name],
                 {self.input_name_1: gtlf_2_flat, self.input_name_2: gtlf_1_flat},
-                run_options=self.run_options
+                run_options=final_run_options
             )[0]
 
         gt_flows_forward = flow_up_forward.reshape(b, l_t - 1, 2, ih, iw)
@@ -86,9 +84,10 @@ class RAFTBiONNX:
             flows_b_up = np.zeros((b, n_flows, 2, h, w), dtype=np.float32)
             for bi in range(b):
                 for fi in range(n_flows):
-                    for ch in range(2):
-                        flows_f_up[bi, fi, ch] = cv2.resize(gt_flows_forward[bi, fi, ch], (w, h), interpolation=cv2.INTER_LINEAR) * inv_scale
-                        flows_b_up[bi, fi, ch] = cv2.resize(gt_flows_backward[bi, fi, ch], (w, h), interpolation=cv2.INTER_LINEAR) * inv_scale
+                    flow_f_hwc = gt_flows_forward[bi, fi].transpose(1, 2, 0)
+                    flow_b_hwc = gt_flows_backward[bi, fi].transpose(1, 2, 0)
+                    flows_f_up[bi, fi] = (cv2.resize(flow_f_hwc, (w, h), interpolation=cv2.INTER_LINEAR) * inv_scale).transpose(2, 0, 1)
+                    flows_b_up[bi, fi] = (cv2.resize(flow_b_hwc, (w, h), interpolation=cv2.INTER_LINEAR) * inv_scale).transpose(2, 0, 1)
             return flows_f_up, flows_b_up
 
         return gt_flows_forward, gt_flows_backward

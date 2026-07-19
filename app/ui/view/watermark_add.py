@@ -41,6 +41,8 @@ from app.license.globals import feature_gate
 
 watermark_add_params = TaskParams()
 task_status_model = TaskStatusModel()
+# 当前批次已提交的任务 future，用于支持一次性取消
+watermark_add_active_futures = []
 
 class FileSelectorCard(HeaderCardWidget):
     def __init__(self, parent=None):
@@ -846,9 +848,11 @@ class HeaderWidget(QWidget):
         if not self.is_batch_task:
             task_status_model.start_step(name=self.tr("准备任务"))
 
+        watermark_add_active_futures.clear()
         for func, args, kwargs in total_tasks:
             input_path = kwargs["input_path"]
             future = global_task_manager.submit(func, *args, **kwargs)
+            watermark_add_active_futures.append(future)
             
             future.finished.connect(
                 lambda result, path=input_path: self._task_finished(path, result)
@@ -1017,6 +1021,7 @@ class PreviewWidget(QWidget):
         # 底部状态栏
         self.status_info_widget = StatusInfoWidget(task_status_model, self)
         self.status_info_widget.model.set_pipeline_steps(names=[self.tr('准备任务'), self.tr('添加/提取水印'), self.tr('导出文件')])
+        self.status_info_widget.cancel_requested.connect(self._cancel_tasks)
         bottom_layout.addWidget(self.status_info_widget, 2)
 
         main_layout.addLayout(bottom_layout)
@@ -1070,6 +1075,22 @@ class PreviewWidget(QWidget):
             widget.set_images(img1=path, img2=out)
         elif self.media_type=="video" and out and widget and hasattr(widget, "setVideos"):
             widget.setVideos(main_path=path, sub_path=out)
+
+    def _cancel_tasks(self):
+        cancelled = 0
+        for future in list(watermark_add_active_futures):
+            if not future.done and global_task_manager.cancel(future.job_id):
+                cancelled += 1
+        TeachingTip.create(
+            target=self.status_info_widget,
+            icon=InfoBarIcon.WARNING,
+            title=self.tr("通知"),
+            content=self.tr("正在取消 {0} 个任务，正在运行的任务将被强制结束").format(cancelled),
+            isClosable=True,
+            tailPosition=TeachingTipTailPosition.BOTTOM,
+            duration=2500,
+            parent=self
+        )
 
     
 class WatermarkAdd(QWidget):

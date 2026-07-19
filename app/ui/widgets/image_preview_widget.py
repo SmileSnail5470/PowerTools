@@ -608,7 +608,7 @@ class ImageNavigationWidget(QWidget):
     def __init__(self, parent=None, task_type="watermark_add"):
         super().__init__(parent)
         self.setObjectName("ImageNavigationWidget")
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.total_images = []
         self.current_index = 0
         self.task_type = task_type

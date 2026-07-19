@@ -361,7 +361,7 @@ class TextRecognizer():
             norm_img_batch = norm_img_batch.copy()
             input_dict = {}
             input_dict[self.input_tensor.name] = norm_img_batch
-            outputs = self.predictor.run(self.output_tensors, input_dict)
+            outputs = self.predictor.run_with_iobinding_numpy(input_dict)
             preds = outputs[0]
             rec_result = self.postprocess_op(
                 preds,

@@ -67,6 +67,17 @@ class TaskManager(QObject):
             # 在锁内获取future，但cancel操作本身是线程安全的
             return future.cancel()
 
+    def cancel_all(self) -> int:
+        with self._lock:
+            futures = [f for f in self._tasks.values() if not f.done]
+
+        # 在锁外执行cancel，避免与信号发射产生死锁
+        cancelled = 0
+        for future in futures:
+            if future.cancel():
+                cancelled += 1
+        return cancelled
+
     def get_future(self, job_id: str) -> Optional[TaskFuture]:
         """获取指定任务ID的Future对象
         

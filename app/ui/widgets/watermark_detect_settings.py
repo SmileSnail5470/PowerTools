@@ -5,10 +5,12 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSlider, QFile
                              QFrame, QGraphicsDropShadowEffect)
 from PySide6.QtCore import Qt, QPropertyAnimation, QPoint, QEasingCurve, QTimer, Signal
 from PySide6.QtGui import QColor, QFont
-from app.ui.library.qfluentwidgets import setFont
+from app.ui.library.qfluentwidgets import setFont, MessageBox
 from app.ui.common.utils import get_file_type
+from app.ui.common.config import cfg
 from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
 from app.ui.widgets.watermark_manual_select_widget import WatermarkMaskTool
+from app.ui.widgets.video_watermark_tracking import VideoWatermarkTrackingDialog
 
 
 class OptionCard(QFrame):
@@ -57,6 +59,7 @@ class WatermarkDetectSettings(QWidget):
     watermarkFormat = Signal(str)             # 静态水印/动态水印
     manualWatermarktMaskPath = Signal(str)    # 手动标注 Mask 路径
     maskDirectoryChanged = Signal(str)        # 人工指定 Mask 路径
+    imageBoxes = Signal(list)                 # 人工选中输入区域
     # AI 交互检测信号
     watermarkAIInteractiveType = Signal(str)  # 语义检测/空间范围检测
     watermarkDetectPrompt = Signal(str)       # 语义检测提示词
@@ -64,6 +67,8 @@ class WatermarkDetectSettings(QWidget):
     watermarkConfidence = Signal(float)       # 水印置信度
     # AI 自动检测
     watermarkContent = Signal(str)            # 通用水印/文字水印
+    # 动态水印跟踪信号
+    watermarkTrackingData = Signal(dict)      # 跟踪数据: {keyframes, end_frame, tracking_enabled, reverse_tracking_frames}
 
 
     def __init__(self, parent=None):
@@ -72,6 +77,8 @@ class WatermarkDetectSettings(QWidget):
         self.current_tab_index = 0
         self.file_path = None
         self.mask_dir_path = ""
+        self.is_video_file = False
+        self.is_dynamic_watermark = False
 
         self.setObjectName("WatermarkDetectSettings")
         self.init_ui()
@@ -148,13 +155,35 @@ class WatermarkDetectSettings(QWidget):
         grid1_l.setContentsMargins(0,0,0,0)
         c2 = OptionCard(self.tr("静态水印"), self.tr("固定位置不移动"))
         c2.clicked.connect(lambda: self.watermarkFormat.emit("static_watermark"))
+        c2.clicked.connect(lambda: self._on_auto_dynamic_selected(False))
         c2.selected = True
         c2.update_style()
         grid1_l.addWidget(c2)
         c2_1 = OptionCard(self.tr("动态水印"), self.tr("移动、缩放、淡入淡出"))
         c2_1.clicked.connect(lambda: self.watermarkFormat.emit("dynamic_watermark"))
+        c2_1.clicked.connect(lambda: self._on_auto_dynamic_selected(True))
         grid1_l.addWidget(c2_1)
         p0_l.addWidget(grid1)
+        p0_l.addSpacing(24)
+
+        self.auto_tracking_container = QWidget()
+        auto_tracking_container_l = QVBoxLayout(self.auto_tracking_container)
+        auto_tracking_container_l.setContentsMargins(0, 0, 0, 0)
+        auto_tracking_container_l.addWidget(self.create_label_group(self.tr("视频水印跟踪"), self.tr("可选：跟踪指定关键帧水印，极大提高水印检测速度")))
+        self.auto_tracking_btn = QPushButton(self.tr("🎯 启用跟踪(可选)"))
+        self.auto_tracking_btn.setObjectName("secondaryBtn")
+        self.auto_tracking_btn.setCursor(Qt.PointingHandCursor)
+        self.auto_tracking_btn.clicked.connect(self._open_tracking_dialog)
+        auto_tracking_container_l.addWidget(self.auto_tracking_btn)
+        self.auto_tracking_container.setVisible(False)
+        p0_l.addWidget(self.auto_tracking_container)
+        p0_l.addSpacing(12)
+
+        p0_l.addWidget(self.create_label_group(self.tr("水印区域选择"), self.tr("可选：框选水印所在区域，辅助识别定位")))
+        self.auto_area_btn = QPushButton(self.tr("🖼 水印区域选择"))
+        self.auto_area_btn.setObjectName("secondaryBtn")
+        self.auto_area_btn.clicked.connect(lambda _: self._watermark_area_selector(image_boxes_only=True))
+        p0_l.addWidget(self.auto_area_btn)
 
         # AI 交互 ---
         p1 = QWidget()
@@ -215,6 +244,17 @@ class WatermarkDetectSettings(QWidget):
         p1_l.addWidget(self.sub_stack)
         p1_l.addSpacing(20)
 
+        self.interactive_area_container = QWidget()
+        area_container_l = QVBoxLayout(self.interactive_area_container)
+        area_container_l.setContentsMargins(0, 0, 0, 0)
+        area_container_l.addWidget(self.create_label_group(self.tr("水印区域选择"), self.tr("可选：框选水印所在区域，辅助识别定位")))
+        self.interactive_area_btn = QPushButton(self.tr("🖼 水印区域选择"))
+        self.interactive_area_btn.setObjectName("secondaryBtn")
+        self.interactive_area_btn.clicked.connect(lambda _: self._watermark_area_selector(image_boxes_only=True))
+        area_container_l.addWidget(self.interactive_area_btn)
+        p1_l.addWidget(self.interactive_area_container)
+        p1_l.addSpacing(20)
+
         conf_w = QWidget()
         conf_l = QVBoxLayout(conf_w)
         conf_l.setContentsMargins(0, 0, 0, 0)
@@ -258,13 +298,28 @@ class WatermarkDetectSettings(QWidget):
         grid2_l.setContentsMargins(0,0,0,0)
         c3 = OptionCard(self.tr("静态水印"), self.tr("固定位置不移动"))
         c3.clicked.connect(lambda: self.watermarkFormat.emit("static_watermark"))
+        c3.clicked.connect(lambda: self._on_interactive_dynamic_selected(False))
         c3.selected = True
         c3.update_style()
         grid2_l.addWidget(c3)
         c3_1 = OptionCard(self.tr("动态水印"), self.tr("移动、缩放、淡入淡出"))
         c3_1.clicked.connect(lambda: self.watermarkFormat.emit("dynamic_watermark"))
+        c3_1.clicked.connect(lambda: self._on_interactive_dynamic_selected(True))
         grid2_l.addWidget(c3_1)
         p1_l.addWidget(grid2)
+        p1_l.addSpacing(20)
+        
+        self.interactive_tracking_container = QWidget()
+        tracking_container_l = QVBoxLayout(self.interactive_tracking_container)
+        tracking_container_l.setContentsMargins(0, 0, 0, 0)
+        tracking_container_l.addWidget(self.create_label_group(self.tr("视频水印跟踪"), self.tr("可选：跟踪指定关键帧水印，极大提高水印检测速度")))
+        self.interactive_tracking_btn = QPushButton(self.tr("🎯 启用跟踪(可选)"))
+        self.interactive_tracking_btn.setObjectName("secondaryBtn")
+        self.interactive_tracking_btn.setCursor(Qt.PointingHandCursor)
+        self.interactive_tracking_btn.clicked.connect(self._open_tracking_dialog)
+        self.interactive_tracking_container.setVisible(False)
+        tracking_container_l.addWidget(self.interactive_tracking_btn)
+        p1_l.addWidget(self.interactive_tracking_container)
 
         # 手工标注 ---
         p2 = QWidget()
@@ -323,8 +378,8 @@ class WatermarkDetectSettings(QWidget):
         self.card_layout.addWidget(self.stack)
         self.main_layout.addWidget(self.card)
 
-        self.btn_sem.clicked.connect(lambda: [self.btn_spa.setChecked(False), self.sub_stack.setCurrentIndex(0)])
-        self.btn_spa.clicked.connect(lambda: [self.btn_sem.setChecked(False), self.sub_stack.setCurrentIndex(1)])
+        self.btn_sem.clicked.connect(lambda: [self.btn_spa.setChecked(False), self.sub_stack.setCurrentIndex(0), self.interactive_area_container.setVisible(True)])
+        self.btn_spa.clicked.connect(lambda: [self.btn_sem.setChecked(False), self.sub_stack.setCurrentIndex(1), self.interactive_area_container.setVisible(False)])
 
     def create_label_group(self, title, desc):
         w = QWidget()
@@ -351,17 +406,30 @@ class WatermarkDetectSettings(QWidget):
 
     def get_current_page_height(self, index: int):
         widget = self.stack.widget(index)
+        layout = widget.layout()
+        if layout:
+            width = self.card.width() if self.card.width() > 0 else widget.width()
+            if width > 0:
+                return layout.heightForWidth(width) if layout.heightForWidth(width) > 0 else widget.sizeHint().height()
         widget.adjustSize()
         return widget.sizeHint().height()
     
     def animate_height_change(self, target_height: int):
         start_height = self.card.height()
+        self.card.setMinimumWidth(self.card.width())
         self.height_anim = QPropertyAnimation(self.card, b"maximumHeight")
         self.height_anim.setDuration(250)
         self.height_anim.setStartValue(start_height)
         self.height_anim.setEndValue(target_height)
         self.height_anim.setEasingCurve(QEasingCurve.OutCubic)
+        self.height_anim.finished.connect(lambda: self.card.setMinimumWidth(0))
         self.height_anim.start()
+
+    def update_layout_height(self):
+        content_height = self.get_current_page_height(self.current_tab_index)
+        extra_height = 90  # tabs + spacing + margins
+        target_height = content_height + extra_height
+        self.animate_height_change(target_height)
 
     def switch_tab(self, index, animated=True):
         self.current_tab_index = index
@@ -381,10 +449,7 @@ class WatermarkDetectSettings(QWidget):
         self.stack.setCurrentIndex(index)
         for i, btn in enumerate(self.tab_btns):
             btn.setChecked(i == index)
-        content_height = self.get_current_page_height(index)
-        extra_height = 90  # tabs + spacing + margins
-        target_height = content_height + extra_height
-        self.animate_height_change(target_height)
+        self.update_layout_height()
 
     def apply_styles(self):
         shadow = QGraphicsDropShadowEffect()
@@ -516,16 +581,21 @@ class WatermarkDetectSettings(QWidget):
             self.file_path = file_path
         else:
             self.file_path = os.path.join(file_path, os.listdir(file_path)[0])
+        self.is_video_file = get_file_type(self.file_path) == "video"
+        self._update_tracking_visibility()
 
-    def _watermark_area_selector(self):
+    def _watermark_area_selector(self, single_area_only=False, image_boxes_only=False):
         if not self.file_path:
             return
-        area_selector = AreaSelectorDialog(file_path=self.file_path, parent=self)
+        area_selector = AreaSelectorDialog(file_path=self.file_path, single_area_only=single_area_only, parent=self)
         area_selector.exec()
         boxes = []
         for item in area_selector.get_results():
             boxes.append((item["x"], item["y"], item["x"] + item["w"], item["y"] + item["h"]))
-        self.watermarkBoxes.emit(boxes)
+        if not image_boxes_only:
+            self.watermarkBoxes.emit(boxes)
+        else:
+            self.imageBoxes.emit(boxes)
 
     def _process_manual_detect(self):
         if not self.file_path:
@@ -535,3 +605,34 @@ class WatermarkDetectSettings(QWidget):
         watermarkMaskTool.exec()
         mask_path = watermarkMaskTool.get_mask_path()
         self.manualWatermarktMaskPath.emit(mask_path)
+
+    def _on_auto_dynamic_selected(self, is_dynamic):
+        self.is_dynamic_watermark = is_dynamic
+        self._update_tracking_visibility()
+
+    def _on_interactive_dynamic_selected(self, is_dynamic):
+        self.is_dynamic_watermark = is_dynamic
+        self._update_tracking_visibility()
+
+    def _update_tracking_visibility(self):
+        should_show = self.is_video_file and self.is_dynamic_watermark
+        self.auto_tracking_container.setVisible(should_show)
+        self.interactive_tracking_container.setVisible(should_show)
+        self.update_layout_height()
+
+    def _open_tracking_dialog(self):
+        if not self.file_path:
+            return
+        if not cfg.get(cfg.localObjectTrackingEnabled):
+            MessageBox(
+                title=self.tr("提醒"),
+                content=self.tr("请先在设置页面打开 '对象跟踪AI能力' 开关并下载对应模型"),
+                parent=self.window()
+            ).exec()
+            return
+        dialog = VideoWatermarkTrackingDialog(file_path=self.file_path, parent=self.window())
+        dialog.trackingDataReady.connect(self._on_tracking_data_ready)
+        dialog.exec()
+
+    def _on_tracking_data_ready(self, data):
+        self.watermarkTrackingData.emit(data)

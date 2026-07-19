@@ -1,4 +1,5 @@
-from typing import List, Tuple
+import tempfile
+import os
 import cv2
 import numpy as np
 from app.algorithms.visible_watermark_removal.modules.sr_segment import SLBRSegment
@@ -296,7 +297,7 @@ class ImageWatermarkRemove():
         # mask 是 (H, W) 值是 0/255
         mask = ((mask > 0) * 255).astype(np.uint8)
         return mask
-    
+
     def run(
             self, 
             image_path, 
@@ -319,14 +320,14 @@ class ImageWatermarkRemove():
             ai_interactive_prompt: str = "watermark",
             ai_interactive_boxes: list = [],
             watermark_confidence: float = 0.5,
+            watermark_boxes: list = [],
             dilate_num: int = 2,
             **kwargs
         ):
-        progress_cb = kwargs.get("progress_cb", None)
+        progress_cb = kwargs.pop("progress_cb", None)
         if progress_cb is not None:
             progress_cb("MaskStart", "")
         if not mask_path:
-            # ai 选择水印掩码
             mask = WatermarkSegment(watermark_type, ai_detect_type, ai_interactive_type, ai_interactive_prompt, ai_interactive_boxes, watermark_confidence).segment(
                 image_path=image_path,
                 sr_onnx_path=sr_segment_onnx_path,
@@ -336,11 +337,20 @@ class ImageWatermarkRemove():
                 segment_onnx_dir=segment_onnx_dir,
                 **kwargs
             )
+            if watermark_boxes and not (ai_detect_type == "ai_interactive_detect" and ai_interactive_type == "space_detect"):
+                h, w = mask.shape
+                mask_image = np.zeros((h, w), dtype=np.uint8)
+                for bbox in watermark_boxes:
+                    xmin, ymin, xmax, ymax = bbox
+                    mask_image[ymin:ymax, xmin:xmax] = mask[ymin:ymax, xmin:xmax]
+                mask = mask_image
         else:
-            # 读取人工标注的水印掩码
             mask = self._read_mask(mask_path=mask_path)
         if progress_cb is not None:
-            mask_tmp_path = "{0}_mask.png".format(output_path.rsplit(".", 1)[0])
+            if "visible_mask_path" in kwargs and kwargs["visible_mask_path"]:
+                mask_tmp_path = kwargs["visible_mask_path"]
+            else:
+                mask_tmp_path = "{0}_mask.png".format(output_path.rsplit(".", 1)[0])
             self._save_mask_visualization(
                 img_path=image_path,
                 mask=mask,

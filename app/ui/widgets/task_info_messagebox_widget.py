@@ -16,6 +16,8 @@ param_name_map = {
     "watermark_ai_interactive_type": "AI 交互检测水印方式",
     "watermark_detect_prompt": "AI 水印检测提示词",
     "watermark_boxes": "AI 框选检测 Box",
+    "image_boxes": "人工选中水印区域 Box",
+    "watermark_tracking_data": "视频水印跟踪参数",
     "watermark_confidence": "水印置信度",
     "mask_dilate": "水印 Mask 扩张系数",
     "model_name": "模型类型",

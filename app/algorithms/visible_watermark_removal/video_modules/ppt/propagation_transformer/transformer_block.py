@@ -314,11 +314,17 @@ class TemporalSparseTransformerBlockORT:
             for i in range(t_dilation):
                 t_indices.append(cp.arange(i, T, t_dilation))
 
-        mask_sum = self._numpy_max_pool2d_and_sum(l_mask, new_h, new_w, n_wh, n_ww)
+        l_mask_np = cp.asnumpy(l_mask) if isinstance(l_mask, cp.ndarray) else l_mask
+        mask_sum = self._numpy_max_pool2d_and_sum(l_mask_np, new_h, new_w, n_wh, n_ww)
 
         x_gpu = cp.asarray(x)
-        enc_feat_np = enc_feat.get() if hasattr(enc_feat, 'get') else enc_feat
-        enc_feat_ort = ort.OrtValue.ortvalue_from_numpy(np.ascontiguousarray(enc_feat_np), device_type="cuda", device_id=0)
+        enc_feat_ort = (
+            _cupy_to_ortvalue(enc_feat)
+            if isinstance(enc_feat, cp.ndarray)
+            else ort.OrtValue.ortvalue_from_numpy(
+                np.ascontiguousarray(enc_feat), device_type="cuda", device_id=0
+            )
+        )
 
         for i in range(self.depths):
             shortcut = x_gpu
@@ -393,4 +399,4 @@ class TemporalSparseTransformerBlockORT:
             del norm_y
             x_gpu = shortcut_mlp + mlp_out.reshape(B, T, H, W, C)
             del shortcut_mlp, mlp_out
-        return cp.asnumpy(x_gpu)
+        return x_gpu

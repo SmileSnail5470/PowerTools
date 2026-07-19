@@ -71,8 +71,7 @@ class PatchWiperSegment():
         img = self._load_image(image_path)
         img, pads = self._pad_to_multiple(img)
 
-        outputs = self.session.run(
-            self.output_names,
+        outputs = self.session.run_with_iobinding_numpy(
             {self.input_name: img}
         )
         mask = outputs[0]

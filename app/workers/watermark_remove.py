@@ -68,12 +68,14 @@ class WatermarkRemoveWork(BaseWorker):
                 "ai_interactive_prompt": kwargs["watermark_detect_prompt"] if "watermark_detect_prompt" in kwargs else "watermark",
                 "ai_interactive_boxes": kwargs["watermark_boxes"] if "watermark_boxes" in kwargs else [],
                 "watermark_confidence": kwargs["watermark_confidence"] if "watermark_confidence" in kwargs else 0.5,
+                "watermark_boxes": kwargs["image_boxes"] if "image_boxes" in kwargs else [],
                 "dilate_num": int(kwargs["mask_dilate"]),
                 "progress_cb": progress_cb,
             }
             self._get_image_instance().run(**params)
         else:
             ppt_onnx_basedir = os.path.join(self.deps_path, _resolve_hardware_variant(), "video_inpainting", "ppt")
+            tacker_onnx_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "tracker")
             params = {
                 "input_video_path": input_path, 
                 "output_video_path": output_file,
@@ -88,6 +90,7 @@ class WatermarkRemoveWork(BaseWorker):
                 "yolo_detection_onnx_path": os.path.join(onnx_model_dir, "yolo.encmodel"),
                 "segment_onnx_dir": segment_model_dir,
                 "ppt_onnx_basedir": ppt_onnx_basedir,
+                "tacker_onnx_dir": tacker_onnx_dir,
                 "mask_path": kwargs["manual_watermark_mask_path"] if "manual_watermark_mask_path" in kwargs and kwargs["manual_watermark_mask_path"] else "",
                 "refine_type": kwargs["model_name"],
                 "use_cache_mask": True if "watermark_format" in kwargs and kwargs["watermark_format"] == "static_watermark" else False,
@@ -97,6 +100,8 @@ class WatermarkRemoveWork(BaseWorker):
                 "ai_interactive_prompt": kwargs["watermark_detect_prompt"] if "watermark_detect_prompt" in kwargs else "watermark",
                 "ai_interactive_boxes": kwargs["watermark_boxes"] if "watermark_boxes" in kwargs else [],
                 "watermark_confidence": kwargs["watermark_confidence"] if "watermark_confidence" in kwargs else 0.5,
+                "watermark_boxes": kwargs["image_boxes"] if "image_boxes" in kwargs else [],
+                "watermark_tracking_data": kwargs["watermark_tracking_data"] if "watermark_tracking_data" in kwargs else [],
                 "dilate_num": int(kwargs["mask_dilate"]),
                 "ffmpeg_path": os.getenv("POWERTOOLS_FFMPEG_BIN"),
                 "progress_cb": progress_cb,

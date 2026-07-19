@@ -2,9 +2,7 @@ import numpy as np
 import cv2
 
 
-def preprocess_opencv(
-    image: np.ndarray, target_size: tuple = (1008, 1008)
-) -> np.ndarray:
+def preprocess_bgr(image_bgr: np.ndarray, dst_width: int, dst_height: int) -> np.ndarray:
     """
     CPU preprocessing using OpenCV (equivalent to the CPU fallback path in C++).
 
@@ -20,7 +18,8 @@ def preprocess_opencv(
     Returns:
         CHW float32 blob (1, 3, H, W)
     """
-    rgb_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    target_size = (dst_width, dst_height)
+    rgb_img = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
     blob = cv2.dnn.blobFromImage(
         rgb_img,
         scalefactor=1.0 / 127.5,

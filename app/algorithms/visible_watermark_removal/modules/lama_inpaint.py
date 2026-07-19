@@ -7,6 +7,10 @@ ORTEnvironment.initialize()
 
 
 class LamaInpaint():
+    # 由于 session 已在进程级缓存复用, CudaGraphRunner 也按 session 复用,
+    # 避免对同一个已捕获 CUDA Graph 的 session 反复重新捕获。
+    _graph_runner_cache = {}
+
     def __init__(self, use_cuda_graph: bool = False):
         self.tile_size = 512
         self.use_cuda_graph = use_cuda_graph
@@ -28,8 +32,13 @@ class LamaInpaint():
         self.output_name = self.session.get_outputs()[0].name
 
         if self.use_cuda_graph and self.session.use_cuda:
-            out_specs = {self.output_name: ((1, 3, self.tile_size, self.tile_size), np.float32)}
-            self._graph_runner = CudaGraphRunner(self.session, out_specs)
+            runner_key = id(self.session)
+            runner = LamaInpaint._graph_runner_cache.get(runner_key)
+            if runner is None:
+                out_specs = {self.output_name: ((1, 3, self.tile_size, self.tile_size), np.float32)}
+                runner = CudaGraphRunner(self.session, out_specs)
+                LamaInpaint._graph_runner_cache[runner_key] = runner
+            self._graph_runner = runner
 
     def prepare(self, onnx_path: str = None):
         self.onnx_path = onnx_path
@@ -321,8 +330,7 @@ class LamaInpaint():
                             }
                         )[self.output_name]
                     else:
-                        out_tile = self.session.run(
-                            [self.output_name],
+                        out_tile = self.session.run_with_iobinding_numpy(
                             {
                                 self.image_input_name: img_tile,
                                 self.mask_input_name: mask_tile

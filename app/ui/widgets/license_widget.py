@@ -321,7 +321,7 @@ class LicenseWidget(QWidget):
         self.browse_btn.clicked.connect(self._browse_license_file)
         btn_layout.addWidget(self.browse_btn)
 
-        self.deactivate_btn = QPushButton("🗑️ " + self.tr("取消激活"))
+        self.deactivate_btn = QPushButton("🗑️ " + self.tr("取消激活"), self)
         setFont(self.deactivate_btn, 12)
         self.deactivate_btn.setStyleSheet("""
             QPushButton {

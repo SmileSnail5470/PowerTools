@@ -197,8 +197,7 @@ class CoordFillInpaint():
             input_mask = input_mask[np.newaxis, ...]
             input_image = input_image[np.newaxis, ...]
             if self._tile_has_watermark(input_mask):
-                out_tile = self.session.run(
-                    [self.output_name],
+                out_tile = self.session.run_with_iobinding_numpy(
                     {
                         self.image_input_name: input_image,
                         self.mask_input_name: input_mask

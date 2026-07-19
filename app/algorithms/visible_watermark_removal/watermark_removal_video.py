@@ -1,3 +1,4 @@
+import logging
 import cv2
 import numpy as np
 import app.utils.ffmpeg as ffmpeg
@@ -8,6 +9,8 @@ from PIL import Image
 from pathlib import Path
 from app.algorithms.visible_watermark_removal.watermark_removal_image import ImageWatermarkRemove, WatermarkSegment
 from app.algorithms.visible_watermark_removal.video_modules.ppt.inference import PPTInferenceORT
+# from app.algorithms.tracker.mask_tracker_nano import MaskTrackerNano
+from app.algorithms.tracker.mask_tracker_edgetam import MaskTrackerEdgeTAM
 
 
 class VideoWatermarkRemover:
@@ -23,7 +26,7 @@ class VideoWatermarkRemover:
         overlay[mask] = (overlay[mask] * 0.55 + np.array([b, g, r_]) * 0.45).astype(np.uint8)
         cv2.imwrite(file_path, overlay)
 
-    def _expand_bbox_keep_center(self, xmin: int, ymin: int, xmax: int, ymax: int, img_w: int, img_h: int, pad: int = 120):
+    def _expand_bbox_keep_center(self, xmin: int, ymin: int, xmax: int, ymax: int, img_w: int, img_h: int, pad: int = 100):
         xmin_new = xmin - pad
         xmax_new = xmax + pad
         if xmin_new < 0:
@@ -117,6 +120,15 @@ class VideoWatermarkRemover:
             canvas[ymin:ymax, xmin:xmax] = cropped_img
             cv2.imwrite(os.path.join(out_path_dir, os.path.basename(c_path)), canvas)
 
+    def _postprocess_mask(self, mask):
+        h, w = mask.shape
+        mask_image = np.zeros((h, w), dtype=np.uint8)
+        for bbox in self.watermark_boxes:
+            xmin, ymin, xmax, ymax = bbox
+            mask_image[ymin:ymax, xmin:xmax] = mask[ymin:ymax, xmin:xmax]
+        new_mask = mask_image
+        return new_mask
+
     def _prepare_masks(
             self, 
             tmp_mask_dir: str|Path, 
@@ -135,8 +147,10 @@ class VideoWatermarkRemover:
             text_detection_onnx_path,
             yolo_detection_onnx_path,
             segment_onnx_dir,
+            tacker_onnx_dir,
             **kwargs
         ):
+        need_postprocess_mask = self.watermark_boxes and not (ai_detect_type == "ai_interactive_detect" and ai_interactive_type == "space_detect")
         if use_cache_mask and not mask_path:
             # 静态水印，AI检测
             mask = WatermarkSegment(watermark_type, ai_detect_type, ai_interactive_type, ai_interactive_prompt, ai_interactive_boxes, watermark_confidence).segment(
@@ -148,6 +162,8 @@ class VideoWatermarkRemover:
                 segment_onnx_dir=segment_onnx_dir,
                 **kwargs
             )
+            if need_postprocess_mask:
+                mask = self._postprocess_mask(mask)
             tmp_mask_path = os.path.join(str(tmp_mask_dir), "mask.png")
             Image.fromarray(mask).convert("L").save(tmp_mask_path)
             for frame_file in frame_files:
@@ -167,19 +183,231 @@ class VideoWatermarkRemover:
             tmp_mask_dir = mask_path
         else:
             # 动态水印，ai 检测
-            for i, frame_file in enumerate(frame_files):
-                mask = WatermarkSegment(watermark_type, ai_detect_type, ai_interactive_type, ai_interactive_prompt, ai_interactive_boxes, watermark_confidence).segment(
-                    image_path=str(frame_file),
-                    sr_onnx_path=sr_segment_onnx_path,
-                    pt_onnx_path=pt_segment_onnx_path,
-                    text_detection_onnx_path=text_detection_onnx_path,
-                    yolo_detection_onnx_path=yolo_detection_onnx_path,
-                    segment_onnx_dir=segment_onnx_dir,
-                    **kwargs
+            if self.video_tracking_data is None:
+                for i, frame_file in enumerate(frame_files):
+                    mask = WatermarkSegment(watermark_type, ai_detect_type, ai_interactive_type, ai_interactive_prompt, ai_interactive_boxes, watermark_confidence).segment(
+                        image_path=str(frame_file),
+                        sr_onnx_path=sr_segment_onnx_path,
+                        pt_onnx_path=pt_segment_onnx_path,
+                        text_detection_onnx_path=text_detection_onnx_path,
+                        yolo_detection_onnx_path=yolo_detection_onnx_path,
+                        segment_onnx_dir=segment_onnx_dir,
+                        **kwargs
+                    )
+                    if need_postprocess_mask:
+                        mask = self._postprocess_mask(mask)
+                    tmp_mask_path = os.path.join(str(tmp_mask_dir), frame_file.name)
+                    Image.fromarray(mask).convert("L").save(tmp_mask_path)
+                    frame_mask_map[str(frame_file)] = tmp_mask_path
+            else:
+                keyframes = self.video_tracking_data.get("keyframes")
+                end_frame = self.video_tracking_data.get("end_frame")
+                tracking_enabled = self.video_tracking_data.get("tracking_enabled")
+                tracking_logger = logging.getLogger("subprocess")
+                reverse_tracking_frames = max(0, int(self.video_tracking_data.get("reverse_tracking_frames", 8) or 0))
+                tracking_logger.info(
+                    "Start track mask with keyframes %s and end frame %s, "
+                    "tracking_enabled %s and reverse_tracking_frames %d",
+                    keyframes,
+                    end_frame,
+                    tracking_enabled,
+                    reverse_tracking_frames,
                 )
-                tmp_mask_path = os.path.join(str(tmp_mask_dir), frame_file.name)
-                Image.fromarray(mask).convert("L").save(tmp_mask_path)
-                frame_mask_map[str(frame_file)] = tmp_mask_path
+                total_frames = len(frame_files)
+                effective_end = end_frame if end_frame else total_frames
+                if not tracking_enabled:
+                    first_kf_idx = keyframes[0] - 1 if keyframes else 0
+                    start_idx = max(0, first_kf_idx)
+                    end_idx = min(effective_end, total_frames)
+                    for i in range(start_idx, end_idx):
+                        frame_file = frame_files[i]
+                        mask = WatermarkSegment(watermark_type, ai_detect_type, ai_interactive_type, ai_interactive_prompt, ai_interactive_boxes, watermark_confidence).segment(
+                            image_path=str(frame_file),
+                            sr_onnx_path=sr_segment_onnx_path,
+                            pt_onnx_path=pt_segment_onnx_path,
+                            text_detection_onnx_path=text_detection_onnx_path,
+                            yolo_detection_onnx_path=yolo_detection_onnx_path,
+                            segment_onnx_dir=segment_onnx_dir,
+                            **kwargs
+                        )
+                        if need_postprocess_mask:
+                            mask = self._postprocess_mask(mask)
+                        tmp_mask_path = os.path.join(str(tmp_mask_dir), frame_file.name)
+                        Image.fromarray(mask).convert("L").save(tmp_mask_path)
+                        frame_mask_map[str(frame_file)] = tmp_mask_path
+                else:
+                    def _segment_tracking_frame(frame_file):
+                        detected_mask = WatermarkSegment(
+                            watermark_type,
+                            ai_detect_type,
+                            ai_interactive_type,
+                            ai_interactive_prompt,
+                            ai_interactive_boxes,
+                            watermark_confidence,
+                        ).segment(
+                            image_path=str(frame_file),
+                            sr_onnx_path=sr_segment_onnx_path,
+                            pt_onnx_path=pt_segment_onnx_path,
+                            text_detection_onnx_path=text_detection_onnx_path,
+                            yolo_detection_onnx_path=yolo_detection_onnx_path,
+                            segment_onnx_dir=segment_onnx_dir,
+                            **kwargs
+                        )
+                        if need_postprocess_mask:
+                            detected_mask = self._postprocess_mask(detected_mask)
+                        detected_mask = np.asarray(detected_mask, dtype=np.uint8)
+                        detected_mask_path = os.path.join(str(tmp_mask_dir), frame_file.name)
+                        Image.fromarray(detected_mask).convert("L").save(detected_mask_path)
+                        frame_mask_map[str(frame_file)] = detected_mask_path
+                        return detected_mask, detected_mask_path
+
+                    def _merge_reverse_transition_masks(tracker_instance, all_seg_files, fail_frame_idx, reference_mask_path):
+                        if reverse_tracking_frames <= 0 or fail_frame_idx <= 0:
+                            return
+                        reverse_start_idx = max(0, fail_frame_idx - reverse_tracking_frames)
+                        reverse_frame_files = all_seg_files[reverse_start_idx:fail_frame_idx + 1]
+                        if len(reverse_frame_files) <= 1:
+                            return
+                        reverse_frames_dir = tempfile.mkdtemp(prefix="track_reverse_frames_")
+                        reverse_masks_dir = tempfile.mkdtemp(prefix="track_reverse_masks_")
+                        try:
+                            for frame_file in reverse_frame_files:
+                                shutil.copy2(str(frame_file), os.path.join(reverse_frames_dir, frame_file.name))
+                            tracking_logger.info(
+                                "Reverse tracker from frame %s over %d previous frames to repair transition",
+                                reverse_frame_files[-1].name,
+                                len(reverse_frame_files) - 1,
+                            )
+                            reverse_fail_idx = tracker_instance.inference(
+                                reference_mask_path,
+                                reverse_frames_dir,
+                                reverse=True,
+                                output_dir=reverse_masks_dir,
+                            )
+                            reverse_traversal = list(reversed(reverse_frame_files))
+                            if reverse_fail_idx == -1:
+                                reliable_reverse_frames = reverse_traversal
+                            else:
+                                reliable_reverse_frames = reverse_traversal[:reverse_fail_idx]
+                            merged_count = 0
+                            for frame_file in reliable_reverse_frames:
+                                reverse_mask_path = os.path.join(reverse_masks_dir, frame_file.name)
+                                if not os.path.exists(reverse_mask_path):
+                                    continue
+                                reverse_mask = np.asarray(Image.open(reverse_mask_path).convert("L"), dtype=np.uint8)
+                                output_mask_path = os.path.join(str(tmp_mask_dir), frame_file.name)
+                                if os.path.exists(output_mask_path):
+                                    forward_mask = np.asarray(Image.open(output_mask_path).convert("L"), dtype=np.uint8)
+                                    merged_mask = np.maximum(forward_mask, reverse_mask)
+                                else:
+                                    merged_mask = reverse_mask
+                                Image.fromarray(merged_mask).convert("L").save(output_mask_path)
+                                frame_mask_map[str(frame_file)] = output_mask_path
+                                merged_count += 1
+
+                            tracking_logger.info(
+                                "Reverse tracker repair completed at frame %s: merged %d frames%s",
+                                reverse_frame_files[-1].name,
+                                merged_count,
+                                " before reverse tracking became unreliable"
+                                if reverse_fail_idx != -1 else "",
+                            )
+                        except Exception:
+                            tracking_logger.exception(
+                                "Reverse tracker repair failed at frame %s; continuing with forward restart",
+                                reverse_frame_files[-1].name,
+                            )
+                        finally:
+                            shutil.rmtree(reverse_frames_dir, ignore_errors=True)
+                            shutil.rmtree(reverse_masks_dir, ignore_errors=True)
+
+                    for seg_idx, kf in enumerate(keyframes):
+                        if seg_idx + 1 < len(keyframes):
+                            seg_end = keyframes[seg_idx + 1]
+                        else:
+                            seg_end = effective_end + 1
+                        kf_idx = kf - 1
+                        if kf_idx < 0 or kf_idx >= total_frames:
+                            continue
+                        keyframe_file = frame_files[kf_idx]
+                        keyframe_mask, keyframe_mask_path = _segment_tracking_frame(keyframe_file)
+                        seg_frame_start = kf_idx + 1
+                        seg_frame_end = min(seg_end - 1, total_frames)
+                        if seg_frame_start >= seg_frame_end:
+                            continue
+                        current_track_start = seg_frame_start
+                        if np.count_nonzero(keyframe_mask) == 0:
+                            tracking_state = "ABSENT"
+                            current_ref_mask_path = None
+                            current_ref_frame = None
+                            tracking_logger.info("No mask at keyframe %s; entering ABSENT state", keyframe_file.name)
+                        else:
+                            tracking_state = "TRACKING"
+                            current_ref_mask_path = keyframe_mask_path
+                            current_ref_frame = keyframe_file
+                        while current_track_start < seg_frame_end:
+                            if tracking_state == "ABSENT":
+                                probe_frame = frame_files[current_track_start]
+                                probe_mask, probe_mask_path = _segment_tracking_frame(probe_frame)
+                                current_track_start += 1
+                                if np.count_nonzero(probe_mask) == 0:
+                                    tracking_logger.info("Mask remains absent at frame %s", probe_frame.name)
+                                    continue
+                                tracking_state = "REACQUIRE"
+                                current_ref_mask_path = probe_mask_path
+                                current_ref_frame = probe_frame
+                                tracking_logger.info("Mask reacquired at frame %s; restarting tracker", probe_frame.name)
+                                tracking_state = "TRACKING"
+                                continue
+                            remaining_frames = frame_files[current_track_start:seg_frame_end]
+                            if not remaining_frames:
+                                break
+                            seg_frames_dir = tempfile.mkdtemp(prefix="track_seg_")
+                            try:
+                                all_seg_files = [current_ref_frame] + remaining_frames
+                                for frame_file in all_seg_files:
+                                    dst = os.path.join(seg_frames_dir, frame_file.name)
+                                    shutil.copy2(str(frame_file), dst)                                
+                                tracker_instance = MaskTrackerEdgeTAM(model_dir=tacker_onnx_dir)
+                                fail_frame_idx = tracker_instance.inference(current_ref_mask_path, seg_frames_dir)
+                                if fail_frame_idx == -1:
+                                    for frame_file in remaining_frames:
+                                        tracked_mask_path = os.path.join(str(tmp_mask_dir), frame_file.name)
+                                        if os.path.exists(tracked_mask_path):
+                                            frame_mask_map[str(frame_file)] = tracked_mask_path
+                                    break
+                                successfully_tracked_count = max(0, fail_frame_idx - 1)
+                                for i in range(min(successfully_tracked_count, len(remaining_frames))):
+                                    frame_file = remaining_frames[i]
+                                    tracked_mask_path = os.path.join(str(tmp_mask_dir), frame_file.name)
+                                    if os.path.exists(tracked_mask_path):
+                                        frame_mask_map[str(frame_file)] = tracked_mask_path
+                                failed_frame_offset = successfully_tracked_count
+                                if failed_frame_offset >= len(remaining_frames):
+                                    break
+                                failed_frame_file = remaining_frames[failed_frame_offset]
+                                tracking_logger.warning("Tracking failed at frame %s; verifying with segmentation", failed_frame_file.name)
+                                verified_mask, verified_mask_path = _segment_tracking_frame(failed_frame_file)
+                                current_track_start += failed_frame_offset + 1
+                                if np.count_nonzero(verified_mask) == 0:
+                                    tracking_state = "ABSENT"
+                                    current_ref_mask_path = None
+                                    current_ref_frame = None
+                                    tracking_logger.info("No mask found at frame %s; entering ABSENT state", failed_frame_file.name)
+                                    continue
+                                tracking_state = "REACQUIRE"
+                                _merge_reverse_transition_masks(
+                                    tracker_instance=tracker_instance,
+                                    all_seg_files=all_seg_files,
+                                    fail_frame_idx=fail_frame_idx,
+                                    reference_mask_path=verified_mask_path,
+                                )
+                                current_ref_mask_path = verified_mask_path
+                                current_ref_frame = failed_frame_file
+                                tracking_logger.info("Mask verified at frame %s; restarting tracker", failed_frame_file.name)
+                                tracking_state = "TRACKING"
+                            finally:
+                                shutil.rmtree(seg_frames_dir, ignore_errors=True)
 
     def _merge_processed_frames(self, processed_frames_dir, has_audio, fps, input_video_path, output_video_path):
         video_input = ffmpeg.input(
@@ -206,17 +434,16 @@ class VideoWatermarkRemover:
                 audio_input,
                 output_video_path,
                 **output_kwargs
-            )
+            ).global_args("-hide_banner", "-loglevel", "error")
         else:
             stream = ffmpeg.output(
                 video_input,
                 output_video_path,
                 **output_kwargs
-            )
-        ffmpeg.run(stream, overwrite_output=True, quiet=True)
+            ).global_args("-hide_banner", "-loglevel", "error")
+        ffmpeg.run(stream, overwrite_output=True, quiet=False)
 
     def _image_model_inpainting(self, args: dict):
-        frame_files = args.get("frame_files")
         processed_frames_dir = args.get("processed_frames_dir")
         frame_mask_map = args.get("frame_mask_map")
         sr_segment_onnx_path = args.get("sr_segment_onnx_path")
@@ -239,10 +466,10 @@ class VideoWatermarkRemover:
         dilate_num = args.get("dilate_num")
         callback_func = args.get("callback_func", None)
         kwargs = args.get("kwargs", {})
-        total_frames = len(frame_files)
+        total_frames = len(frame_mask_map.keys())
 
-        for _, frame_file in enumerate(frame_files):
-            output_frame_path = processed_frames_dir / frame_file.name
+        for frame_file, tmp_mask_path in frame_mask_map.items():
+            output_frame_path = os.path.join(str(processed_frames_dir), os.path.basename(str(frame_file)))
             ImageWatermarkRemove().run(
                 frame_file,
                 output_frame_path,
@@ -256,7 +483,7 @@ class VideoWatermarkRemover:
                 text_detection_onnx_path=text_detection_onnx_path,
                 yolo_detection_onnx_path=yolo_detection_onnx_path,
                 segment_onnx_dir=segment_onnx_dir,
-                mask_path=frame_mask_map[str(frame_file)],
+                mask_path=str(tmp_mask_path),
                 refine_type=refine_type,
                 watermark_type=watermark_type,
                 ai_detect_type=ai_detect_type,
@@ -302,23 +529,36 @@ class VideoWatermarkRemover:
                     }
                 }
             }
-            input_frames_dir = os.path.dirname(str(frame_files[0]))
-            masks_dir = os.path.dirname(frame_mask_map[str(frame_files[0])])
+            if len(frame_mask_map.keys()) < len(frame_files):
+                input_frames_dir = os.path.dirname(str(frame_files[0]))
+                masks_dir = os.path.dirname(str(list(frame_mask_map.values())[0]))
+                input_frames_dir = os.path.join(os.path.dirname(input_frames_dir), "real_{0}_tmp".format(os.path.basename(input_frames_dir)))
+                masks_dir = os.path.join(os.path.dirname(masks_dir), "real_{0}_tmp".format(os.path.basename(masks_dir)))
+                os.makedirs(input_frames_dir, exist_ok=True)
+                os.makedirs(masks_dir, exist_ok=True)
+                for frame_file, mask_file in frame_mask_map.items():
+                    shutil.copy2(str(frame_file), os.path.join(input_frames_dir, os.path.basename(str(frame_file))))
+                    shutil.copy2(str(mask_file), os.path.join(masks_dir, os.path.basename(str(mask_file))))
+            else:
+                input_frames_dir = os.path.dirname(str(frame_files[0]))
+                masks_dir = os.path.dirname(frame_mask_map[str(frame_files[0])])
             output_dir = str(processed_frames_dir)
             cropped_out_dir = os.path.join(os.path.dirname(output_dir), "{0}_cropped".format(os.path.basename(output_dir)))
             bbox = self._get_roi(masks_dir)
             new_input_frames_dir, new_masks_dir = self._crop_frames_and_masks(input_frames_dir, masks_dir, bbox)
             xmin, ymin, xmax, ymax = bbox
             process_w, process_h = xmax - xmin, ymax - ymin
+            init_subvideo_length = int(os.environ.get("POWERTOOLS_SUBVIDEO_LENGTH", 100))
             if max(process_h, process_w) < 540:
                 resize_ratio = 1.0
-                subvideo_length = 80
+                subvideo_length = min(80, init_subvideo_length)
             elif max(process_h, process_w) < 720:
                 resize_ratio = 540.0 / max(process_h, process_w)
-                subvideo_length = 70
+                subvideo_length = min(70, init_subvideo_length)
             else:
                 resize_ratio = 720.0 / max(process_h, process_w)
-                subvideo_length = 60
+                subvideo_length = min(60, init_subvideo_length)
+            logging.getLogger("subprocess").info(f"Process video resize ratio {resize_ratio} and subvideo length {subvideo_length} and process size {(process_w, process_h)}")
             pipeline = PPTInferenceORT(
                 onnx_paths=ONNX_PATHS,
                 resize_ratio=resize_ratio,
@@ -335,7 +575,14 @@ class VideoWatermarkRemover:
             self._past_frames_back(input_frames_dir, cropped_out_dir, output_dir, bbox)
         else:
             raise ValueError(f"Unsupported video inpainting model: {refine_type}")
-    
+
+    def _merge_video_prepare(self, all_frame_files: list, output_dir):
+        processed_frames_name = os.listdir(output_dir)
+        for one_frame_file in all_frame_files:
+            if one_frame_file.name in processed_frames_name:
+                continue
+            shutil.copy2(str(one_frame_file), os.path.join(output_dir, one_frame_file.name))
+
     def process_video(
             self, 
             input_video_path, 
@@ -351,15 +598,18 @@ class VideoWatermarkRemover:
             yolo_detection_onnx_path,
             segment_onnx_dir,
             ppt_onnx_basedir,
+            tacker_onnx_dir,
             mask_path: str = "",
-            refine_type: str = "coordfill",  # patchwiper/lama/transparent/cv2/coordfill
+            refine_type: str = "coordfill",
             use_cache_mask: bool = False,
-            watermark_type: str = "all",      # text / all
+            watermark_type: str = "all",
             ai_detect_type: str = "ai_interactive_detect",      # ai_interactive_detect/ai_auto_detect
             ai_interactive_type: str = "semantic_detect",       # semantic_detect/space_detect
             ai_interactive_prompt: str = "watermark",
             ai_interactive_boxes: list = [],
             watermark_confidence: float = 0.5,
+            watermark_boxes: list = [],
+            watermark_tracking_data: dict = {},
             dilate_num: int = 2,
             ffmpeg_path: str = "",
             callback_func = None,
@@ -379,30 +629,30 @@ class VideoWatermarkRemover:
         fps = float(video_stream["avg_frame_rate"].split("/")[0]) / float(video_stream["avg_frame_rate"].split("/")[1])
         
         has_audio = any(stream['codec_type'] == 'audio' for stream in probe['streams'])
+
+        if watermark_tracking_data and watermark_tracking_data.get("keyframes") and watermark_tracking_data.get("end_frame") is not None:
+            self.video_tracking_data = watermark_tracking_data
+        else:
+            self.video_tracking_data = None
+        self.watermark_boxes = watermark_boxes
         
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             frames_dir = temp_path / 'frames'
             frames_dir.mkdir()
-            
-            # 提取所有帧
             (
                 ffmpeg
                 .input(input_video_path)
                 .output(str(frames_dir / '%06d.png'), start_number=0, fps_mode="passthrough")
                 .overwrite_output()
+                .global_args("-hide_banner", "-loglevel", "error")
                 .run(capture_stdout=True, capture_stderr=True)
             )
-            
-            # 获取所有帧文件
             frame_files = sorted([f for f in frames_dir.iterdir() if f.suffix == '.png'])
-            
-            # 处理每一帧
             processed_frames_dir = temp_path / 'processed_frames'
             processed_frames_dir.mkdir()
             tmp_mask_dir = temp_path / 'masks'
             tmp_mask_dir.mkdir()
-
             if progress_cb is not None:
                 progress_cb("MaskStart", "")
             frame_mask_map = {}
@@ -423,6 +673,7 @@ class VideoWatermarkRemover:
                 text_detection_onnx_path=text_detection_onnx_path,
                 yolo_detection_onnx_path=yolo_detection_onnx_path,
                 segment_onnx_dir=segment_onnx_dir,
+                tacker_onnx_dir=tacker_onnx_dir,
                 **kwargs
             )
             if progress_cb is not None:
@@ -435,6 +686,7 @@ class VideoWatermarkRemover:
                         file_path=os.path.join(tmp_visualzation_path, os.path.basename(str(frame_file)))
                     )
                 output_video_tmp_path = "{0}_mask_visualization.mp4".format(output_video_path.rsplit(".", 1)[0])
+                self._merge_video_prepare(frame_files, tmp_visualzation_path)
                 self._merge_processed_frames(
                     processed_frames_dir=Path(tmp_visualzation_path),
                     has_audio=has_audio, 
@@ -446,7 +698,6 @@ class VideoWatermarkRemover:
             
             if refine_type not in self.video_models_name:
                 args = {
-                    "frame_files": frame_files,
                     "processed_frames_dir": processed_frames_dir,
                     "frame_mask_map": frame_mask_map,
                     "sr_segment_onnx_path": sr_segment_onnx_path,
@@ -483,7 +734,7 @@ class VideoWatermarkRemover:
                 self._video_model_inpainting(args)
             if progress_cb is not None:
                 progress_cb("WaterRemoved", "")
-
+            self._merge_video_prepare(frame_files, processed_frames_dir)
             self._merge_processed_frames(
                 processed_frames_dir=processed_frames_dir,
                 has_audio=has_audio, 

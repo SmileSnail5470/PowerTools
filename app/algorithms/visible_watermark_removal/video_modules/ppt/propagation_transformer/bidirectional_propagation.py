@@ -64,15 +64,15 @@ class BidirectionalPropagationORT:
             }
             return self.forward_step.run_with_iobinding(feed, run_options=self.run_options)[0]
         return self.forward_step.run(
-            None, 
+            None,
             {
-                "feat_current": feat_current, 
+                "feat_current": feat_current,
                 "feat_prop_prev": feat_prop_prev,
-                "flow_prop": flow_prop, 
-                "flow_check": flow_check, 
-                "mask_current": mask_current
-            }, 
-            run_options=self.run_options
+                "flow_prop": flow_prop,
+                "flow_check": flow_check,
+                "mask_current": mask_current,
+            },
+            run_options=self.run_options,
         )[0]
 
     def _run_backward_first(self, feat_current, mask_current):
@@ -100,14 +100,14 @@ class BidirectionalPropagationORT:
                 return _ortvalue_to_cupy(ort_out)
             return ortvalue_to_numpy(ort_out)
         return self.fusion_sess.run(
-            None, 
+            None,
             {
-                "outputs_b": outputs_b, 
+                "outputs_b": outputs_b,
                 "outputs_f": outputs_f,
-                "mask_in": mask_in, 
+                "mask_in": mask_in,
                 "x_raw": x_raw,
-            }, 
-            run_options=self.run_options
+            },
+            run_options=self.run_options,
         )[0]
 
     def forward(self, feats, flows_forward, flows_backward, mask):
@@ -235,7 +235,8 @@ class ImgPropStepORT:
             return _cupy_to_ortvalue(v)
         return v
 
-    def __call__(self, feat_current, feat_prop_prev, mask_current, mask_prop_prev, flow_prop, flow_check):
+    def __call__(self, feat_current, feat_prop_prev, mask_current, mask_prop_prev, flow_prop, flow_check, run_options=None):
+        run_options = self.run_options if run_options is None else run_options
         if self._use_iobinding:
             feed = {
                 self.input_names[0]: self._to_ort(feat_current),
@@ -245,7 +246,7 @@ class ImgPropStepORT:
                 self.input_names[4]: self._to_ort(flow_prop),
                 self.input_names[5]: self._to_ort(flow_check),
             }
-            ort_outputs = self.session.run_with_iobinding(feed, run_options=self.run_options)
+            ort_outputs = self.session.run_with_iobinding(feed, run_options=run_options)
             return ort_outputs[0], ort_outputs[1]
         outputs = self.session.run(None, {
             self.input_names[0]: feat_current if not isinstance(feat_current, ort.OrtValue) else feat_current.numpy(),
@@ -254,7 +255,7 @@ class ImgPropStepORT:
             self.input_names[3]: mask_prop_prev if not isinstance(mask_prop_prev, ort.OrtValue) else mask_prop_prev.numpy(),
             self.input_names[4]: flow_prop,
             self.input_names[5]: flow_check,
-        }, run_options=self.run_options)
+        }, run_options=run_options)
         return outputs[0], outputs[1]
 
     def __del__(self):

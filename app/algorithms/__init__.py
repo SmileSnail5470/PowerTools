@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import pathlib
 import sys
@@ -44,6 +45,10 @@ _NP_TO_ORT_DTYPE = {
     np.dtype(np.uint8): "tensor(uint8)",
     np.dtype(np.bool_): "tensor(bool)",
 }
+
+
+_SESSION_CACHE = {}
+_SESSION_CACHE_LOCK = threading.Lock()
 
 
 def _is_cuda_session(session):
@@ -104,6 +109,9 @@ class IOBindingSession:
         if expected is not None and isinstance(value, np.ndarray) and value.dtype != expected:
             return value.astype(expected)
         return value
+
+    def clear_persistent_inputs(self):
+        self._persist_inputs.clear()
 
     def run(self, output_names, input_feed, **kwargs):
         casted_feed = {}
@@ -280,24 +288,71 @@ class ORTEnvironment:
             cls._initialized = True
 
 
+def _session_cache_key(model_path, feature_name, providers, provider_options):
+    try:
+        opts_key = json.dumps(provider_options, sort_keys=True, default=str)
+    except Exception:
+        opts_key = repr(provider_options)
+    prov_key = tuple(providers) if providers else ()
+    return (os.path.abspath(model_path), feature_name, prov_key, opts_key)
+
+
 def general_inference_session(model_path: str, sess_options, providers, provider_options):
     model_name = os.environ["_feature_name_"]
-    lic_path = os.path.join(os.path.join(pathlib.Path.home(), ".PowerTools", "license"), "license.lic")
-    with open(lic_path, "r", encoding="utf-8") as f:
-        raw_data = json.load(f)
-    license_json = json.dumps(raw_data)
-    old_cwd = os.getcwd()
-    os.chdir(os.path.dirname(model_path))
-    sess = model_loader.load_model_auto(
-        model_path,
-        model_name, 
-        license_json, 
-        session_options=sess_options, 
-        providers=providers, 
-        provider_options=provider_options
-    )
-    os.chdir(old_cwd)
-    return IOBindingSession(sess)
+    cache_key = _session_cache_key(model_path, model_name, providers, provider_options)
+
+    cached = _SESSION_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    with _SESSION_CACHE_LOCK:
+        cached = _SESSION_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+        lic_path = os.path.join(os.path.join(pathlib.Path.home(), ".PowerTools", "license"), "license.lic")
+        with open(lic_path, "r", encoding="utf-8") as f:
+            raw_data = json.load(f)
+        license_json = json.dumps(raw_data)
+        old_cwd = os.getcwd()
+        os.chdir(os.path.dirname(model_path))
+        try:
+            sess = model_loader.load_model_auto(
+                model_path,
+                model_name,
+                license_json,
+                session_options=sess_options,
+                providers=providers,
+                provider_options=provider_options
+            )
+        finally:
+            os.chdir(old_cwd)
+        wrapped = IOBindingSession(sess)
+        _SESSION_CACHE[cache_key] = wrapped
+        return wrapped
+
+
+def evict_session_cache(model_paths):
+    normalized_paths = {os.path.abspath(os.fspath(path)) for path in model_paths}
+    removed = []
+    with _SESSION_CACHE_LOCK:
+        keys = [key for key in _SESSION_CACHE if key[0] in normalized_paths]
+        for key in keys:
+            wrapped = _SESSION_CACHE.pop(key)
+            wrapped.clear_persistent_inputs()
+            removed.append(wrapped)
+    count = len(removed)
+    removed.clear()
+    return count
+
+
+def clear_session_cache():
+    removed = []
+    with _SESSION_CACHE_LOCK:
+        for wrapped in _SESSION_CACHE.values():
+            wrapped.clear_persistent_inputs()
+            removed.append(wrapped)
+        _SESSION_CACHE.clear()
+    removed.clear()
 
 
 
@@ -331,7 +386,7 @@ def general_session():
     sess = ort.SessionOptions()
     sess.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
     sess.add_session_config_entry("session.use_env_allocators", "1")
-    sess.execution_mode = ort.ExecutionMode.ORT_PARALLEL
-    sess.inter_op_num_threads = 0
+    sess.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+    sess.inter_op_num_threads = 1
     sess.intra_op_num_threads = 0
     return sess

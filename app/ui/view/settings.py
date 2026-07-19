@@ -58,6 +58,10 @@ models_deps_urls = {
     "video_inpainting": {
         "cpu": {"path": "CPU/video_inpainting", "sha256": None},
         "gpu": {"path": "GPU/video_inpainting", "sha256": None},
+    },
+    "tracker": {
+        "cpu": {"path": "CPU/tracker", "sha256": None},
+        "gpu": {"path": "GPU/tracker", "sha256": None},
     }
 }
 
@@ -65,16 +69,18 @@ model_estimated_sizes = {
     "gpu": {
         "blind_watermark_addition": "1.08 GB",
         "visible_watermark_removal": "2.48 GB",
-        "segment": "2.63 GB",
+        "segment": "1.69 GB",
         "ocr": "217 MB",
         "video_inpainting": "183 MB",
+        "tracker": "124 MB"
     },
     "cpu": {
         "blind_watermark_addition": "1.08 GB",
         "visible_watermark_removal": "2.58 GB",
-        "segment": "1.42 GB",
+        "segment": "899 MB",
         "ocr": "217 MB",
         "video_inpainting": "261 MB",
+        "tracker": "124 MB"
     }
 }
 
@@ -166,13 +172,13 @@ class InitWorker(QRunnable):
             )
         except Exception:
             cache_dir = os.path.join(variant_deps_path, ".cache")
-            if os.path.exists():
+            if os.path.exists(cache_dir):
                 shutil.rmtree(cache_dir)
             CPU_dir = os.path.join(variant_deps_path, "CPU")
-            if os.path.exists():
+            if os.path.exists(CPU_dir):
                 shutil.rmtree(CPU_dir)
             GPU_dir = os.path.join(variant_deps_path, "GPU")
-            if os.path.exists():
+            if os.path.exists(GPU_dir):
                 shutil.rmtree(GPU_dir)
             raise Exception(f"Download {dir_path} failed")
 
@@ -1183,6 +1189,33 @@ class Settings(QWidget):
         video_inpainting_card.setSeparatorVisible(True)
         ai_settings_cards.append(video_inpainting_card)
 
+        object_tracking_switch = ToggleSwitch()
+        self.ai_toggle_switchs.append(object_tracking_switch)
+        object_tracking_switch.setActive(cfg.get(cfg.localObjectTrackingEnabled))
+        object_tracking_switch.toggled.connect(lambda flag: cfg.set(cfg.localObjectTrackingEnabled, flag))
+        object_tracking_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="object_tracking")
+        try:
+            text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{object_tracking_status.name}_status_info"]["text"]
+            color = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{object_tracking_status.name}_status_info"]["color"]
+            object_tracking_status.setLabel(text=text, color=color)
+        except Exception:
+            pass
+        object_tracking_panel = ModelVariantPanel(config_key="tracker", parent=self)
+        self._bind_ai_toggle(
+            switch=object_tracking_switch,
+            badge=object_tracking_status,
+            local_ai_type="tracker",
+            panel=object_tracking_panel
+        )
+        object_tracking_chevron = self._create_chevron_btn(object_tracking_panel)
+        object_tracking_card = CustomCardGroupWidget(title=self.tr("对象跟踪AI能力"), content=self.tr("智能跟踪视频中的目标对象"), parent=self)
+        object_tracking_card.addWidget(object_tracking_status, stretch=0)
+        object_tracking_card.addWidget(object_tracking_switch, stretch=0)
+        object_tracking_card.addWidget(object_tracking_chevron, stretch=0)
+        object_tracking_card.vBoxLayout.addWidget(object_tracking_panel)
+        object_tracking_card.setSeparatorVisible(True)
+        ai_settings_cards.append(object_tracking_card)
+
         for card in ai_settings_cards:
             ai_settings.addCard(card=card)
 
@@ -1344,6 +1377,7 @@ class Settings(QWidget):
             "segment": ("物体分割AI能力", cfg.get(cfg.localObjectSegmentationEnabled)),
             "ocr": ("OCR 能力", cfg.get(cfg.localOCREnabled)),
             "video_inpainting": ("视频修复AI能力", cfg.get(cfg.localVideoInpaintingEnabled)),
+            "tracker": ("对象跟踪AI能力", cfg.get(cfg.localObjectTrackingEnabled)),
         }
         deps_path = cfg.get(cfg.localAIModelDeps)
         missing = []
