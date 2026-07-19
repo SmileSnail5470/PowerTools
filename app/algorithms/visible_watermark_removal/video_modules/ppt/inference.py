@@ -47,7 +47,7 @@ class PPTInferenceORT:
         self.raft_model = None
         self.fix_flow_complete = None
         self.ppt_pipeline = None
-        self._use_cupy = False
+        self._use_cupy = _HAS_CUPY
 
     @staticmethod
     def _flatten_model_paths(value):
@@ -234,9 +234,9 @@ class PPTInferenceORT:
         video_length = frames_np.shape[1]
         self._prepare_raft()
         if debug:
-            ppt_logger.info(f"\nProcessing pipeline: [{video_length} frames] and frame shape: {frames_np.shape} and low memory: {self.low_memory} and use cupy {self._use_cupy}")
+            ppt_logger.info(f"Processing pipeline: [{video_length} frames] and frame shape: {frames_np.shape} and low memory: {self.low_memory} and use cupy {self._use_cupy}")
             start_time = time.time()
-        raft_scale = (0.5 if min(frames_np.shape[-2], frames_np.shape[-1]) >= 480 else 1.0)
+        raft_scale = (0.5 if min(frames_np.shape[-2], frames_np.shape[-1]) >= 240 else 1.0)
         short_clip_len = 12 if max(frames_np.shape[-2:]) <= 1280 else 6
         if video_length > short_clip_len:
             flow_shape = (
@@ -380,6 +380,7 @@ class PPTInferenceORT:
             start_time = time.time()
 
         if self._use_cupy:
+            ppt_logger.info("Propagation Transformer with cupy")
             self._transformer_loop_cupy(
                 video_length,
                 updated_frames,
@@ -391,6 +392,7 @@ class PPTInferenceORT:
                 output_dir,
             )
         else:
+            ppt_logger.info("Propagation Transformer without cupy")
             self._transformer_loop_cpu(
                 video_length,
                 updated_frames,

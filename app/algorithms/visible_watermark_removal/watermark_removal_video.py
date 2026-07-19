@@ -26,7 +26,7 @@ class VideoWatermarkRemover:
         overlay[mask] = (overlay[mask] * 0.55 + np.array([b, g, r_]) * 0.45).astype(np.uint8)
         cv2.imwrite(file_path, overlay)
 
-    def _expand_bbox_keep_center(self, xmin: int, ymin: int, xmax: int, ymax: int, img_w: int, img_h: int, pad: int = 120):
+    def _expand_bbox_keep_center(self, xmin: int, ymin: int, xmax: int, ymax: int, img_w: int, img_h: int, pad: int = 100):
         xmin_new = xmin - pad
         xmax_new = xmax + pad
         if xmin_new < 0:

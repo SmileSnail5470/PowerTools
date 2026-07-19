@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from collections import deque
 import cv2
 import numpy as np
 from PIL import Image
@@ -209,7 +210,7 @@ class MaskTrackerEdgeTAM:
         else:
             distance = float(np.hypot(centroid[0] - previous_centroid[0], centroid[1] - previous_centroid[1]))
             centroid_shift = distance / max(previous_diagonal, 1.0)
-        history = accepted_areas[-self.quality_config.area_history_size:]
+        history = list(accepted_areas)
         reference_area = float(np.median(history)) if history else float(previous_area)
         area_ratio = float(area / reference_area) if reference_area > 0 else 0.0
         flat_logits = finite_logits.reshape(-1)
@@ -291,6 +292,13 @@ class MaskTrackerEdgeTAM:
             quality.uncertain_ratio,
         )
 
+    def _prune_bank(self, bank, current_frame_idx):
+        keep_window = max(self.num_maskmem, self.max_obj_ptrs) + 3
+        min_keep = current_frame_idx - keep_window
+        keys_to_remove = [k for k in bank if k != 0 and k < min_keep]
+        for k in keys_to_remove:
+            del bank[k]
+
     def inference(self, mask_path, frames_dir, reverse: bool = False, output_dir: Optional[str] = None):
         frames_list = sorted(
             (
@@ -315,18 +323,20 @@ class MaskTrackerEdgeTAM:
         high_res = mask * 20.0 - 10.0
         mm, mmpos = self._enc_mem(high_res, pix_feat)
         bank[0] = {"mm": mm, "mmpos": mmpos, "obj_ptr": obj_ptr, "cond": True}
+        del image, pix_feat, high_res
         Image.fromarray(
             (self._mask_to_orig(mask[0, 0], (height0, width0)) * 255).astype(np.uint8)
         ).save(os.path.join(mask_out, f"{os.path.splitext(os.path.basename(frames_list[0]))[0]}.png"))
 
         previous_reliable_mask = initial_mask
-        accepted_areas = [initial_area]
+        accepted_areas = deque([initial_area], maxlen=self.quality_config.area_history_size)
         pending_start_idx = None
         suspect_count = 0
 
         for frame_idx in range(1, len(frames_list)):
             image, (height, width) = self._load_frame(frames_list[frame_idx])
             pix_feat, hr0, hr1, vfeat, vpos = self._enc_image(image)
+            del image
             spatial_memory, spatial_pos, pointer_tokens = self._build_memory(frame_idx, bank)
             image_embed = self._attend({
                 "vision_feat": vfeat,
@@ -335,11 +345,13 @@ class MaskTrackerEdgeTAM:
                 "spatial_memory_pos": spatial_pos,
                 "obj_ptr_tokens": pointer_tokens,
             })
+            del vfeat, vpos, spatial_memory, spatial_pos, pointer_tokens
             obj_ptr, high_res = self._decode({
                 "image_embed": image_embed,
                 "high_res_feat0": hr0,
                 "high_res_feat1": hr1,
             })
+            del image_embed, hr0, hr1
             raw_logits = high_res[0, 0]
             quality = self._measure_quality(raw_logits, previous_reliable_mask, accepted_areas)
             decision = self._decide_quality(quality)
@@ -350,14 +362,17 @@ class MaskTrackerEdgeTAM:
 
             output_logits = _resize_bilinear(raw_logits, (height, width))
             output_mask = output_logits > self.quality_config.logit_threshold
+            del output_logits
             output_path = os.path.join(mask_out, f"{os.path.splitext(os.path.basename(frames_list[frame_idx]))[0]}.png")
             Image.fromarray((output_mask * 255).astype(np.uint8)).save(output_path)
+            del output_mask
             if decision.status == self.SUSPECT:
                 if pending_start_idx is None:
                     pending_start_idx = frame_idx
                     suspect_count = 1
                 else:
                     suspect_count += 1
+                del pix_feat, high_res, obj_ptr
                 if suspect_count >= self.quality_config.max_suspect_frames:
                     return pending_start_idx
                 continue
@@ -369,7 +384,9 @@ class MaskTrackerEdgeTAM:
             previous_reliable_mask = reliable_logits > self.quality_config.logit_threshold
             accepted_areas.append(int(np.count_nonzero(previous_reliable_mask)))
             mm, mmpos = self._enc_mem(high_res, pix_feat)
+            del high_res, pix_feat
             bank[frame_idx] = {"mm": mm, "mmpos": mmpos, "obj_ptr": obj_ptr, "cond": False}
+            self._prune_bank(bank, frame_idx)
         return -1
 
     def _mask_to_orig(self, mask_s, out_hw):

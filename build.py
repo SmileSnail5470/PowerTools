@@ -58,6 +58,9 @@ def build_windows_command(args, project_root, outdir):
     cmd.append('--mode=standalone')
     
     cmd.extend([
+        '--include-package=cupy',
+        '--include-package-data=cupy',
+        '--include-package=cupy_backends',
         '--windows-console-mode=disable',
         f'--company-name={COPYRIGHT}',
         f'--product-name={APP_NAME}',

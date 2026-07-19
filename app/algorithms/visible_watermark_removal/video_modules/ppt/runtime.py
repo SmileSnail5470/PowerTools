@@ -1,5 +1,5 @@
 import onnxruntime as ort
-from app.algorithms import general_session
+from app.algorithms import general_session, is_gpu_device
 
 
 def ppt_session_options():
@@ -9,10 +9,10 @@ def ppt_session_options():
     return options
 
 
-def ppt_run_options(shrink_memory=False, use_cuda=False):
+def ppt_run_options(shrink_memory=True, use_cuda=False):
     options = ort.RunOptions()
     if shrink_memory:
-        device = "gpu:0" if use_cuda else "cpu"
+        device = "gpu:0" if (use_cuda or is_gpu_device()) else "cpu"
         options.add_run_config_entry(
             "memory.enable_memory_arena_shrinkage", device
         )
