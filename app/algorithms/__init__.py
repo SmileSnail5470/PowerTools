@@ -382,11 +382,34 @@ def general_provider(enable_cuda_graph: bool = False, use_cpu: bool = False):
     return providers, provider_options
 
 
-def general_session():
-    sess = ort.SessionOptions()
-    sess.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-    sess.add_session_config_entry("session.use_env_allocators", "1")
-    sess.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-    sess.inter_op_num_threads = 1
-    sess.intra_op_num_threads = 0
-    return sess
+def general_session(
+    intra_op_num_threads: int | None = None,
+    inter_op_num_threads: int = 1,
+    graph_optimization_level: str = "all",
+    enable_cpu_mem_arena: bool = True,
+    enable_mem_pattern: bool = True,
+    optimized_model_path: str | None = None,
+    log_severity_level: int = 2,
+    free_dim_overrides: dict[str, int] | None = None,
+    ) -> ort.SessionOptions:
+    options = ort.SessionOptions()
+    options.log_severity_level = log_severity_level
+    options.graph_optimization_level = {
+        "disable": ort.GraphOptimizationLevel.ORT_DISABLE_ALL,
+        "basic": ort.GraphOptimizationLevel.ORT_ENABLE_BASIC,
+        "extended": ort.GraphOptimizationLevel.ORT_ENABLE_EXTENDED,
+        "all": ort.GraphOptimizationLevel.ORT_ENABLE_ALL,
+    }[graph_optimization_level]
+    options.add_session_config_entry("session.use_env_allocators", "1")
+    options.add_session_config_entry("session.use_device_allocator_for_initializers", "1")
+    options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+    if intra_op_num_threads:
+        options.intra_op_num_threads = int(intra_op_num_threads)
+    options.inter_op_num_threads = int(inter_op_num_threads)
+    options.enable_cpu_mem_arena = bool(enable_cpu_mem_arena)
+    options.enable_mem_pattern = bool(enable_mem_pattern)
+    if optimized_model_path:
+        options.optimized_model_filepath = str(optimized_model_path)
+    for name, value in (free_dim_overrides or {}).items():
+        options.add_free_dimension_override_by_name(name, int(value))
+    return options
