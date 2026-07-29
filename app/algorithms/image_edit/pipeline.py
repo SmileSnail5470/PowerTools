@@ -1,32 +1,27 @@
 import json
 import math
 import time
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
-
 import numpy as np
 from PIL import Image
+from tokenizers import Tokenizer
+from app.algorithms.image_edit.backend import OnnxModule, asnumpy
 
-from ort_backend import OnnxModule, array_module, asnumpy, resolve_device
 
-__all__ = ["Flux2KleinOnnxPipeline", "Flux2OnnxPipelineOutput"]
-
-_COMPONENTS = ("text_encoder", "transformer", "vae_encoder", "vae_decoder")
+image_edit_logger = logging.getLogger("ImageEdit")
 
 
 @dataclass
-class Flux2OnnxPipelineOutput:
+class PipelineOutput:
     images: list[Image.Image] | np.ndarray
     latents: np.ndarray | None = None
     timings: dict[str, float] = field(default_factory=dict)
 
 
-# --------------------------------------------------------------------------------------
-# numpy re-implementations of the torch-side maths
-# --------------------------------------------------------------------------------------
 def compute_empirical_mu(image_seq_len: int, num_steps: int) -> float:
-    """Copy of `diffusers.pipelines.flux2.pipeline_flux2.compute_empirical_mu`."""
     a1, b1 = 8.73809524e-05, 1.89833333
     a2, b2 = 0.00016927, 0.45666666
 
@@ -41,8 +36,6 @@ def compute_empirical_mu(image_seq_len: int, num_steps: int) -> float:
 
 
 class FlowMatchEulerScheduler:
-    """numpy port of `FlowMatchEulerDiscreteScheduler` (the subset Flux2 uses)."""
-
     def __init__(self, config: dict):
         self.num_train_timesteps = int(config.get("num_train_timesteps", 1000))
         self.shift = float(config.get("shift", 1.0))
@@ -68,24 +61,19 @@ class FlowMatchEulerScheduler:
         mu: float | None = None,
     ) -> np.ndarray:
         if sigmas is None:
-            timesteps = np.linspace(
-                self.num_train_timesteps, self.num_train_timesteps / num_inference_steps, num_inference_steps
-            )
+            timesteps = np.linspace(self.num_train_timesteps, self.num_train_timesteps / num_inference_steps, num_inference_steps)
             sigmas = timesteps / self.num_train_timesteps
         sigmas = np.asarray(sigmas, dtype=np.float32)
-
         if self.use_dynamic_shifting:
             if mu is None:
                 raise ValueError("`mu` must be passed when `use_dynamic_shifting=True`")
             sigmas = self._time_shift(mu, 1.0, sigmas)
         else:
             sigmas = self.shift * sigmas / (1 + (self.shift - 1) * sigmas)
-
         if self.shift_terminal:
             one_minus_z = 1 - sigmas
             scale_factor = one_minus_z[-1] / (1 - self.shift_terminal)
             sigmas = 1 - (one_minus_z / scale_factor)
-
         sigmas = np.asarray(sigmas, dtype=np.float32)
         if self.invert_sigmas:
             sigmas = 1.0 - sigmas
@@ -97,18 +85,11 @@ class FlowMatchEulerScheduler:
         return self.timesteps
 
     def step(self, sample, model_output, index: int):
-        """Euler update: `x_{t-1} = x_t + (sigma_next - sigma) * v`."""
         dt = float(self.sigmas[index + 1]) - float(self.sigmas[index])
         return sample + dt * model_output
 
 
-def rope_embeddings(
-    ids: np.ndarray, theta: int, axes_dim: Sequence[int]
-) -> tuple[np.ndarray, np.ndarray]:
-    """numpy port of `Flux2PosEmbed`: (S, len(axes_dim)) ids -> (S, sum(axes_dim)) cos/sin.
-
-    float64 accumulation, matching diffusers' `freqs_dtype=torch.float64`.
-    """
+def rope_embeddings(ids: np.ndarray, theta: int, axes_dim: Sequence[int]) -> tuple[np.ndarray, np.ndarray]:
     pos = np.asarray(ids, dtype=np.float64)
     cos_out, sin_out = [], []
     for axis, dim in enumerate(axes_dim):
@@ -123,16 +104,12 @@ def rope_embeddings(
 
 
 def cartesian_ids(t_values: Sequence[int], height: int, width: int, length: int = 1) -> np.ndarray:
-    """Equivalent of `torch.cartesian_prod(t, arange(h), arange(w), arange(l))`."""
     t = np.asarray(t_values, dtype=np.int64).reshape(-1)
-    grid = np.meshgrid(
-        t, np.arange(height), np.arange(width), np.arange(length), indexing="ij"
-    )
+    grid = np.meshgrid(t, np.arange(height), np.arange(width), np.arange(length), indexing="ij")
     return np.stack(grid, axis=-1).reshape(-1, 4).astype(np.int64)
 
 
 def patchify_latents(latents: np.ndarray) -> np.ndarray:
-    """(B, C, H, W) -> (B, 4C, H/2, W/2)."""
     b, c, h, w = latents.shape
     x = latents.reshape(b, c, h // 2, 2, w // 2, 2)
     x = x.transpose(0, 1, 3, 5, 2, 4)
@@ -140,7 +117,6 @@ def patchify_latents(latents: np.ndarray) -> np.ndarray:
 
 
 def unpatchify_latents(latents: np.ndarray) -> np.ndarray:
-    """(B, 4C, H, W) -> (B, C, 2H, 2W)."""
     b, c, h, w = latents.shape
     x = latents.reshape(b, c // 4, 2, 2, h, w)
     x = x.transpose(0, 1, 4, 2, 5, 3)
@@ -148,15 +124,11 @@ def unpatchify_latents(latents: np.ndarray) -> np.ndarray:
 
 
 def pack_latents(latents: np.ndarray) -> np.ndarray:
-    """(B, C, H, W) -> (B, H*W, C)."""
     b, c, h, w = latents.shape
     return latents.reshape(b, c, h * w).transpose(0, 2, 1)
 
 
-def unpack_latents_with_ids(
-    x: np.ndarray, ids: np.ndarray, height: int, width: int
-) -> np.ndarray:
-    """Scatter packed tokens back onto the (C, H, W) grid using their position ids."""
+def unpack_latents_with_ids(x: np.ndarray, ids: np.ndarray, height: int, width: int) -> np.ndarray:
     batch, _, channels = x.shape
     out = np.zeros((batch, height * width, channels), dtype=x.dtype)
     flat = (ids[:, 1].astype(np.int64) * width + ids[:, 2].astype(np.int64))
@@ -165,19 +137,12 @@ def unpack_latents_with_ids(
     return out.reshape(batch, height, width, channels).transpose(0, 3, 1, 2)
 
 
-# --------------------------------------------------------------------------------------
-# image helpers (PIL only, mirrors Flux2ImageProcessor)
-# --------------------------------------------------------------------------------------
-def check_image_input(
-    image: Image.Image, max_aspect_ratio: int = 8, min_side_length: int = 64
-) -> None:
+def check_image_input(image: Image.Image, max_aspect_ratio: int = 8, min_side_length: int = 64) -> None:
     if not isinstance(image, Image.Image):
         raise ValueError(f"Image must be a PIL.Image.Image, got {type(image)}")
     width, height = image.size
     if width < min_side_length or height < min_side_length:
-        raise ValueError(
-            f"Image too small: {width}x{height}. Both dimensions must be at least {min_side_length}px"
-        )
+        raise ValueError(f"Image too small: {width}x{height}. Both dimensions must be at least {min_side_length}px")
     ratio = max(width / height, height / width)
     if ratio > max_aspect_ratio:
         raise ValueError(
@@ -186,31 +151,24 @@ def check_image_input(
         )
 
 
-def preprocess_condition_image(
-    image: Image.Image, max_area: int = 1024 * 1024, multiple_of: int = 16
-) -> tuple[np.ndarray, int, int]:
-    """PIL image -> (1, 3, H, W) float32 in [-1, 1] plus the (width, height) actually used."""
+def preprocess_condition_image(image: Image.Image, max_area: int = 1024 * 1024, multiple_of: int = 16) -> tuple[np.ndarray, int, int]:
     image = image.convert("RGB")
     width, height = image.size
     if width * height > max_area:
         scale = math.sqrt(max_area / (width * height))
         width, height = int(width * scale), int(height * scale)
         image = image.resize((width, height), Image.Resampling.LANCZOS)
-
     target_w = (width // multiple_of) * multiple_of
     target_h = (height // multiple_of) * multiple_of
-    # `Flux2ImageProcessor._resize_and_crop` is a plain centre crop (no rescale)
     left = (width - target_w) // 2
     top = (height - target_h) // 2
     image = image.crop((left, top, left + target_w, top + target_h))
-
     array = np.asarray(image, dtype=np.float32) / 255.0
     array = array.transpose(2, 0, 1)[None]
     return array * 2.0 - 1.0, target_w, target_h
 
 
 def postprocess_image(sample: np.ndarray, output_type: str = "pil"):
-    """(B, 3, H, W) in [-1, 1] -> PIL images / HWC float array."""
     images = (sample / 2.0 + 0.5).clip(0.0, 1.0)
     images = images.transpose(0, 2, 3, 1)
     if output_type == "np":
@@ -219,15 +177,10 @@ def postprocess_image(sample: np.ndarray, output_type: str = "pil"):
     return [Image.fromarray(frame) for frame in uint8]
 
 
-# --------------------------------------------------------------------------------------
-class Flux2KleinOnnxPipeline:
-    """ONNX Runtime port of `Flux2KleinPipeline` (distilled, guidance-free)."""
-
+class Pipeline:
     def __init__(
         self,
         model_dir: str | Path,
-        device: str = "auto",
-        device_id: int = 0,
         use_io_binding: bool | None = None,
         use_cupy: bool | None = None,
         low_memory: bool = True,
@@ -237,8 +190,6 @@ class Flux2KleinOnnxPipeline:
     ):
         self.model_dir = Path(model_dir)
         self.config = json.loads((self.model_dir / "pipeline_config.json").read_text())
-        self.device = resolve_device(device)
-        self.device_id = device_id
         self.use_io_binding = use_io_binding
         self.use_cupy = use_cupy
         self.low_memory = low_memory
@@ -267,32 +218,22 @@ class Flux2KleinOnnxPipeline:
         eps = float(self.config.get("batch_norm_eps", 1e-4))
         self.latent_mean = bn["running_mean"].astype(np.float32).reshape(1, -1, 1, 1)
         self.latent_std = np.sqrt(bn["running_var"].astype(np.float32) + eps).reshape(1, -1, 1, 1)
-
         self._tokenizer = None
-        self.xp, self.uses_cupy = array_module(self.device, use_cupy)
 
-    # ------------------------------------------------------------------ loading
     @classmethod
-    def from_pretrained(cls, model_dir: str | Path, **kwargs) -> "Flux2KleinOnnxPipeline":
+    def from_pretrained(cls, model_dir: str | Path, **kwargs):
         return cls(model_dir, **kwargs)
 
     def _log(self, message: str) -> None:
         if self.verbose:
-            print(message, flush=True)
+            image_edit_logger.info(message)
 
     def _module(self, name: str) -> OnnxModule:
         module = self._modules.get(name)
         if module is None:
             path = self.model_dir / name
             start = time.perf_counter()
-            module = OnnxModule(
-                path,
-                device=self.device,
-                device_id=self.device_id,
-                use_io_binding=self.use_io_binding,
-                use_cupy=self.use_cupy,
-                **self._session_kwargs,
-            )
+            module = OnnxModule(path, use_io_binding=self.use_io_binding, use_cupy=self.use_cupy, **self._session_kwargs)
             self._modules[name] = module
             self._log(f"[onnx] loaded {name} in {time.perf_counter() - start:.1f}s ({module.provider})")
         return module
@@ -300,21 +241,18 @@ class Flux2KleinOnnxPipeline:
     def unload(self, *names: str) -> None:
         for name in names or tuple(self._modules):
             module = self._modules.pop(name, None)
-            if module is not None:
-                module.unload()
-                self._log(f"[onnx] released {name}")
+            if module is None:
+                continue
+            module.unload()
+            self._log(f"[onnx] released {name}")
 
     @property
     def tokenizer(self):
         if self._tokenizer is None:
-            from tokenizers import Tokenizer
-
             self._tokenizer = Tokenizer.from_file(str(self.model_dir / "tokenizer" / "tokenizer.json"))
         return self._tokenizer
 
-    # ------------------------------------------------------------------ stages
     def encode_prompt(self, prompt: str) -> tuple[np.ndarray, np.ndarray]:
-        """prompt -> (prompt_embeds (1, L, D), text_ids (L, 4))."""
         text = self.chat_template.format(prompt=prompt or "")
         ids = self.tokenizer.encode(text, add_special_tokens=False).ids
         length = self.max_sequence_length
@@ -330,41 +268,27 @@ class Flux2KleinOnnxPipeline:
         text_ids = cartesian_ids([0], 1, 1, length)
         return prompt_embeds, text_ids
 
-    def encode_condition_images(
-        self, images: Sequence[Image.Image]
-    ) -> tuple[np.ndarray, np.ndarray, tuple[int, int]]:
-        """PIL images -> (packed latents (1, N, C), ids (N, 4), (width, height) of image 0)."""
+    def encode_condition_images(self, images: Sequence[Image.Image]) -> tuple[np.ndarray, np.ndarray, tuple[int, int]]:
         module = self._module("vae_encoder")
         packed, all_ids, first_size = [], [], None
         for index, image in enumerate(images):
             check_image_input(image)
-            pixel_values, width, height = preprocess_condition_image(
-                image, self.max_condition_area, self.vae_scale_factor * 2
-            )
+            pixel_values, width, height = preprocess_condition_image(image, self.max_condition_area, self.vae_scale_factor * 2)
             if first_size is None:
                 first_size = (width, height)
             latent_h = height // self.vae_scale_factor
             latent_w = width // self.vae_scale_factor
-            outputs = module.run(
-                {"pixel_values": pixel_values},
-                output_shapes={"latent": (1, self.latent_channels, latent_h, latent_w)},
-            )
+            outputs = module.run({"pixel_values": pixel_values}, output_shapes={"latent": (1, self.latent_channels, latent_h, latent_w)})
             latent = asnumpy(outputs["latent"]).astype(np.float32)
             latent = patchify_latents(latent)
             latent = (latent - self.latent_mean) / self.latent_std
             packed.append(pack_latents(latent)[0])
-            all_ids.append(
-                cartesian_ids(
-                    [self.image_ids_scale * (index + 1)], latent.shape[2], latent.shape[3]
-                )
-            )
+            all_ids.append(cartesian_ids([self.image_ids_scale * (index + 1)], latent.shape[2], latent.shape[3]))
         image_latents = np.concatenate(packed, axis=0)[None]
         image_ids = np.concatenate(all_ids, axis=0)
         return image_latents, image_ids, first_size
 
-    def prepare_latents(
-        self, height: int, width: int, seed: int | None, latents: np.ndarray | None = None
-    ) -> tuple[np.ndarray, np.ndarray, int, int]:
+    def prepare_latents(self, height: int, width: int, seed: int | None, latents: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray, int, int]:
         num_latent_channels = self.in_channels // 4
         latent_height = 2 * (int(height) // (self.vae_scale_factor * 2))
         latent_width = 2 * (int(width) // (self.vae_scale_factor * 2))
@@ -377,10 +301,7 @@ class Flux2KleinOnnxPipeline:
         latent_ids = cartesian_ids([0], shape[2], shape[3])
         return pack_latents(latents), latent_ids, latent_height, latent_width
 
-    def unpack_and_denormalize(
-        self, latents: np.ndarray, latent_ids: np.ndarray, latent_height: int, latent_width: int
-    ) -> np.ndarray:
-        """Packed tokens -> (1, latent_channels, H/8, W/8), matching `output_type="latent"`."""
+    def unpack_and_denormalize(self, latents: np.ndarray, latent_ids: np.ndarray, latent_height: int, latent_width: int) -> np.ndarray:
         latents = unpack_latents_with_ids(latents, latent_ids, latent_height // 2, latent_width // 2)
         latents = latents * self.latent_std + self.latent_mean
         return unpatchify_latents(latents)
@@ -400,7 +321,6 @@ class Flux2KleinOnnxPipeline:
         )
         return asnumpy(outputs["sample"]).astype(np.float32)
 
-    # ------------------------------------------------------------------ __call__
     def __call__(
         self,
         prompt: str,
@@ -414,26 +334,20 @@ class Flux2KleinOnnxPipeline:
         prompt_embeds: np.ndarray | None = None,
         output_type: str = "pil",
         callback_on_step_end=None,
-    ) -> Flux2OnnxPipelineOutput:
+    ) -> PipelineOutput:
         timings: dict[str, float] = {}
         start = time.perf_counter()
-
-        # 1. text
         if prompt_embeds is None:
             prompt_embeds, text_ids = self.encode_prompt(prompt)
         else:
             prompt_embeds = np.asarray(prompt_embeds)
             text_ids = cartesian_ids([0], 1, 1, prompt_embeds.shape[1])
         if prompt_embeds.shape[1] != self.text_seq_len:
-            raise ValueError(
-                f"the transformer graph was exported for text_seq_len={self.text_seq_len}, "
-                f"got {prompt_embeds.shape[1]}"
-            )
+            raise ValueError(f"the transformer graph was exported for text_seq_len={self.text_seq_len}, got {prompt_embeds.shape[1]}")
         timings["text_encoder"] = time.perf_counter() - start
         if self.low_memory:
             self.unload("text_encoder")
 
-        # 2. condition images
         images = [image] if isinstance(image, Image.Image) else (list(image) if image else [])
         image_latents = image_ids = None
         if images:
@@ -447,25 +361,15 @@ class Flux2KleinOnnxPipeline:
 
         height = height or self.default_sample_size * self.vae_scale_factor
         width = width or self.default_sample_size * self.vae_scale_factor
-
-        # 3. latents + position ids
-        latents, latent_ids, latent_height, latent_width = self.prepare_latents(
-            height, width, seed, latents
-        )
+        latents, latent_ids, latent_height, latent_width = self.prepare_latents(height, width, seed, latents)
         num_latent_tokens = latents.shape[1]
         img_ids = latent_ids if image_ids is None else np.concatenate([latent_ids, image_ids], axis=0)
-        rope_cos, rope_sin = rope_embeddings(
-            np.concatenate([text_ids, img_ids], axis=0), self.rope_theta, self.axes_dims_rope
-        )
-
-        # 4. timesteps
+        rope_cos, rope_sin = rope_embeddings(np.concatenate([text_ids, img_ids], axis=0), self.rope_theta, self.axes_dims_rope)
         if sigmas is None:
             sigmas = np.linspace(1.0, 1.0 / num_inference_steps, num_inference_steps)
         mu = compute_empirical_mu(num_latent_tokens, num_inference_steps)
         self.scheduler.set_timesteps(num_inference_steps, sigmas=sigmas, mu=mu)
         step_sigmas = self.scheduler.sigmas
-
-        # 5. denoising loop
         mark = time.perf_counter()
         transformer = self._module("transformer")
         xp = transformer.xp
@@ -476,46 +380,36 @@ class Flux2KleinOnnxPipeline:
         transformer.set_static_input("rope_cos", rope_cos)
         transformer.set_static_input("rope_sin", rope_sin)
 
-        # persistent input buffer: the reference-image tokens never change, only the
-        # first `num_latent_tokens` rows are rewritten on every step
         model_input = xp.empty((1, total_tokens, self.in_channels), dtype=hidden_dtype)
         if image_latents is not None:
             model_input[:, num_latent_tokens:] = xp.asarray(image_latents.astype(hidden_dtype))
         sample = xp.asarray(latents)
         timestep = xp.empty((1,), dtype=transformer.input_dtypes["timestep"])
         out_shapes = {"noise_pred": (1, total_tokens, self.in_channels)}
-
         for index in range(num_inference_steps):
             model_input[:, :num_latent_tokens] = sample.astype(hidden_dtype)
             timestep[0] = step_sigmas[index]
-            outputs = transformer.run(
-                {"hidden_states": model_input, "timestep": timestep}, output_shapes=out_shapes
-            )
+            outputs = transformer.run({"hidden_states": model_input, "timestep": timestep}, output_shapes=out_shapes)
             noise_pred = outputs["noise_pred"][:, :num_latent_tokens]
             dt = float(step_sigmas[index + 1]) - float(step_sigmas[index])
             sample = sample + dt * noise_pred.astype(np.float32)
             if callback_on_step_end is not None:
                 callback_on_step_end(self, index, float(self.scheduler.timesteps[index]), sample)
             self._log(f"[onnx] step {index + 1}/{num_inference_steps}")
-
         latents = asnumpy(sample).astype(np.float32)
         timings["transformer"] = time.perf_counter() - mark
         transformer.clear_static_inputs()
         if self.low_memory:
             self.unload("transformer")
 
-        # 6. decode
         latents = self.unpack_and_denormalize(latents, latent_ids, latent_height, latent_width)
         if output_type == "latent":
             timings["total"] = time.perf_counter() - start
-            return Flux2OnnxPipelineOutput(images=latents, latents=latents, timings=timings)
+            return PipelineOutput(images=latents, latents=latents, timings=timings)
         mark = time.perf_counter()
         sample = self.decode_latents(latents)
         timings["vae_decoder"] = time.perf_counter() - mark
         if self.low_memory:
             self.unload("vae_decoder")
-
         timings["total"] = time.perf_counter() - start
-        return Flux2OnnxPipelineOutput(
-            images=postprocess_image(sample, output_type), latents=latents, timings=timings
-        )
+        return PipelineOutput(images=postprocess_image(sample, output_type), latents=latents, timings=timings)

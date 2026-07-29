@@ -14,21 +14,6 @@ def cupy_available() -> bool:
     return True
 
 
-def resolve_device(device: str = "auto") -> str:
-    """Map a user facing device string to one of the keys of `_DEVICE_PROVIDERS`."""
-    if device not in (None, "auto"):
-        return device
-    available = set(ort.get_available_providers())
-    for name, providers in (
-        ("cuda", ["CUDAExecutionProvider"]),
-        ("rocm", ["ROCMExecutionProvider"]),
-        ("dml", ["DmlExecutionProvider"]),
-    ):
-        if providers[0] in available:
-            return name
-    return "cpu"
-
-
 def array_module(device: str, use_cupy: bool | None = None):
     if device in ("cuda", "tensorrt", "rocm") and use_cupy is not False and cupy_available():
         return cupy, True
@@ -36,7 +21,6 @@ def array_module(device: str, use_cupy: bool | None = None):
 
 
 def asnumpy(array) -> np.ndarray:
-    """`cupy`/`numpy` -> `numpy` without importing cupy eagerly."""
     if isinstance(array, np.ndarray):
         return array
     get = getattr(array, "get", None)
@@ -53,11 +37,8 @@ class OnnxModule:
     def __init__(
         self,
         path: str | Path,
-        device: str = "auto",
-        device_id: int = 0,
         use_io_binding: bool | None = None,
         session_options: ort.SessionOptions | None = None,
-        providers: list | None = None,
         use_cupy: bool | None = None,
         **session_option_kwargs,
     ):
@@ -65,8 +46,6 @@ class OnnxModule:
         self.path = self.path / "model.onnx" if self.path.is_dir() else self.path
         if not self.path.exists():
             raise FileNotFoundError(self.path)
-        self.device = resolve_device(device)
-        self.device_id = int(device_id)
         options = session_options or general_session(**session_option_kwargs)
         providers, provider_options = general_provider()
         self.session = general_inference_session(
@@ -76,14 +55,8 @@ class OnnxModule:
             provider_options=provider_options,
         )
         self.is_gpu = self.session.use_cuda
-        self.ort_device_type = self.session.device_type
 
-        self.input_names = list(self.session.input_names)
-        self.output_names = list(self.session.output_names)
         self.input_dtypes = dict(self.session.input_dtypes)
-        self.output_dtypes = dict(self.session.output_dtypes)
-        self.input_shapes = dict(self.session.input_shapes)
-        self.output_shapes = dict(self.session.output_shapes)
 
         self.xp, self.uses_cupy = array_module("cuda" if self.is_gpu else "cpu", use_cupy)
         use_io_binding = self.is_gpu if use_io_binding is None else use_io_binding
