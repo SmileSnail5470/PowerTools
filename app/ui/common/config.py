@@ -60,6 +60,10 @@ class Config(QConfig):
 
     # 软件设置
     ffmpeg_path = ConfigItem("SoftwareSettings", "FFmpegPath", softwareInvalidPath, FolderValidator())
+    # 显卡环境配置
+    gpuMemoryLimit = OptionsConfigItem("SoftwareSettings", "GPUMemoryLimit", "16", OptionsValidator(["6", "8", "12", "16", "24"]))
+    cudaPath = ConfigItem("SoftwareSettings", "CUDAPath", softwareInvalidPath, FolderValidator())
+    cudnnPath = ConfigItem("SoftwareSettings", "CUDNNPath", softwareInvalidPath, FolderValidator())
 
     # 本地AI设置
     default_deps_path = os.path.join(pathlib.Path.home(), "PowerToolsResources", "resources", "deps")
@@ -70,6 +74,7 @@ class Config(QConfig):
     localOCREnabled = ConfigItem("LocalAISettings", "localOCREnabled", False, BoolValidator())
     localVideoInpaintingEnabled = ConfigItem("LocalAISettings", "localVideoInpaintingEnabled", False, BoolValidator())
     localObjectTrackingEnabled = ConfigItem("LocalAISettings", "localObjectTrackingEnabled", False, BoolValidator())
+    localImageEditEnabled = ConfigItem("LocalAISettings", "localImageEditEnabled", False, BoolValidator())
 
     # 高级设置
     logLevel = OptionsConfigItem("AdvancedSettings", "LogLevel", "INFO", OptionsValidator(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]))
@@ -82,11 +87,34 @@ class Config(QConfig):
         self._config_file = os.path.join(pathlib.Path.home(), ".PowerTools", "settings.json")
         self._load_config()
         self._init_connect()
+        self._update_env()
         
         os.environ["POWERTOOLS_FFMPEG_BIN"] = self.get(self.ffmpeg_path)
         self.ffmpeg_path.valueChanged.connect(update_ffmpeg_path)
         os.environ["POWERTOOLS_LOCAL_AI_MODEL_DEPS"] = self.get(self.localAIModelDeps)
         self.localAIModelDeps.valueChanged.connect(lambda path: os.environ.update({"POWERTOOLS_LOCAL_AI_MODEL_DEPS": path}))
+
+    def _update_env(self):
+        gpu_config_path = os.path.join(self.softwareInvalidPath, "gpu_env_config.json")
+        if not os.path.exists(gpu_config_path):
+            return
+        with open(gpu_config_path, "r") as fp:
+            data = json.loads(fp.read())
+        if "cuda_path" not in data or "cudnn_path" not in data:
+            return
+        cuda_path = data["cuda_path"]
+        cudnn_path = data["cudnn_path"]
+        current_path = os.environ.get("PATH", "")
+        path_list = [os.path.normpath(p) for p in current_path.split(os.pathsep) if p]
+        normalized_cuda = os.path.normpath(cuda_path)
+        normalized_cudnn = os.path.normpath(cudnn_path)
+        if normalized_cudnn not in path_list:
+            os.environ["PATH"] = normalized_cudnn + os.pathsep + current_path
+        if normalized_cuda not in path_list:
+            os.environ["PATH"] = normalized_cuda + os.pathsep + current_path
+        cuda_parent_dir = os.path.dirname(os.path.abspath(cuda_path))
+        if "CUDA_PATH" not in os.environ or os.environ["CUDA_PATH"] != cuda_parent_dir:
+            os.environ["CUDA_PATH"] = cuda_parent_dir
 
     def _init_connect(self):
         for name in dir(self.__class__):
