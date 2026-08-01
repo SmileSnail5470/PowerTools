@@ -24,7 +24,7 @@ class EncoderORT:
                 self.input_names[1]: _cupy_to_ortvalue(masks_in) if isinstance(masks_in, cp.ndarray) else masks_in,
                 self.input_names[2]: _cupy_to_ortvalue(masks_updated) if isinstance(masks_updated, cp.ndarray) else masks_updated,
             }
-            ort_outputs = self.session.run_with_iobinding(feed, run_options=self.run_options)
+            ort_outputs = self.session.run_ortvalues(feed, run_options=self.run_options)
             return _ortvalue_to_cupy(ort_outputs[0])
         feed_dict = {
             self.input_names[0]: masked_frames,

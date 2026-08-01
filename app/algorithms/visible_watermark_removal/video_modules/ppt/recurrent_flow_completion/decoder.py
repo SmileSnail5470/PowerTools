@@ -22,7 +22,7 @@ class DecoderORT:
                 "feat_e1": _cupy_to_ortvalue(feat_e1) if isinstance(feat_e1, cp.ndarray) else feat_e1,
                 "x": _cupy_to_ortvalue(x) if isinstance(x, cp.ndarray) else x,
             }
-            ort_outputs = self.session.run_with_iobinding(feed, run_options=run_options)
+            ort_outputs = self.session.run_ortvalues(feed, run_options=run_options)
             return _ortvalue_to_cupy(ort_outputs[0]), _ortvalue_to_cupy(ort_outputs[1])
         feed = {"feat_prop": feat_prop, "feat_e1": feat_e1, "x": x}
         if self._use_iobinding:

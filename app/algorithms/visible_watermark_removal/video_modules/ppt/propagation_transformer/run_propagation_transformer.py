@@ -378,11 +378,11 @@ class PropagationTransformerORT:
         feats_f_ort = [None] * t
         masks_f_ort = [None] * t
         for i, idx in enumerate(range(t)):
-            feat_current = _ortvalue_to_cupy(feats_b_ort[idx])
-            mask_current = _ortvalue_to_cupy(masks_b_ort[idx])
+            feat_current = feats_b_ort[idx]
+            mask_current = masks_b_ort[idx]
             if i == 0:
-                feat_prop = _cupy_to_ortvalue(cp.ascontiguousarray(feat_current))
-                mask_prop = _cupy_to_ortvalue(cp.ascontiguousarray(mask_current))
+                feat_prop = feat_current
+                mask_prop = mask_current
             else:
                 flow_prop = cp.ascontiguousarray(flows_b_cp[:, i - 1])
                 flow_check = cp.ascontiguousarray(flows_f_cp[:, i - 1])

@@ -426,6 +426,13 @@ class IOBindingSession:
         binding, _ = self._run_bound(input_feed, run_options)
         return binding.copy_outputs_to_cpu()
 
+    def run_ortvalues(self, input_feed, run_options=None):
+        if not self._use_cuda:
+            results = self._run_numpy_fallback(input_feed, run_options=run_options)
+            return [ort.OrtValue.ortvalue_from_numpy(r) for r in results]
+        binding, _ = self._run_bound(input_feed, run_options)
+        return binding.get_outputs()
+
     def run_dict(
         self,
         input_feed,

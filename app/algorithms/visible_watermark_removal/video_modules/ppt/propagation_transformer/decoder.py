@@ -20,7 +20,7 @@ class DecoderORT:
         run_options = self.run_options if run_options is None else run_options
         if self._use_cupy:
             feed = {self.input_names[0]: _cupy_to_ortvalue(enc_feat) if isinstance(enc_feat, cp.ndarray) else enc_feat}
-            ort_outputs = self.session.run_with_iobinding(feed, run_options=run_options)
+            ort_outputs = self.session.run_ortvalues(feed, run_options=run_options)
             return _ortvalue_to_cupy(ort_outputs[0])
         feed = {self.input_names[0]: enc_feat}
         if self._use_iobinding:

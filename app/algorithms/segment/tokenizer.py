@@ -2,6 +2,7 @@ import gzip
 import html
 import os
 import string
+import threading
 import ftfy
 import regex as re
 from functools import lru_cache
@@ -231,8 +232,25 @@ class HFJsonTokenizer:
         return input_ids, attention_mask
 
 
-def load_tokenizer(context_length, tokenizer_json, bpe_path):
+_TOKENIZER_CACHE = {}
+_TOKENIZER_CACHE_LOCK = threading.Lock()
+
+
+def _build_tokenizer(context_length, tokenizer_json, bpe_path):
     try:
         return HFJsonTokenizer(tokenizer_json=tokenizer_json, context_length=context_length)
     except Exception:
         return SimpleTokenizer(bpe_path=bpe_path, context_length=context_length)
+
+
+def load_tokenizer(context_length, tokenizer_json, bpe_path):
+    key = (int(context_length), os.path.abspath(os.fspath(tokenizer_json)), os.path.abspath(os.fspath(bpe_path)))
+    tok = _TOKENIZER_CACHE.get(key)
+    if tok is not None:
+        return tok
+    with _TOKENIZER_CACHE_LOCK:
+        tok = _TOKENIZER_CACHE.get(key)
+        if tok is None:
+            tok = _build_tokenizer(context_length, tokenizer_json, bpe_path)
+            _TOKENIZER_CACHE[key] = tok
+        return tok

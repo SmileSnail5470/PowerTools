@@ -20,20 +20,29 @@ class SegmentationInference():
         self.prompt_mode = prompt_mode
         self.prompt_value = prompt_value
         self.threshold = threshold
+        self._prompt_cache = {}
 
     def _save_mask(self, img, results):
-        h, w = img.shape[:2]
-        mask_image = np.zeros((h, w), dtype=np.uint8)
-        for r in results:
-            mask_image[r > 0] = 255
+        if not results:
+            return np.zeros(img.shape[:2], dtype=np.uint8)
+        mask_image = results[0]
+        if len(results) == 1:
+            return mask_image
+        mask_image = mask_image.copy()
+        for r in results[1:]:
+            cv2.bitwise_or(mask_image, r, dst=mask_image)
         return mask_image
 
     def tokenize_prompt(self, prompt: str):
+        cached = self._prompt_cache.get(prompt)
+        if cached is not None:
+            return cached
         tokenizer_json = os.path.join(self.model_dir, "tokenizer.json")
         bpe_path = os.path.join(self.model_dir, "bpe_simple_vocab_16e6.txt.gz")
         tok = load_tokenizer(context_length=CONTEXT_LENGTH, tokenizer_json=tokenizer_json, bpe_path=bpe_path)
-        input_ids, attention_mask = tok.tokenize(prompt)
-        return input_ids, attention_mask
+        result = tok.tokenize(prompt)
+        self._prompt_cache[prompt] = result
+        return result
     
     def prepare(self):
         model_path = os.path.join(self.model_dir, "sam3.encmodel")

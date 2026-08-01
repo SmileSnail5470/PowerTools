@@ -3,7 +3,7 @@ import numpy as np
 import onnxruntime as ort
 import app.algorithms.segment.postprocess as pp
 from app.algorithms.segment.preprocess import preprocess_bgr
-from app.algorithms import general_provider, general_session, general_inference_session, ORTEnvironment
+from app.algorithms import general_provider, general_session, general_inference_session, ORTEnvironment, ortvalue_to_numpy
 ORTEnvironment.initialize()
 
 
@@ -31,6 +31,8 @@ class SAM3_PCS:
         self._input_ids_name = self._find_input("input_ids")
         self._attention_mask_name = self._find_input("attention_mask")
 
+        self._semantic_seg_index = self._output_names.index(self._find_output("semantic_seg"))
+
         self._input_ids: Optional[np.ndarray] = None
         self._attention_mask: Optional[np.ndarray] = None
 
@@ -53,8 +55,8 @@ class SAM3_PCS:
         return None
 
     def set_prompt(self, input_ids: List[int], attention_mask: List[int]) -> None:
-        self._input_ids = np.asarray(input_ids, dtype=np.int64).reshape(1, -1)
-        self._attention_mask = np.asarray(attention_mask, dtype=np.int64).reshape(1, -1)
+        self._input_ids = np.ascontiguousarray(input_ids, dtype=np.int64).reshape(1, -1)
+        self._attention_mask = np.ascontiguousarray(attention_mask, dtype=np.int64).reshape(1, -1)
 
     def infer_raw(self, image_bgr: np.ndarray) -> np.ndarray:
         if self._input_ids is None or self._attention_mask is None:
@@ -65,8 +67,8 @@ class SAM3_PCS:
             self._input_ids_name: self._input_ids,
             self._attention_mask_name: self._attention_mask,
         }
-        instance_masks, semantic_seg, pred_boxes, pred_logits = self.session.run_with_iobinding_numpy(feeds)
-        return semantic_seg
+        outputs = self.session.run_with_iobinding(feeds)
+        return ortvalue_to_numpy(outputs[self._semantic_seg_index])
 
     def infer_on_image(self, image_bgr: np.ndarray):
         semantic_seg = self.infer_raw(image_bgr)

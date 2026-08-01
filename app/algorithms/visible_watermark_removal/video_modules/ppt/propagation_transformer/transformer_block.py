@@ -50,7 +50,7 @@ class SparseAttentionCoreORT:
         if self._use_cupy:
             x_ort = _cupy_to_ortvalue(x) if isinstance(x, cp.ndarray) else x
             feed = {self.input_names[0]: x_ort}
-            ort_outputs = self.session.run_with_iobinding(feed, run_options=self.run_options)
+            ort_outputs = self.session.run_ortvalues(feed, run_options=self.run_options)
             return (
                 _ortvalue_to_cupy(ort_outputs[0]),
                 _ortvalue_to_cupy(ort_outputs[1]),
@@ -82,7 +82,7 @@ class AttentionComputationORT:
                 self.input_names[1]: _cupy_to_ortvalue(k),
                 self.input_names[2]: _cupy_to_ortvalue(v),
             }
-            ort_outputs = self.session.run_with_iobinding(feed, run_options=self.run_options)
+            ort_outputs = self.session.run_ortvalues(feed, run_options=self.run_options)
             return _ortvalue_to_cupy(ort_outputs[0])
         feed_dict = {
             self.input_names[0]: q,
@@ -110,11 +110,11 @@ class MLPComputationORT:
             x_ort = _cupy_to_ortvalue(x) if isinstance(x, cp.ndarray) else x
             enc_ort = enc_feat if isinstance(enc_feat, ort.OrtValue) else _cupy_to_ortvalue(enc_feat)
             feed = {self.input_names[0]: x_ort, self.input_names[1]: enc_ort}
-            ort_outputs = self.session.run_with_iobinding(feed, run_options=self.run_options)
+            ort_outputs = self.session.run_ortvalues(feed, run_options=self.run_options)
             return _ortvalue_to_cupy(ort_outputs[0])
         feed_dict = {self.input_names[0]: x, self.input_names[1]: enc_feat}
         if self._use_iobinding:
-            return self.session.run_with_iobinding(feed_dict, run_options=self.run_options)[0]
+            return self.session.run_ortvalues(feed_dict, run_options=self.run_options)[0]
         return self.session.run(None, feed_dict, run_options=self.run_options)[0]
 
     def __del__(self):
@@ -135,11 +135,11 @@ class OutputProjectionORT:
                 self.input_names[0]: _cupy_to_ortvalue(att_out),
                 self.input_names[1]: _cupy_to_ortvalue(x),
             }
-            ort_outputs = self.session.run_with_iobinding(feed, run_options=self.run_options)
+            ort_outputs = self.session.run_ortvalues(feed, run_options=self.run_options)
             return _ortvalue_to_cupy(ort_outputs[0])
         feed_dict = {self.input_names[0]: att_out, self.input_names[1]: x}
         if self._use_iobinding:
-            return self.session.run_with_iobinding(feed_dict, run_options=self.run_options)[0]
+            return self.session.run_ortvalues(feed_dict, run_options=self.run_options)[0]
         return self.session.run(None, feed_dict, run_options=self.run_options)[0]
 
     def __del__(self):
@@ -158,7 +158,7 @@ class NormComputationORT:
         if self._use_cupy:
             x_ort = _cupy_to_ortvalue(x) if isinstance(x, cp.ndarray) else x
             feed = {self.input_names[0]: x_ort}
-            ort_outputs = self.session.run_with_iobinding(feed, run_options=self.run_options)
+            ort_outputs = self.session.run_ortvalues(feed, run_options=self.run_options)
             return _ortvalue_to_cupy(ort_outputs[0])
         feed_dict = {self.input_names[0]: x}
         if self._use_iobinding:

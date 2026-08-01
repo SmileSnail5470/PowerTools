@@ -1,6 +1,6 @@
 from pathlib import Path
 from PIL import Image
-from color_fix import wavelet_color_fix
+from app.algorithms.image_edit.color_fix import wavelet_color_fix
 from app.algorithms.image_edit.pipeline import Pipeline
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
