@@ -8,7 +8,7 @@ from typing import Sequence
 import numpy as np
 from PIL import Image
 from tokenizers import Tokenizer
-from app.algorithms.image_edit.backend import OnnxModule, asnumpy
+from app.algorithms.image_edit.general_edit.backend import OnnxModule, asnumpy
 
 
 image_edit_logger = logging.getLogger("ImageEdit")
@@ -182,7 +182,7 @@ class Pipeline:
         self,
         model_dir: str | Path,
         use_io_binding: bool | None = None,
-        use_cupy: bool | None = None,
+        use_cupy: bool = True,
         low_memory: bool = True,
         intra_op_num_threads: int | None = None,
         enable_cpu_mem_arena: bool = True,

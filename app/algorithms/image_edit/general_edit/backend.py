@@ -39,7 +39,7 @@ class OnnxModule:
         path: str | Path,
         use_io_binding: bool | None = None,
         session_options: ort.SessionOptions | None = None,
-        use_cupy: bool | None = None,
+        use_cupy: bool = True,
         **session_option_kwargs,
     ):
         self.path = Path(path)

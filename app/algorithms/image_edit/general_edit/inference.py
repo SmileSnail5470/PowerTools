@@ -1,7 +1,7 @@
 from pathlib import Path
 from PIL import Image
 from app.algorithms.image_edit.color_fix import wavelet_color_fix
-from app.algorithms.image_edit.pipeline import Pipeline
+from app.algorithms.image_edit.general_edit.pipeline import Pipeline
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
 
@@ -12,7 +12,7 @@ class ImageEditInference:
         model_dir,
         low_memory: bool = True,
         use_io_binding: bool | None = None,
-        use_cupy: bool | None = None,
+        use_cupy: bool = True,
         intra_op_num_threads: int | None = None,
         num_inference_steps: int = 4,
         verbose: bool = True,

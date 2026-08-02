@@ -931,9 +931,9 @@ class SoftwareCard(QFrame):
         header_layout = QHBoxLayout()
         header_layout.addLayout(name_layout)
         header_layout.addStretch()
-        header_layout.addWidget(self.status_label, alignment=Qt.AlignVCenter)
 
         path_layout = QHBoxLayout()
+        path_layout.setSpacing(8)
         self.path_input = QLineEdit()
         default_path = cfg.get(self.global_config_params_name_map[self.name.lower()])
         if default_path and default_path != cfg.softwareInvalidPath:
@@ -972,6 +972,7 @@ class SoftwareCard(QFrame):
 
         path_layout.addWidget(self.path_input)
         path_layout.addWidget(browse_btn)
+        path_layout.addWidget(self.status_label)
         path_layout.addWidget(test_btn)
 
         layout.addLayout(header_layout)
