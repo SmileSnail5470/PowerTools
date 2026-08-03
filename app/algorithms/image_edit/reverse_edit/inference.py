@@ -64,7 +64,7 @@ class ReverseEditInference:
                 guidance_scale=1.0,
             )[0]
             rec_image = rec_image.resize(image_ori.size, Image.Resampling.LANCZOS)
-            rec_image = wavelet_color_fix(rec_image, image_ori) if self.use_color_fix else rec_image
+            rec_image = wavelet_color_fix(rec_image, image_ori) if self.use_color_fix and edit_prompt==prompt else rec_image
             rec_image.save(output_path)
         self.pipe.release_all()
 
@@ -118,7 +118,7 @@ class ReverseEditInference:
             final_img_np = np.clip(final_img_np, 0, 255).astype(np.uint8)
             rec_image = Image.fromarray(final_img_np)
             rec_image = rec_image.crop((0, 0, original_w, original_h))
-            if self.use_color_fix:
+            if self.use_color_fix and edit_prompt == prompt:
                 rec_image = wavelet_color_fix(rec_image, image_ori)   
             rec_image.save(output_path)
         self.pipe.release_all()

@@ -454,10 +454,10 @@ class HeaderWidget(QWidget):
         return ""
 
 
-class ImageEdit(QWidget):
+class BlindWatermarkRemove(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setObjectName("ImageEdit")
+        self.setObjectName("BlindWatermarkRemove")
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
