@@ -1,4 +1,0 @@
-完成以下任务：
-1. app/ui/view/watermark_remove.py 图片模型新增加一个模型，模型卡片使用【智能重绘】【语义理解强，细节丰富，复杂场景效果佳，速度较慢】放第一个位置，最终调用 app/algorithms/image_edit/general_edit/inference.py。
-2. app/ui/view/blind_watermark.py 控制面板的裁剪设置改为是否启用颜色修复开关。备注说明，确保输出和输入图片色彩空间一致。图片模型最终调用 app/algorithms/image_edit/reverse_edit/inference.py。
-3. app/ui/view/新增加一个 image_edit.py 类，控制面板支持提示词输入，参考图输入，模型分为图片模型和视频模型，目前视频模型tab不可选择，为后面留接口。参考图支持区域选择。

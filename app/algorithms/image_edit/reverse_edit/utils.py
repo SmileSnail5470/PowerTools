@@ -7,7 +7,7 @@ from pathlib import Path
 from tokenizers import Tokenizer
 
 
-ONNX_WEIGHTS_NAME = "model.onnx"
+ONNX_WEIGHTS_NAME = "model.encmodel"
 PIPELINE_CONFIG_NAME = "model_index.json"
 SCHEDULER_CONFIG_NAME = "scheduler_config.json"
 COMPONENT_CONFIG_NAME = "config.json"

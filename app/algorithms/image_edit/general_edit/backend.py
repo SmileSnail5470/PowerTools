@@ -43,7 +43,7 @@ class OnnxModule:
         **session_option_kwargs,
     ):
         self.path = Path(path)
-        self.path = self.path / "model.onnx" if self.path.is_dir() else self.path
+        self.path = self.path / "model.encmodel" if self.path.is_dir() else self.path
         if not self.path.exists():
             raise FileNotFoundError(self.path)
         options = session_options or general_session(**session_option_kwargs)

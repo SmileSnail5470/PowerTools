@@ -110,8 +110,9 @@ class ORTPipeline:
             kwargs["intra_op_num_threads"] = self.intra_op_num_threads
         options = general_session(**kwargs)
         providers, provider_options = general_provider()
+        path = self.model_dir / name / ONNX_WEIGHTS_NAME
         sess = general_inference_session(
-            model_path=str(self.path),
+            model_path=str(path),
             sess_options=options,
             providers=providers,
             provider_options=provider_options,

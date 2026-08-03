@@ -160,7 +160,7 @@ class ImageEditInference:
         output_np[dilated_mask > 127] = result_np[dilated_mask > 127]
         return Image.fromarray(output_np)
 
-    def infer_local_patches(self, prompt, output_path, image, mask_np):
+    def infer_local_patches(self, prompt, image, mask_np):
         if isinstance(mask_np, Image.Image):
             mask_np = np.array(mask_np.convert("L"))
         if mask_np.ndim == 3:
@@ -184,10 +184,9 @@ class ImageEditInference:
                 output = self._infer_crop_region(prompt, output, mask_np, crop_box)
         if output.size != (img_width, img_height):
             output = output.resize((img_width, img_height), resample=Image.Resampling.LANCZOS)
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        output.save(output_path)
+        return np.array(output)
 
-    def infer(self, prompt, output_path, input_path = None, mask = None):
+    def infer(self, prompt, input_path = None, mask = None):
         if input_path is not None:
             image_list = [Image.open(p).convert("RGB") for p in self._collect(input_path)]
         else:
@@ -197,9 +196,8 @@ class ImageEditInference:
         if mask is None:
             width, height, ori_width, ori_height = self._update_dimensions_from_image(image_list)
             image = self._infer(prompt=prompt, input_images=image_list, width=width, height=height)
-            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
             if ori_height and ori_width:
                 image = image.resize((ori_width, ori_height), resample=Image.Resampling.LANCZOS)
-            image.save(output_path)
+            return np.array(image)
         else:
-            self.infer_local_patches(prompt, output_path, image_list[0], mask)
+            return self.infer_local_patches(prompt, image_list[0], mask)

@@ -260,6 +260,11 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         image_layout.setContentsMargins(0, 6, 0, 6)
         image_layout.setSpacing(0)
 
+        general_edit_card = StyleCard("#667eea", self.tr("智能重绘"), self.tr("语义理解强，细节丰富，复杂场景效果佳，速度较慢"))
+        general_edit_card.set_name("general_edit")
+        image_layout.addWidget(general_edit_card)
+        image_layout.addWidget(CardSeparator(self))
+
         patchwiper_card = StyleCard("#4facfe", self.tr("细节增强"), self.tr("智能重建细节，提升清晰度，速度慢(不适合字幕)"))
         patchwiper_card.set_name("patchwiper")
         image_layout.addWidget(patchwiper_card)
@@ -287,7 +292,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         image_layout.addStretch()
         self.stacked_widget.addWidget(image_container)
         
-        self.image_cards = [patchwiper_card, emdf_card, grig_card, lama_card, coordfill_card]
+        self.image_cards = [general_edit_card, patchwiper_card, emdf_card, grig_card, lama_card, coordfill_card]
         self.all_cards.extend(self.image_cards)
 
         video_container = QWidget()
