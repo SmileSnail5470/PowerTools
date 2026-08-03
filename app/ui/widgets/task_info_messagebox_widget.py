@@ -39,6 +39,8 @@ param_name_map = {
     "drop_score": "OCR 识别置信度",
     "use_textline_ori": "文本行方向矫正",
     "use_color_fix": "颜色校正",
+    "prompt": "编辑提示词",
+    "mask_boxes": "编辑区域",
 }
 
 class TaskInfoMessageBox(MessageBoxBase):
@@ -277,9 +279,9 @@ class TaskInfoMessageBox(MessageBoxBase):
             
             row, col = 0, 0
             for key, value in self.task_params.items():
-                if key in ["input_path", "output_path", "output_format"]:
+                if key in ["input_path", "output_path"]:
                     continue
-                param_widget = self.create_param_widget(param_name_map[key], value if value not in value_map else value_map[value])
+                param_widget = self.create_param_widget(param_name_map[key], str(value) if str(value) not in value_map else value_map[value])
                 params_grid.addWidget(param_widget, row, col)
                 col += 1
                 if col >= 1:
@@ -290,11 +292,46 @@ class TaskInfoMessageBox(MessageBoxBase):
 
             output_section = self.create_section(self.tr("💾 输出保存设置"))
             output_path = self.create_path_label(self.task_params["output_path"], header=self.tr("输出位置："))
-            output_format = self.create_path_label(self.task_params["output_format"], header=self.tr("输出格式："))
             output_section.layout().addWidget(output_path)
-            output_section.layout().addWidget(output_format)
             
             body_layout.addWidget(input_section)
+            body_layout.addWidget(scroll_area)
+            body_layout.addWidget(output_section)
+        if self.task_type == "image-edit":
+            value_map = {
+                "general_edit": "智能重绘",
+            }
+            scroll_area = QScrollArea()
+            scroll_area.setWidgetResizable(True)
+            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            scroll_area.setStyleSheet("""
+                QScrollArea {
+                    background-color: #f5f5f5;
+                    border: none;
+                    border-radius: 12px;
+                }
+            """)
+            params_section = self.create_section(self.tr("⚙️ 图像编辑参数"))
+            params_grid = QGridLayout()
+            params_grid.setSpacing(10)
+            
+            row, col = 0, 0
+            for key, value in self.task_params.items():
+                if key in ["output_path"]:
+                    continue
+                param_widget = self.create_param_widget(param_name_map[key], str(value) if str(value) not in value_map else value_map[value])
+                params_grid.addWidget(param_widget, row, col)
+                col += 1
+                if col >= 1:
+                    col = 0
+                    row += 1
+            params_section.layout().addLayout(params_grid)
+            scroll_area.setWidget(params_section)
+
+            output_section = self.create_section(self.tr("💾 输出保存设置"))
+            output_path = self.create_path_label(self.task_params["output_path"], header=self.tr("输出位置："))
+            output_section.layout().addWidget(output_path)
+            
             body_layout.addWidget(scroll_area)
             body_layout.addWidget(output_section)
         

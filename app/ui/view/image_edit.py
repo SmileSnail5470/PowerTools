@@ -15,10 +15,11 @@ from app.ui.library.qfluentwidgets import (
 
 from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.file_selector_widget import FileSelectorWidget
-from app.ui.widgets.custom_card_group_widget import StyleCard, CardSeparator
+from app.ui.widgets.custom_card_group_widget import StyleCard
 from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
+from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
 
 from app.ui.common.event_bus import global_event_bus
 from app.controllers.task_manager import global_task_manager
@@ -50,7 +51,6 @@ class PromptInputCard(HeaderCardWidget):
         self.viewLayout.addLayout(main_layout)
 
         self.prompt_edit = QTextEdit(self)
-        self.prompt_edit.setPlaceholderText(self.tr("输入编辑提示词【建议英文】，描述期望编辑效果..."))
         self.prompt_edit.setMaximumHeight(100)
         self.prompt_edit.setStyleSheet("""
             QTextEdit {
@@ -58,10 +58,12 @@ class PromptInputCard(HeaderCardWidget):
                 border-radius: 8px;
                 padding: 8px;
                 background-color: #fafafa;
+                color: #1a1a1a;
             }
             QTextEdit:focus {
                 border: 1px solid #667eea;
                 background-color: #ffffff;
+                color: #000000;
             }
         """)
         setFont(self.prompt_edit, fontSize=13)
@@ -80,7 +82,7 @@ class PromptInputCard(HeaderCardWidget):
 class ReferenceImageCard(HeaderCardWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setTitle(self.tr("🖼️ 参考图"))
+        self.setTitle(self.tr("🖼️ 参考图（可选）"))
         self.setBorderRadius(8)
 
         main_layout = QVBoxLayout()
@@ -96,46 +98,43 @@ class ReferenceImageCard(HeaderCardWidget):
         main_layout.addWidget(self.file_selector)
 
         preview_layout = QHBoxLayout()
-        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setContentsMargins(0, 10, 0, 0)
         preview_layout.setSpacing(8)
-
-        self.preview_label = QLabel(self)
-        self.preview_label.setFixedSize(120, 90)
-        self.preview_label.setAlignment(Qt.AlignCenter)
-        self.preview_label.setStyleSheet("""
-            QLabel {
-                border: 1px dashed #ccc;
-                border-radius: 8px;
-                background-color: #f9f9f9;
-                color: #999;
-                font-size: 12px;
-            }
-        """)
-        self.preview_label.setText(self.tr("无预览"))
-        preview_layout.addWidget(self.preview_label)
 
         btn_layout = QVBoxLayout()
         btn_layout.setSpacing(6)
 
-        self.area_select_btn = PushButton(text=self.tr("区域选择"))
+        self.area_select_btn = PushButton(text=self.tr("🖼 水印区域选择"))
         self.area_select_btn.setEnabled(False)
         self.area_select_btn.setStyleSheet("""
             PushButton { padding: 6px 12px; border-radius: 6px; font-size: 12px; }
+            PushButton { 
+                background: #F1F5F9; 
+                border: 1px solid #E2E8F0; 
+                border-radius: 6px; 
+                padding: 6px; 
+                color: #0F172A;
+            }
+            PushButton:hover { 
+                background: #E2E8F0; 
+                border-color: #CBD5E1;
+            }
+            PushButton:pressed { 
+                background: #CBD5E1; 
+                padding-top: 7px;
+                padding-bottom: 5px;
+            }
         """)
+        setFont(self.area_select_btn, fontSize=12)
         self.area_select_btn.clicked.connect(self._on_area_select)
         btn_layout.addWidget(self.area_select_btn)
 
         self.area_info_label = CaptionLabel(self.tr("未选择区域"))
+        self.area_info_label.setAlignment(Qt.AlignCenter)
         self.area_info_label.setStyleSheet("color: #999999;")
         btn_layout.addWidget(self.area_info_label)
-        btn_layout.addStretch()
         preview_layout.addLayout(btn_layout)
-        preview_layout.addStretch()
         main_layout.addLayout(preview_layout)
-
-        hint_label = CaptionLabel(self.tr("选择参考图后可框选需要编辑的区域（Mask）"))
-        hint_label.setStyleSheet("color: #999999;")
-        main_layout.addWidget(hint_label)
 
         self._file_path = ""
 
@@ -143,37 +142,27 @@ class ReferenceImageCard(HeaderCardWidget):
         self._file_path = file_path
         image_edit_params.set_param("mask_boxes", [])
         self.area_info_label.setText(self.tr("未选择区域"))
-
         if file_path and os.path.isfile(file_path):
             pixmap = QPixmap(file_path)
             if not pixmap.isNull():
-                self.preview_label.setPixmap(
-                    pixmap.scaled(120, 90, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                )
                 self.area_select_btn.setEnabled(True)
             else:
-                self.preview_label.setText(self.tr("无预览"))
                 self.area_select_btn.setEnabled(False)
         else:
-            self.preview_label.setText(self.tr("无预览"))
             self.area_select_btn.setEnabled(False)
-
         global_event_bus.imageEdit_InputFileUpdate.emit(file_path)
 
     def _on_area_select(self):
         if not self._file_path:
             return
-        from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
-        dialog = AreaSelectorDialog(
-            file_path=self._file_path, single_area_only=False, parent=self.window()
-        )
-        if dialog.exec():
-            boxes = dialog.saved_boxes
-            image_edit_params.set_param("mask_boxes", boxes)
-            if boxes:
-                self.area_info_label.setText(self.tr("已选择 {0} 个区域").format(len(boxes)))
-            else:
-                self.area_info_label.setText(self.tr("未选择区域"))
+        dialog = AreaSelectorDialog(file_path=self._file_path, single_area_only=False, parent=self.window())
+        dialog.exec()
+        boxes = dialog.get_results()
+        image_edit_params.set_param("mask_boxes", boxes)
+        if boxes:
+            self.area_info_label.setText(self.tr("已选择 {0} 个区域").format(len(boxes)))
+        else:
+            self.area_info_label.setText(self.tr("未选择区域"))
 
 
 class ModelSelectCard(HeaderCardWidget):
@@ -357,9 +346,7 @@ class OutputSettingsCard(HeaderCardWidget):
         self.save_location_line_edit.setPlaceholderText(self.tr("选择保存位置"))
         save_location_action = QAction(FluentIcon.FOLDER_ADD.qicon(), "", triggered=self.save_location_browse)
         self.save_location_line_edit.addAction(save_location_action, QLineEdit.TrailingPosition)
-        bind_widget_to_param(
-            self.save_location_line_edit, "textChanged", image_edit_params, "output_path", transform=None
-        )
+        bind_widget_to_param(self.save_location_line_edit, "textChanged", image_edit_params, "output_path", transform=None)
         output_settings_layout.addWidget(self.save_location_line_edit)
 
         self.viewLayout.addLayout(output_settings_layout)
@@ -637,16 +624,14 @@ class HeaderWidget(QWidget):
             error_msg = self.tr("请输入编辑提示词")
             return error_msg, task_params
         task_params["prompt"] = params["prompt"].strip()
-        if "input_path" not in params or not params["input_path"]:
-            error_msg = self.tr("请选择参考图")
-            return error_msg, task_params
-        if isinstance(params["input_path"], str) and " " in params["input_path"]:
-            error_msg = self.tr("输入路径不能包含空格")
-            return error_msg, task_params
-        if isinstance(params["input_path"], str) and not params["input_path"].isascii():
-            error_msg = self.tr("输入路径: 不支持非英文路径")
-            return error_msg, task_params
-        task_params["input_path"] = params["input_path"]
+        if "input_path" in params and params["input_path"]:
+            if isinstance(params["input_path"], str) and " " in params["input_path"]:
+                error_msg = self.tr("输入路径不能包含空格")
+                return error_msg, task_params
+            if isinstance(params["input_path"], str) and not params["input_path"].isascii():
+                error_msg = self.tr("输入路径: 不支持非英文路径")
+                return error_msg, task_params
+            task_params["input_path"] = params["input_path"]
         if "model_name" not in params or not params["model_name"]:
             error_msg = self.tr("请选择编辑模型")
             return error_msg, task_params
