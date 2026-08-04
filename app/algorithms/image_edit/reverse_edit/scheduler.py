@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 import numpy as np
-from app.algorithms.image_edit.reverse_edit.utils import SCHEDULER_CONFIG_NAME, load_json
+from app.algorithms.image_edit.reverse_edit.utils import config_dict
 
 
 def betas_for_alpha_bar(num_diffusion_timesteps: int, max_beta: float = 0.999) -> np.ndarray:
@@ -88,7 +88,7 @@ class DDIMScheduler:
         path = Path(pretrained_path)
         if subfolder:
             path = path / subfolder
-        config = load_json(path / SCHEDULER_CONFIG_NAME)
+        config = config_dict["scheduler_config"]
         config.pop("_class_name", None)
         config.pop("_diffusers_version", None)
         config.update(kwargs)

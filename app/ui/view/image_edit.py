@@ -483,7 +483,7 @@ class PreviewWidget(QWidget):
 class HeaderWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
-        header = GradientHeader(parent=self, start=QColor(102, 126, 234), stop=QColor(118, 75, 162))
+        header = GradientHeader(parent=self, start=QColor(67, 233, 123), stop=QColor(56, 249, 215))
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(30, 20, 30, 20)
         header_layout.setSpacing(10)

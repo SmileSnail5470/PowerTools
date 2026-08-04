@@ -1,7 +1,8 @@
 import numpy as np
 from PIL import Image
 from app.algorithms.image_edit.color_fix import wavelet_color_fix
-from app.algorithms.image_edit.reverse_edit.pipeline import ORTPipeline, RunConfig
+from app.algorithms.image_edit.reverse_edit.utils import RunConfig
+from app.algorithms.image_edit.reverse_edit.pipeline import ORTPipeline
 
 
 class ReverseEditInference:
@@ -12,11 +13,6 @@ class ReverseEditInference:
         use_io_binding: bool | None = None,
         use_cupy: bool = True,
         intra_op_num_threads: int | None = None,
-        num_inference_steps: int = 50,
-        num_inversion_steps: int = 50,
-        num_renoise_steps: int = 1,
-        guidance_scale: float = 0.0,
-        lambda_ac: float = 20.0,
         no_reconstruction: bool = False,
         vae_sample_mode: str = "sample",
         use_color_fix: bool = True,
@@ -27,11 +23,6 @@ class ReverseEditInference:
         self.use_io_binding = use_io_binding
         self.use_cupy = use_cupy
         self.intra_op_num_threads = intra_op_num_threads
-        self.num_inference_steps = num_inference_steps
-        self.num_inversion_steps = num_inversion_steps
-        self.num_renoise_steps = num_renoise_steps
-        self.guidance_scale = guidance_scale
-        self.lambda_ac = lambda_ac
         self.no_reconstruction = no_reconstruction
         self.vae_sample_mode = vae_sample_mode
         self.use_color_fix = use_color_fix
@@ -44,14 +35,7 @@ class ReverseEditInference:
             intra_op_num_threads=self.intra_op_num_threads or None,
             vae_sample_mode=self.vae_sample_mode,
         )
-        self.config = RunConfig(
-                num_inference_steps=self.num_inference_steps,
-                num_inversion_steps=self.num_inversion_steps,
-                num_renoise_steps=self.num_renoise_steps,
-                guidance_scale=self.guidance_scale,
-                noise_regularization_lambda_ac=self.lambda_ac,
-                perform_noise_correction=False,
-            )
+        self.config = RunConfig()
 
     def _infer_sample_size(self, image_ori, output_path, prompt, edit_prompt=None):
         inv_latent, _ = self.pipe.invert(image_ori, prompt, self.config)

@@ -141,7 +141,7 @@ def _apply_cfg(noise_pred: np.ndarray, guidance_scale: float) -> np.ndarray:
     return uncond + guidance_scale * (text - uncond)
 
 
-def inversion_step(
+def optinoise_step(
     pipe,
     z_t: np.ndarray,
     t: int,

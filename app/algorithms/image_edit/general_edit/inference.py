@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from PIL import Image
 import cv2
@@ -6,7 +7,7 @@ from app.algorithms.image_edit.general_edit.pipeline import Pipeline
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
 CROP_EXPAND_PIXELS = 120
-SCALE_THRESHOLD = 1408
+SCALE_THRESHOLD = 1408 if int(os.environ["POWERTOOLS_GPU_MEMORY_LIMIT"]) >= 12 else 1152
 
 
 class ImageEditInference:
@@ -40,25 +41,28 @@ class ImageEditInference:
         return [str(path)]
 
     def _update_dimensions_from_image(self, image_list):
+        gpu_memory_limit = int(os.environ.get("POWERTOOLS_GPU_MEMORY_LIMIT", 16))
         if image_list is None or len(image_list) == 0:
-            return 1024, 1024, None, None
+            res_size = 1024 if gpu_memory_limit >= 12 else 960 if gpu_memory_limit >= 8 else 768
+            return res_size, res_size, None, None
+        max_side = 1024 if gpu_memory_limit >= 12 else 832
         img = image_list[0]
         img_width, img_height = img.size
-        if max(img_width, img_height) <= 1024:
+        if max(img_width, img_height) <= max_side:
             new_height = img_height
             new_width = img_width
         else:
             aspect_ratio = img_width / img_height
             if aspect_ratio >= 1:
-                new_width = 1024
-                new_height = int(1024 / aspect_ratio)
+                new_width = max_side
+                new_height = int(max_side / aspect_ratio)
             else:
-                new_height = 1024
-                new_width = int(1024 * aspect_ratio)
+                new_height = max_side
+                new_width = int(max_side * aspect_ratio)
         new_width = round(new_width / 8) * 8
         new_height = round(new_height / 8) * 8
-        new_width = max(256, min(1024, new_width))
-        new_height = max(256, min(1024, new_height))
+        new_width = max(256, min(max_side, new_width))
+        new_height = max(256, min(max_side, new_height))
         return new_width, new_height, img_width, img_height
 
     def _infer(self, prompt, input_images=None, seed=42, width=1024, height=1024, num_inference_steps=None):

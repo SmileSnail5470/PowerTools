@@ -151,10 +151,9 @@ class FeatureCard(QFrame):
         gradients = {
             'watermark-add': 'qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #667eea, stop:1 #764ba2)',
             'watermark-remove': 'qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #4facfe, stop:1 #00f2fe)',
-            'screenshot': 'qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #fa709a, stop:1 #fee140)',
-            'scroll-screenshot': 'qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #30cfd0, stop:1 #330867)',
             'text-extract': 'qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #f093fb, stop:1 #f5576c)',
-            'image-edit': 'qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #a8edea, stop:1 #fed6e3)'
+            'blind-watermark-remove': 'qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #a8edea, stop:1 #fed6e3)',
+            'image-edit': 'qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #43e97b, stop:1 #38f9d7)'
         }
         return gradients.get(card_type, gradients['watermark-add'])
     
@@ -325,19 +324,17 @@ class Home(QWidget):
         cards_data = [
             ("💧", "水印添加", "为您的图片添加个性化水印，保护版权，提升品牌识别度。支持多种水印样式和自定义设置。", None, "watermark-add"),
             ("🧹", "水印移除", "智能识别并移除图片中的水印，还原图片原始状态。采用先进的AI算法，确保移除效果自然。", "AI驱动", "watermark-remove"),
-            # ("📸", "屏幕截图", "快速截取屏幕内容，支持多种截图模式和编辑功能。内置强大的编辑工具，让截图更加专业。", None, "screenshot"),
-            # ("📜", "滚动截图", "智能滚动并截取长页面内容，完美保存完整信息。自动识别滚动区域，无需手动操作。", None, "scroll-screenshot"),
-            ("📝", "文字提取", "OCR智能识别图片中的文字，支持多语言高精度识别。先进的识别引擎，确保文字提取准确率。", None, "text-extract"),
-            ("🔍", "暗水印去除", "智能识别并去除图片中的隐藏盲水印，还原图片原始状态。采用先进的AI算法，确保去除效果自然。", "AI驱动", "image-edit")
+            ("📝", "文字提取", "OCR智能识别图片中的文字，支持多语言高精度识别。先进的识别引擎，确保文字提取准确率。", "AI驱动", "text-extract"),
+            ("🔍", "暗水印去除", "智能识别并去除图片中的隐藏盲水印，还原图片原始状态。采用先进的AI算法，确保去除效果自然。", "AI驱动", "blind-watermark-remove"),
+            ("📸", "图像编辑", "AI图像创作平台，支持文生图、图片编辑等多种能力。", "AI驱动", "image-edit")
         ]
 
         features_map = {
             'watermark-add': ['支持文字和图片水印', '自定义位置和透明度', '批量处理功能', '支持盲水印'],
             'watermark-remove': ['AI智能识别技术', '保持图片质量', '支持多种水印类型', '一键批量处理'],
-            # 'screenshot': ['区域截图和窗口截图', '内置编辑工具', '快捷键支持', '云同步功能'],
-            # 'scroll-screenshot': ['自动滚动检测', '智能拼接算法', '支持网页和文档', '高质量输出'],
             'text-extract': ['多语言支持', '高精度识别', '可编辑和导出', '表格识别功能'],
-            'image-edit': ['AI智能识别技术', '保持图片质量', '支持批量处理', '多种模型可选']
+            'blind-watermark-remove': ['AI智能技术', '保持图片质量', '支持批量处理', '多种模型可选'],
+            'image-edit': ['文生图', '图片编辑', '先进AI算法驱动', '高质量输出']
         }
         
         self.cards = []
@@ -345,8 +342,8 @@ class Home(QWidget):
             card = FeatureCard(icon, title, desc, badge, card_type, features_map[card_type])
             card.clicked.connect(self.handle_card_click)
             self.cards.append(card)
-            row = i // 2
-            col = i % 2
+            row = i // 3
+            col = i % 3
             cards_layout.addWidget(card, row, col)
         
         features_layout.addWidget(cards_widget)
@@ -357,10 +354,9 @@ class Home(QWidget):
         card_index = {
             'watermark-add': 3,
             'watermark-remove': 4,
-            # 'screenshot': 4,
-            # 'scroll-screenshot': 5,
             'text-extract': 5,
-            'image-edit': 6
+            'blind-watermark-remove': 6,
+            'image-edit': 7,
         }
         index = card_index.get(card_type, 0)
         self.window().stackedWidget.setCurrentIndex(index)

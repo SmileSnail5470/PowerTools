@@ -60,6 +60,7 @@ class Config(QConfig):
 
     # 软件设置
     ffmpeg_path = ConfigItem("SoftwareSettings", "FFmpegPath", softwareInvalidPath, FolderValidator())
+    corePluginPath = ConfigItem("SoftwareSettings", "CorePluginPath", "", FolderValidator())
     # 显卡环境配置
     gpuMemoryLimit = OptionsConfigItem("SoftwareSettings", "GPUMemoryLimit", "16", OptionsValidator(["6", "8", "12", "16", "24"]))
     cudaPath = ConfigItem("SoftwareSettings", "CUDAPath", softwareInvalidPath, FolderValidator())
@@ -93,6 +94,8 @@ class Config(QConfig):
         self.ffmpeg_path.valueChanged.connect(update_ffmpeg_path)
         os.environ["POWERTOOLS_LOCAL_AI_MODEL_DEPS"] = self.get(self.localAIModelDeps)
         self.localAIModelDeps.valueChanged.connect(lambda path: os.environ.update({"POWERTOOLS_LOCAL_AI_MODEL_DEPS": path}))
+        os.environ["POWERTOOLS_GPU_MEMORY_LIMIT"] = str(self.get(self.gpuMemoryLimit))
+        self.gpuMemoryLimit.valueChanged.connect(lambda value: os.environ.update({"POWERTOOLS_GPU_MEMORY_LIMIT": str(value)}))
 
     def _update_env(self):
         gpu_config_path = os.path.join(self.softwareInvalidPath, "gpu_env_config.json")

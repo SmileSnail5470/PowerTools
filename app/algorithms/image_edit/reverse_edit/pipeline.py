@@ -1,21 +1,20 @@
 import gc
 import logging
 import time
-from dataclasses import dataclass
 from pathlib import Path
 import numpy as np
-from app.algorithms.image_edit.reverse_edit.ddim import DDIMScheduler
-from app.algorithms.image_edit.reverse_edit.renoise import inversion_step
+from app.algorithms.image_edit.reverse_edit.scheduler import DDIMScheduler
+from app.algorithms.image_edit.reverse_edit.optinoise import optinoise_step
 from app.algorithms.image_edit.reverse_edit.utils import (
-    COMPONENT_CONFIG_NAME,
+    config_dict,
     ONNX_WEIGHTS_NAME,
     CLIPTokenizer,
     denormalize,
-    maybe_load_json,
     numpy_to_pil,
     preprocess_image,
     randn,
-    DiagonalGaussianDistribution
+    DiagonalGaussianDistribution,
+    RunConfig
 )
 from app.algorithms import general_provider, general_session, general_inference_session, ORTEnvironment, evict_session_cache
 ORTEnvironment.initialize()
@@ -23,27 +22,6 @@ ORTEnvironment.initialize()
 
 image_edit_logger = logging.getLogger("ImageEdit")
 _COMPONENTS = ("text_encoder", "unet", "vae_encoder", "vae_decoder")
-
-
-@dataclass
-class RunConfig:
-    seed: int = 7865
-    num_inference_steps: int = 4
-    num_inversion_steps: int = 4
-    guidance_scale: float = 0.0
-    num_renoise_steps: int = 9
-    max_num_renoise_steps_first_step: int = 5
-    inversion_max_step: float = 1.0
-    
-    average_latent_estimations: bool = True
-    average_first_step_range: tuple = (0, 5)
-    average_step_range: tuple = (8, 10)
-
-    noise_regularization_lambda_ac: float = 20.0
-    noise_regularization_lambda_kl: float = 0.065
-    noise_regularization_num_reg_steps: int = 4
-    noise_regularization_num_ac_rolls: int = 5
-    perform_noise_correction: bool = False
 
 
 class ORTPipeline:
@@ -78,8 +56,8 @@ class ORTPipeline:
             raise FileNotFoundError("no onnx model: " + ", ".join(missing))
         self._sessions: dict[str, object] = {}
         self._pinned: set[str] = set()
-        vae_cfg = maybe_load_json(self.model_dir / "vae_encoder" / COMPONENT_CONFIG_NAME) or maybe_load_json(self.model_dir / "vae_decoder" / COMPONENT_CONFIG_NAME)
-        unet_cfg = maybe_load_json(self.model_dir / "unet" / COMPONENT_CONFIG_NAME)
+        vae_cfg = config_dict["vae_encoder_config"] or config_dict["vae_decoder_config"]
+        unet_cfg = config_dict["unet_config"]
         self.vae_scaling_factor = float(vae_cfg.get("scaling_factor", 0.18215))
         block_out_channels = vae_cfg.get("block_out_channels") or [128, 256, 512, 512]
         self.vae_scale_factor = 2 ** (len(block_out_channels) - 1)
@@ -234,7 +212,7 @@ class ORTPipeline:
             total = len(timesteps)
             t0 = time.perf_counter()
             for i, t in enumerate(reversed(timesteps.tolist())):
-                latents = inversion_step(
+                latents = optinoise_step(
                     self,
                     latents,
                     t,

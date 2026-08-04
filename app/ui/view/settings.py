@@ -1117,6 +1117,299 @@ class SoftwareCard(QFrame):
         tmp.update({f"{self.name}_status_info": {"text": text, "color": color}})
         cfg.additionalParams.value.update({"SoftwareSettings": tmp})
 
+
+class CorePluginCard(QFrame):
+    """核心插件验证卡片：选择 .zip 插件包，解压并安装到指定目录。"""
+
+    _STATUS_KEY = "CorePlugin_status_info"
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("softwareCard")
+        self._zip_path: str = ""
+        self._setup_ui()
+        self._restore_status()
+
+    # ------------------------------------------------------------------ UI ---
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        # ── 标题行 ────────────────────────────────────────────────────────
+        icon_label = QLabel("🧩")
+        icon_label.setFixedSize(40, 40)
+        icon_label.setAlignment(Qt.AlignCenter)
+        setFont(icon_label, 20)
+        icon_label.setStyleSheet("""
+            QLabel {
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:1,
+                    stop:0 #f59e0b, stop:1 #d97706);
+                border-radius: 10px;
+                color: white;
+            }
+        """)
+
+        name_info = QVBoxLayout()
+        name_info.setSpacing(2)
+        name_label = QLabel(self.tr("核心插件"))
+        setFont(name_label, 16, QFont.Bold)
+        name_label.setStyleSheet("color: #1f2937;")
+        desc_label = QLabel(self.tr("指定插件 .zip 包，解压安装到目标目录"))
+        setFont(desc_label, 12, QFont.Bold)
+        desc_label.setStyleSheet("color: #6b7280;")
+        name_info.addWidget(name_label)
+        name_info.addWidget(desc_label)
+
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(10)
+        header_layout.addWidget(icon_label)
+        header_layout.addLayout(name_info)
+        header_layout.addStretch()
+        layout.addLayout(header_layout)
+
+        # ── 插件 zip 行 ───────────────────────────────────────────────────
+        zip_row = QHBoxLayout()
+        zip_row.setSpacing(8)
+
+        zip_label = QLabel(self.tr("插件包:"))
+        setFont(zip_label, 13, QFont.DemiBold)
+        zip_label.setStyleSheet("color: #374151;")
+        zip_row.addWidget(zip_label)
+
+        self.zip_input = QLineEdit()
+        self.zip_input.setPlaceholderText(self.tr("选择核心插件 .zip 文件"))
+        self.zip_input.setReadOnly(True)
+        setFont(self.zip_input, 13)
+        self.zip_input.setStyleSheet(self._input_style())
+        zip_row.addWidget(self.zip_input, stretch=1)
+
+        browse_zip_btn = QPushButton()
+        browse_zip_btn.setIcon(FluentIcon.FOLDER_ADD.qicon())
+        browse_zip_btn.setStyleSheet(self._btn_style(bg="#f3f4f6", hover="#d1d5db"))
+        browse_zip_btn.setToolTip(self.tr("选择 .zip 文件"))
+        browse_zip_btn.clicked.connect(self._select_zip_file)
+        zip_row.addWidget(browse_zip_btn)
+
+        layout.addLayout(zip_row)
+
+        # ── 安装目录行 ────────────────────────────────────────────────────
+        dest_row = QHBoxLayout()
+        dest_row.setSpacing(8)
+
+        dest_label = QLabel(self.tr("安装目录:"))
+        setFont(dest_label, 13, QFont.DemiBold)
+        dest_label.setStyleSheet("color: #374151;")
+        dest_row.addWidget(dest_label)
+
+        self.dest_input = QLineEdit()
+        saved = cfg.get(cfg.corePluginPath)
+        if saved and saved != cfg.softwareInvalidPath:
+            self.dest_input.setText(saved)
+        else:
+            self.dest_input.setPlaceholderText(self.tr("选择插件安装目录"))
+        self.dest_input.textChanged.connect(self._on_dest_changed)
+        setFont(self.dest_input, 13)
+        self.dest_input.setStyleSheet(self._input_style())
+        dest_row.addWidget(self.dest_input, stretch=1)
+
+        browse_dest_btn = QPushButton()
+        browse_dest_btn.setIcon(FluentIcon.FOLDER_ADD.qicon())
+        browse_dest_btn.setStyleSheet(self._btn_style(bg="#f3f4f6", hover="#d1d5db"))
+        browse_dest_btn.setToolTip(self.tr("选择安装目录"))
+        browse_dest_btn.clicked.connect(self._select_dest_dir)
+        dest_row.addWidget(browse_dest_btn)
+
+        # 状态徽章 + 验证按钮
+        self.status_badge = StatusBadge(text=self.tr("未验证"), color="#eab308")
+        dest_row.addWidget(self.status_badge, alignment=Qt.AlignVCenter)
+
+        self.verify_btn = QPushButton(self.tr("验证"))
+        setFont(self.verify_btn, 12, QFont.Bold)
+        self.verify_btn.setStyleSheet(self._btn_style(bg="#4f46e5", hover="#4338ca", color="white"))
+        self.verify_btn.clicked.connect(self._do_install)
+        dest_row.addWidget(self.verify_btn)
+
+        layout.addLayout(dest_row)
+
+        self.setStyleSheet("""
+            QFrame#softwareCard {
+                background: #fafafa;
+                border: 1px solid #e5e7eb;
+                border-radius: 12px;
+            }
+            QFrame#softwareCard:hover {
+                background: #f9fafb;
+                border: 1px solid #4f46e5;
+            }
+        """)
+
+    # ----------------------------------------------------------------- slots --
+
+    def _select_zip_file(self):
+        files, _ = QFileDialog.getOpenFileName(
+            self,
+            self.tr("选择插件 .zip 文件"),
+            "",
+            self.tr("ZIP 文件 (*.zip)"),
+            options=(
+                QFileDialog.Option.DontUseNativeDialog
+                if sys.platform == "darwin"
+                else QFileDialog.Option(0)
+            ),
+        )
+        if files:
+            self.zip_input.setText(files)
+            self._zip_path = files
+            self._reset_status()
+
+    def _select_dest_dir(self):
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            self.tr("选择安装目录"),
+            "",
+            QFileDialog.Option.ShowDirsOnly
+            | (
+                QFileDialog.Option.DontUseNativeDialog
+                if sys.platform == "darwin"
+                else QFileDialog.Option(0)
+            ),
+        )
+        if directory:
+            if not directory.isascii():
+                MessageBox(
+                    title=self.tr("提醒"),
+                    content=self.tr("不支持非英文路径"),
+                    parent=self.window(),
+                ).exec()
+                return
+            self.dest_input.setText(directory)
+
+    def _on_dest_changed(self, path: str):
+        cfg.set(cfg.corePluginPath, path)
+        self._reset_status()
+
+    def _do_install(self):
+        zip_path = self._zip_path
+        dest_dir = self.dest_input.text().strip()
+
+        if not zip_path or not os.path.isfile(zip_path):
+            TeachingTip.create(
+                target=self.status_badge,
+                icon=InfoBarIcon.ERROR,
+                title=self.tr("警告"),
+                content=self.tr("请先选择有效的 .zip 插件文件"),
+                isClosable=True,
+                tailPosition=TeachingTipTailPosition.BOTTOM,
+                duration=3000,
+                parent=self,
+            )
+            return
+
+        if not dest_dir:
+            TeachingTip.create(
+                target=self.status_badge,
+                icon=InfoBarIcon.ERROR,
+                title=self.tr("警告"),
+                content=self.tr("请先指定插件安装目录"),
+                isClosable=True,
+                tailPosition=TeachingTipTailPosition.BOTTOM,
+                duration=3000,
+                parent=self,
+            )
+            return
+
+        # 执行解压并拷贝
+        error_msg = self._extract_and_install(zip_path, dest_dir)
+
+        if error_msg:
+            self._set_status("Failed", "#dc2626")
+            TeachingTip.create(
+                target=self.status_badge,
+                icon=InfoBarIcon.ERROR,
+                title=self.tr("安装失败"),
+                content=self.tr(error_msg),
+                isClosable=True,
+                tailPosition=TeachingTipTailPosition.BOTTOM,
+                duration=5000,
+                parent=self,
+            )
+        else:
+            self._set_status("OK", "#16a34a")
+
+    def _extract_and_install(self, zip_path: str, dest_dir: str) -> str:
+        """解压 zip 并将内容安装到 dest_dir，返回错误信息字符串，成功返回空串。"""
+        try:
+            if not zipfile.is_zipfile(zip_path):
+                return f"文件不是有效的 ZIP 格式: {os.path.basename(zip_path)}"
+
+            os.makedirs(dest_dir, exist_ok=True)
+
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                # 安全检查：拒绝路径遍历攻击
+                for member in zf.namelist():
+                    member_path = os.path.realpath(os.path.join(dest_dir, member))
+                    if not member_path.startswith(os.path.realpath(dest_dir)):
+                        return f"ZIP 包含非法路径，拒绝安装: {member}"
+
+                zf.extractall(dest_dir)
+
+            logger.info(f"CorePlugin installed: {zip_path} -> {dest_dir}")
+            return ""
+        except PermissionError as e:
+            return f"权限不足，无法写入目录: {e}"
+        except zipfile.BadZipFile:
+            return f"ZIP 文件损坏或格式不正确"
+        except Exception as e:
+            return f"安装失败: {e}"
+
+    # --------------------------------------------------------------- helpers --
+
+    def _reset_status(self):
+        self._set_status("未验证", "#eab308")
+
+    def _set_status(self, text: str, color: str):
+        self.status_badge.setLabel(text=self.tr(text), color=color)
+        tmp = cfg.get(cfg.additionalParams).get("SoftwareSettings", {})
+        tmp[self._STATUS_KEY] = {"text": text, "color": color}
+        cfg.additionalParams.value.update({"SoftwareSettings": tmp})
+
+    def _restore_status(self):
+        try:
+            info = cfg.get(cfg.additionalParams)["SoftwareSettings"][self._STATUS_KEY]
+            self.status_badge.setLabel(text=self.tr(info["text"]), color=info["color"])
+        except Exception:
+            pass
+
+    @staticmethod
+    def _input_style() -> str:
+        return """
+            QLineEdit {
+                padding: 8px 12px;
+                border: 1px solid #d1d5db;
+                border-radius: 8px;
+                background: white;
+                color: #333;
+            }
+            QLineEdit:focus { border: 1px solid #4f46e5; }
+        """
+
+    @staticmethod
+    def _btn_style(bg: str, hover: str, color: str = "#374151") -> str:
+        return f"""
+            QPushButton {{
+                padding: 8px 12px;
+                background: {bg};
+                color: {color};
+                border: none;
+                border-radius: 8px;
+            }}
+            QPushButton:hover {{ background: {hover}; }}
+            QPushButton:pressed {{ background: {hover}; padding: 9px 12px; margin-top: 1px; }}
+        """
+
+
 class Settings(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
@@ -1300,7 +1593,9 @@ class Settings(QWidget):
             parent=self,
         )
 
-        self.software_cards = [ffmpeg_card, gpu_env_card]
+        core_plugin_card = CorePluginCard(parent=self)
+
+        self.software_cards = [ffmpeg_card, gpu_env_card, core_plugin_card]
         for card in self.software_cards:
             group.addCard(card=card)
 

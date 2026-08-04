@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import json
 import os
 import cv2
@@ -8,12 +9,189 @@ from tokenizers import Tokenizer
 
 
 ONNX_WEIGHTS_NAME = "model.encmodel"
-PIPELINE_CONFIG_NAME = "model_index.json"
-SCHEDULER_CONFIG_NAME = "scheduler_config.json"
-COMPONENT_CONFIG_NAME = "config.json"
 TOKENIZER_FILE_NAME = "tokenizer.json"
 HF_TOKENIZER_CONFIG_NAME = "tokenizer_config.json"
 SPECIAL_TOKENS_MAP_NAME = "special_tokens_map.json"
+
+config_dict = {
+    "scheduler_config": {
+        "_class_name": "PNDMScheduler",
+        "_diffusers_version": "0.40.0.dev0",
+        "beta_end": 0.012,
+        "beta_schedule": "scaled_linear",
+        "beta_start": 0.00085,
+        "clip_sample": False,
+        "num_train_timesteps": 1000,
+        "prediction_type": "epsilon",
+        "set_alpha_to_one": False,
+        "skip_prk_steps": True,
+        "steps_offset": 1,
+        "timestep_spacing": "leading",
+        "trained_betas": None
+    },
+    "vae_encoder_config": {
+        "_class_name": "AutoencoderKL",
+        "_diffusers_version": "0.40.0.dev0",
+        "act_fn": "silu",
+        "block_out_channels": [
+            128,
+            256,
+            512,
+            512
+        ],
+        "down_block_types": [
+            "DownEncoderBlock2D",
+            "DownEncoderBlock2D",
+            "DownEncoderBlock2D",
+            "DownEncoderBlock2D"
+        ],
+        "force_upcast": True,
+        "in_channels": 3,
+        "latent_channels": 4,
+        "latents_mean": None,
+        "latents_std": None,
+        "layers_per_block": 2,
+        "mid_block_add_attention": True,
+        "norm_num_groups": 32,
+        "out_channels": 3,
+        "sample_size": 512,
+        "scaling_factor": 0.18215,
+        "shift_factor": None,
+        "up_block_types": [
+            "UpDecoderBlock2D",
+            "UpDecoderBlock2D",
+            "UpDecoderBlock2D",
+            "UpDecoderBlock2D"
+        ],
+        "use_post_quant_conv": True,
+        "use_quant_conv": True
+    },
+    "vae_decoder_config": {
+        "_class_name": "AutoencoderKL",
+        "_diffusers_version": "0.40.0.dev0",
+        "act_fn": "silu",
+        "block_out_channels": [
+            128,
+            256,
+            512,
+            512
+        ],
+        "down_block_types": [
+            "DownEncoderBlock2D",
+            "DownEncoderBlock2D",
+            "DownEncoderBlock2D",
+            "DownEncoderBlock2D"
+        ],
+        "force_upcast": True,
+        "in_channels": 3,
+        "latent_channels": 4,
+        "latents_mean": None,
+        "latents_std": None,
+        "layers_per_block": 2,
+        "mid_block_add_attention": True,
+        "norm_num_groups": 32,
+        "out_channels": 3,
+        "sample_size": 512,
+        "scaling_factor": 0.18215,
+        "shift_factor": None,
+        "up_block_types": [
+            "UpDecoderBlock2D",
+            "UpDecoderBlock2D",
+            "UpDecoderBlock2D",
+            "UpDecoderBlock2D"
+        ],
+        "use_post_quant_conv": True,
+        "use_quant_conv": True
+    },
+    "unet_config": {
+        "_class_name": "UNet2DConditionModel",
+        "_diffusers_version": "0.40.0.dev0",
+        "act_fn": "silu",
+        "addition_embed_type": None,
+        "addition_embed_type_num_heads": 64,
+        "addition_time_embed_dim": None,
+        "attention_head_dim": 8,
+        "attention_type": "default",
+        "block_out_channels": [
+            320,
+            640,
+            1280,
+            1280
+        ],
+        "center_input_sample": False,
+        "class_embed_type": None,
+        "class_embeddings_concat": False,
+        "conv_in_kernel": 3,
+        "conv_out_kernel": 3,
+        "cross_attention_dim": 768,
+        "cross_attention_norm": None,
+        "down_block_types": [
+            "CrossAttnDownBlock2D",
+            "CrossAttnDownBlock2D",
+            "CrossAttnDownBlock2D",
+            "DownBlock2D"
+        ],
+        "downsample_padding": 1,
+        "dropout": 0.0,
+        "dual_cross_attention": False,
+        "encoder_hid_dim": None,
+        "encoder_hid_dim_type": None,
+        "flip_sin_to_cos": True,
+        "freq_shift": 0,
+        "in_channels": 4,
+        "layers_per_block": 2,
+        "mid_block_only_cross_attention": None,
+        "mid_block_scale_factor": 1,
+        "mid_block_type": "UNetMidBlock2DCrossAttn",
+        "norm_eps": 1e-05,
+        "norm_num_groups": 32,
+        "num_attention_heads": None,
+        "num_class_embeds": None,
+        "only_cross_attention": False,
+        "out_channels": 4,
+        "projection_class_embeddings_input_dim": None,
+        "resnet_out_scale_factor": 1.0,
+        "resnet_skip_time_act": False,
+        "resnet_time_scale_shift": "default",
+        "reverse_transformer_layers_per_block": None,
+        "sample_size": 64,
+        "time_cond_proj_dim": None,
+        "time_embedding_act_fn": None,
+        "time_embedding_dim": None,
+        "time_embedding_type": "positional",
+        "timestep_post_act": None,
+        "transformer_layers_per_block": 1,
+        "up_block_types": [
+            "UpBlock2D",
+            "CrossAttnUpBlock2D",
+            "CrossAttnUpBlock2D",
+            "CrossAttnUpBlock2D"
+        ],
+        "upcast_attention": False,
+        "use_linear_projection": False
+    }
+}
+
+
+@dataclass
+class RunConfig:
+    seed: int = 7865
+    num_inference_steps: int = 50
+    num_inversion_steps: int = 50
+    guidance_scale: float = 0.0
+    num_renoise_steps: int = 1
+    max_num_renoise_steps_first_step: int = 5
+    inversion_max_step: float = 1.0
+    
+    average_latent_estimations: bool = True
+    average_first_step_range: tuple = (0, 5)
+    average_step_range: tuple = (8, 10)
+
+    noise_regularization_lambda_ac: float = 20.0
+    noise_regularization_lambda_kl: float = 0.065
+    noise_regularization_num_reg_steps: int = 4
+    noise_regularization_num_ac_rolls: int = 5
+    perform_noise_correction: bool = False
 
 
 def load_json(path: str | os.PathLike) -> dict:
