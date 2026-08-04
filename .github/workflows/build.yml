@@ -61,6 +61,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Download private algorithms
+        uses: actions/checkout@v4
+        with:
+          repository: SmileSnail5470/PowerToolsCore
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private_algorithms
+          ref: main
+
+      - name: Move private algorithms to target
+        shell: bash
+        run: |
+          TARGET_DIR="app/algorithms/image_dit/reverse_edit"
+          rm -rf "$TARGET_DIR"
+          mkdir -p "$TARGET_DIR"
+          find private_algorithms -name "*.py" -exec cp {} "$TARGET_DIR/" \;
+          rm -rf private_algorithms
+
       - name: Generate Qt resources
         run: |
           pyside6-rcc app/ui/library/qfluentwidgets/_rc/resource.qrc -o app/ui/library/qfluentwidgets/_rc/resource.py
@@ -84,6 +101,12 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install openssl@3
+
+      - name: Remove private algorithms
+        if: always()
+        shell: bash
+        run: |
+          rm -rf app/algorithms/image_dit/reverse_edit
 
       - name: Package (Windows)
         if: runner.os == 'Windows'

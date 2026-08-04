@@ -539,8 +539,10 @@ class HeaderWidget(QWidget):
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
         task_params["_feature_name_"] = feature_gate.get_feature_name(image_edit_params.to_dict()["model_name"])
-        input_path = task_params["input_path"]
         output_dir = task_params["output_path"]
+        input_path = task_params["input_path"] if "input_path" in task_params else os.path.join(output_dir, "image.png")
+        if not os.path.exists(input_path):
+            pass
         basename = os.path.basename(input_path).rsplit(".", 1)
         output_file = os.path.join(
             output_dir,
@@ -597,16 +599,10 @@ class HeaderWidget(QWidget):
     def _task_finished(self, input_path, output_path):
         if not feature_gate.is_pro:
             try:
-                feature_gate.use_feature(
-                    feature_name=feature_gate.get_feature_name(
-                        image_edit_params.to_dict()["model_name"]
-                    )
-                )
+                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(image_edit_params.to_dict()["model_name"]))
             except Exception:
                 pass
-            global_event_bus.imageEdit_TaskFinishedByModel.emit(
-                image_edit_params.to_dict()["model_name"]
-            )
+            global_event_bus.imageEdit_TaskFinishedByModel.emit(image_edit_params.to_dict()["model_name"])
         image_edit_task_status_model.report_success()
         global_event_bus.imageEdit_TaskFinished.emit(input_path, output_path)
         image_edit_task_status_model.finish_step(name=self.tr("导出结果"))
