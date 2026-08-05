@@ -541,14 +541,14 @@ class HeaderWidget(QWidget):
         task_params["_feature_name_"] = feature_gate.get_feature_name(image_edit_params.to_dict()["model_name"])
         output_dir = task_params["output_path"]
         input_path = task_params["input_path"] if "input_path" in task_params else os.path.join(output_dir, "image.png")
-        if not os.path.exists(input_path):
-            pass
         basename = os.path.basename(input_path).rsplit(".", 1)
         output_file = os.path.join(
             output_dir,
             "{0}_edited.{1}".format(basename[0], basename[1] if len(basename) > 1 else "png")
         )
         task_params["output_path"] = output_file
+        if not os.path.exists(input_path):
+            input_path = output_file
 
         global_event_bus.imageEdit_ImageNavigationInit.emit()
         self.is_batch_task = False

@@ -28,11 +28,12 @@ class HammingECC(RepeatECC):
     """Hamming(15, 11)"""
 
     CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ,1234" + "`"  # 5-bit 编码，共支持 32 个字符。 ` 作为终止符
-    def __init__(self):
+    def __init__(self, detect_error_bit_position: list = []):
         self.encode_bits_per_char = 5
         self.total_bits = 256
         self.redundancy = 2
         self.num_bits = self.total_bits // self.redundancy
+        self.detect_error_bit_position = detect_error_bit_position
         super().__init__(num_bits=self.num_bits, redundancy=self.redundancy)
 
     def __hamming_encode_block(self, block):
@@ -58,6 +59,7 @@ class HammingECC(RepeatECC):
         syndrome = (s3<<3)|(s2<<2)|(s1<<1)|s0
         if syndrome != 0:
             print(f"Error detected at position {syndrome}")
+            self.detect_error_bit_position.append(syndrome)
         if syndrome != 0 and 1 <= syndrome <= 15:
             c[syndrome-1] = not c[syndrome-1]
         data_idx = [2,4,5,6,8,9,10,11,12,13,14]

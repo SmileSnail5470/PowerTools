@@ -3,7 +3,8 @@ import os
 from app.ui.common.config import cfg
 from app.workers.work_base import BaseWorker, _resolve_hardware_variant
 from app.utils.logger.decorators import log_exception
-from app.algorithms.image_edit.reverse_edit.inference import ReverseEditInference
+from app.algorithms.image_edit.reverse_edit.inference import ReverseEditInference  # type: ignore
+from app.workers.watermark_extract_work import WatermarkExtractInternal
 
 
 class BlindWatermarkRemoveWork(BaseWorker):
@@ -30,6 +31,9 @@ class BlindWatermarkRemoveWork(BaseWorker):
 
         if cancel_requested and cancel_requested():
             raise InterruptedError("Task was cancelled before start")
+
+        if WatermarkExtractInternal(file_type="image").has_powertools_blind_watermark(input_path=input_path):
+            raise Exception(f"Reject process {input_path}")
         
         model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "reverse_edit")
         output_dir = output_path

@@ -25,7 +25,7 @@ class ImageEditWork(BaseWorker):
 
     @log_exception(logger=logging.getLogger('ImageEdit'), reraise=True, log_args=True, log_result=True)
     def run_algorithm(self, progress_cb, cancel_requested, *args, **kwargs):
-        input_path = kwargs["input_path"]
+        input_path = kwargs["input_path"] if "input_path" in kwargs else None
         output_path = kwargs["output_path"]
         prompt = kwargs.get("prompt", "")
         mask_boxes = kwargs.get("mask_boxes", [])

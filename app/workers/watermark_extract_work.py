@@ -11,6 +11,33 @@ from app.algorithms.blind_watermark_addition.blind_watermark_addition_image impo
 from app.algorithms.blind_watermark_addition.blind_watermark_addition_video import VideoBlindWatermarkDetect
 
 
+class WatermarkExtractInternal():
+    def __init__(self, file_type="image"):
+        self.deps_path = cfg.get(cfg.localAIModelDeps)
+        self.file_type = file_type
+        self._image_instance = ImageBlindWatermarkDetect()
+
+    def has_powertools_blind_watermark(self, input_path):
+        if self.file_type == "image":
+            params = {
+                "input_image_path": input_path,
+                "ouput_error_position": True
+            }
+            self._image_instance.prepare(
+                onnx_path=os.path.join(self.deps_path, _resolve_hardware_variant(), "blind_watermark_addition", "videoseal_image_detect.encmodel")
+            )
+            error_position = self._image_instance.watermark_extraction(**params)
+            if len(error_position) <= 1:
+                return True
+            self._image_instance.prepare(
+                onnx_path=os.path.join(self.deps_path, _resolve_hardware_variant(), "blind_watermark_addition", "pixelseal_image_detect.encmodel")
+            )
+            error_position = self._image_instance.watermark_extraction(**params)
+            if len(error_position) <= 1:
+                return True
+        return False
+
+
 class WatermarkExtractWork(BaseWorker):
     _image_instance = None
     _video_instance = None

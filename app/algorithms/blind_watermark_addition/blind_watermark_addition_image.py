@@ -85,7 +85,7 @@ class ImageBlindWatermarkDetect():
         self.onnx_path = onnx_path
         self._create_predictor()
 
-    def watermark_extraction(self, input_image_path):
+    def watermark_extraction(self, input_image_path, ouput_error_position=False):
         # load image
         imgs = Image.open(input_image_path, "r").convert("RGB")
         imgs = np.array(imgs)
@@ -109,7 +109,7 @@ class ImageBlindWatermarkDetect():
             "file": input_image_path,
             "preds": preds_str
         }
-        return metrics
+        return metrics if not ouput_error_position else ecc.detect_error_bit_position
     
 
 if __name__ == "__main__":
