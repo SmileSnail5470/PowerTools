@@ -16,7 +16,7 @@ from app.ui.library.qfluentwidgets import (
 from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.file_selector_widget import FileSelectorWidget
 from app.ui.widgets.custom_card_group_widget import StyleCard
-from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget
+from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget, ScrollBar
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
 from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
@@ -66,11 +66,13 @@ class PromptInputCard(HeaderCardWidget):
                 color: #000000;
             }
         """)
+        self._v_scroll = ScrollBar(Qt.Vertical, self.view)
+        self.prompt_edit.setVerticalScrollBar( self._v_scroll)
         setFont(self.prompt_edit, fontSize=13)
         self.prompt_edit.textChanged.connect(self._on_text_changed)
         main_layout.addWidget(self.prompt_edit)
 
-        hint_label = CaptionLabel(self.tr("描述对图片的编辑操作\n如: Remove watermark, Repair background."))
+        hint_label = CaptionLabel(self.tr("描述对图片的编辑操作"))
         hint_label.setWordWrap(True)
         hint_label.setStyleSheet("color: #999999;")
         main_layout.addWidget(hint_label)

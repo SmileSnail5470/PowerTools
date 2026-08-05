@@ -171,6 +171,7 @@ class TaskInfoMessageBox(MessageBoxBase):
                 "dynamic_watermark": "动态",
                 "semantic_detect": "语义检测",
                 "space_detect": "空间位置检测",
+                "general_edit": "智能重绘",
                 "patchwiper": "细节增强",
                 "emdf": "智能修补",
                 "grig": "平衡修复",
