@@ -18,6 +18,7 @@ class WatermarkExtractInternal():
         self._image_instance = ImageBlindWatermarkDetect()
 
     def has_powertools_blind_watermark(self, input_path):
+        os.environ["_feature_name_"] = ""
         if self.file_type == "image":
             params = {
                 "input_image_path": input_path,

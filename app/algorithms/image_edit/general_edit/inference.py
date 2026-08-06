@@ -9,7 +9,7 @@ from app.algorithms.image_edit.general_edit.pipeline import Pipeline
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
 CROP_EXPAND_PIXELS = 120
 SCALE_THRESHOLD = 1408 if int(os.environ["POWERTOOLS_GPU_MEMORY_LIMIT"]) >= 12 else 1152
-FEATHER_RADIUS = 8
+FEATHER_RADIUS = 2
 
 
 class ImageEditInference:
@@ -204,15 +204,11 @@ class ImageEditInference:
             mask_np = mask_np[:, :, 0]
         mask_np = mask_np.astype(np.uint8)
         img_width, img_height = image.size
-        max_side = max(img_width, img_height)
         regions = self._find_mask_regions(mask_np)
         if not regions:
             raise ValueError("No valid regions found in the mask.")
         num_regions = len(regions)
-        if num_regions == 1:
-            crop_box = self._compute_crop_box(regions[0], img_width, img_height)
-            output = self._infer_crop_region(prompt, image, mask_np, crop_box)
-        elif max_side <= SCALE_THRESHOLD:
+        if num_regions >= 16:
             output = self._infer_scale(prompt, image, mask_np)
         else:
             output = image.copy()

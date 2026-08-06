@@ -106,7 +106,7 @@ class ReferenceImageCard(HeaderCardWidget):
         btn_layout = QVBoxLayout()
         btn_layout.setSpacing(6)
 
-        self.area_select_btn = PushButton(text=self.tr("🖼 水印区域选择"))
+        self.area_select_btn = PushButton(text=self.tr("🖼 区域选择"))
         self.area_select_btn.setEnabled(False)
         self.area_select_btn.setStyleSheet("""
             PushButton { padding: 6px 12px; border-radius: 6px; font-size: 12px; }
