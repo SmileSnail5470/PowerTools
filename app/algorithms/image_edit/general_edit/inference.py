@@ -9,6 +9,7 @@ from app.algorithms.image_edit.general_edit.pipeline import Pipeline
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
 CROP_EXPAND_PIXELS = 120
 SCALE_THRESHOLD = 1408 if int(os.environ["POWERTOOLS_GPU_MEMORY_LIMIT"]) >= 12 else 1152
+FEATHER_RADIUS = 8
 
 
 class ImageEditInference:
@@ -126,11 +127,30 @@ class ImageEditInference:
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * self.dilate_num + 1, 2 * self.dilate_num + 1))
         return cv2.dilate(mask_np, kernel, iterations=1)
 
+    @staticmethod
+    def _feather_mask(mask_np: np.ndarray, radius: int = FEATHER_RADIUS) -> np.ndarray:
+        if radius <= 0:
+            return (mask_np > 127).astype(np.float32)
+        ksize = radius * 2 + 1
+        blurred = cv2.GaussianBlur(mask_np.astype(np.float32), (ksize, ksize), 0)
+        blurred = blurred / 255.0
+        return np.clip(blurred, 0.0, 1.0)
+
+    @staticmethod
+    def _blend_with_mask(original_np: np.ndarray, generated_np: np.ndarray, alpha: np.ndarray) -> np.ndarray:
+        if alpha.ndim == 2:
+            alpha = alpha[:, :, np.newaxis]
+        original = original_np.astype(np.float32)
+        generated = generated_np.astype(np.float32)
+        blended = original * (1.0 - alpha) + generated * alpha
+        return np.clip(blended, 0, 255).astype(np.uint8)
+
     def _infer_crop_region(self, prompt: str, image: Image.Image, mask_np: np.ndarray, crop_box: tuple[int, int, int, int]) -> Image.Image:
         x1, y1, x2, y2 = crop_box
         crop_w, crop_h = x2 - x1, y2 - y1
         cropped_image = image.crop((x1, y1, x2, y2))
         dilated_mask = self._dilate_mask(mask_np)
+        crop_mask = dilated_mask[y1:y2, x1:x2]
         infer_w, infer_h, _, _ = self._update_dimensions_from_image([cropped_image])
         condition_resized = cropped_image.resize((infer_w, infer_h), resample=Image.Resampling.LANCZOS)
         result = self._infer(
@@ -140,10 +160,18 @@ class ImageEditInference:
             height=infer_h,
         )
         result_resized = result.resize((crop_w, crop_h), resample=Image.Resampling.LANCZOS)
-        fixed_result = calibrate_color_fix(original_bgr=np.array(cropped_image), generated_bgr=np.array(result_resized), mask_gray=dilated_mask[y1:y2, x1:x2])
+        cropped_np = np.array(cropped_image)
+        result_np = np.array(result_resized)
+        fixed_result = calibrate_color_fix(
+            original_bgr=cropped_np,
+            generated_bgr=result_np,
+            mask_gray=crop_mask,
+        )
+        alpha = self._feather_mask(crop_mask, radius=FEATHER_RADIUS)
+        blended_crop = self._blend_with_mask(cropped_np, fixed_result, alpha)
         output = image.copy()
         output_np = np.array(output)
-        output_np[y1:y2, x1:x2] = fixed_result
+        output_np[y1:y2, x1:x2] = blended_crop
         return Image.fromarray(output_np)
 
     def _infer_scale(self, prompt: str, image: Image.Image, mask_np: np.ndarray) -> Image.Image:
@@ -159,8 +187,15 @@ class ImageEditInference:
             height=infer_h,
         )
         result_resized = result.resize((img_width, img_height), resample=Image.Resampling.LANCZOS)
-        fixed_result = calibrate_color_fix(original_bgr=image_np, generated_bgr=np.array(result_resized), mask_gray=dilated_mask)
-        return Image.fromarray(fixed_result)
+        result_np = np.array(result_resized)
+        fixed_result = calibrate_color_fix(
+            original_bgr=image_np,
+            generated_bgr=result_np,
+            mask_gray=dilated_mask,
+        )
+        alpha = self._feather_mask(dilated_mask, radius=FEATHER_RADIUS)
+        blended = self._blend_with_mask(image_np, fixed_result, alpha)
+        return Image.fromarray(blended)
 
     def infer_local_patches(self, prompt, image, mask_np):
         if isinstance(mask_np, Image.Image):
@@ -188,7 +223,7 @@ class ImageEditInference:
             output = output.resize((img_width, img_height), resample=Image.Resampling.LANCZOS)
         return np.array(output)
 
-    def infer(self, prompt, input_path = None, mask = None):
+    def infer(self, prompt, input_path=None, mask=None):
         if input_path is not None:
             image_list = [Image.open(p).convert("RGB") for p in self._collect(input_path)]
         else:
