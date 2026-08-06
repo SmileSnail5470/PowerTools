@@ -3,6 +3,7 @@ from pathlib import Path
 from PIL import Image
 import cv2
 import numpy as np
+from app.algorithms.image_edit.color_fix import calibrate_color_fix
 from app.algorithms.image_edit.general_edit.pipeline import Pipeline
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
@@ -139,11 +140,10 @@ class ImageEditInference:
             height=infer_h,
         )
         result_resized = result.resize((crop_w, crop_h), resample=Image.Resampling.LANCZOS)
+        fixed_result = calibrate_color_fix(original_bgr=np.array(cropped_image), generated_bgr=np.array(result_resized), mask_gray=dilated_mask[y1:y2, x1:x2])
         output = image.copy()
         output_np = np.array(output)
-        result_np = np.array(result_resized)
-        paste_mask = dilated_mask[y1:y2, x1:x2] > 127
-        output_np[y1:y2, x1:x2][paste_mask] = result_np[paste_mask]
+        output_np[y1:y2, x1:x2] = fixed_result
         return Image.fromarray(output_np)
 
     def _infer_scale(self, prompt: str, image: Image.Image, mask_np: np.ndarray) -> Image.Image:
@@ -159,10 +159,8 @@ class ImageEditInference:
             height=infer_h,
         )
         result_resized = result.resize((img_width, img_height), resample=Image.Resampling.LANCZOS)
-        output_np = image_np.copy()
-        result_np = np.array(result_resized)
-        output_np[dilated_mask > 127] = result_np[dilated_mask > 127]
-        return Image.fromarray(output_np)
+        fixed_result = calibrate_color_fix(original_bgr=image_np, generated_bgr=np.array(result_resized), mask_gray=dilated_mask)
+        return Image.fromarray(fixed_result)
 
     def infer_local_patches(self, prompt, image, mask_np):
         if isinstance(mask_np, Image.Image):
