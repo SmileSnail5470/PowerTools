@@ -398,7 +398,7 @@ class PreviewWidget(QWidget):
         self.stack = QStackedLayout()
         self.stack.setContentsMargins(0, 0, 0, 0)
 
-        self.placeholder_widget = QLabel(self.tr("请选择参考图并输入提示词进行图像编辑"), parent=self)
+        self.placeholder_widget = QLabel(self.tr("请输入提示词进行图像编辑"), parent=self)
         self.placeholder_widget.setStyleSheet("color: #888888;")
         setFont(self.placeholder_widget, 20)
         self.placeholder_widget.setAlignment(Qt.AlignCenter)
@@ -432,9 +432,19 @@ class PreviewWidget(QWidget):
         global_event_bus.imageEdit_InputFileUpdate.connect(self.update_init_preview)
         global_event_bus.imageEdit_TaskFinished.connect(self.update_preview)
         global_event_bus.imageEdit_PreviewFile.connect(self._on_preview_file)
-        global_event_bus.imageEdit_ImageNavigationInit.connect(
-            lambda: self.image_navigation_widget.clear_images()
-        )
+        global_event_bus.imageEdit_ImageNavigationInit.connect(self._on_navigation_init)
+        global_event_bus.imageEdit_PreviewMode.connect(self._update_preview_mode)
+
+    def _update_preview_mode(self, mode):
+        if mode == "single":
+            self.image_viewer.set_compare_mode(False)
+
+    def _on_navigation_init(self):
+        self.image_navigation_widget.clear_images()
+        if self.stack.currentIndex() == 0:
+            self.stack.setCurrentIndex(1)
+            self.image_viewer.init_scene()
+        self.status_info_widget.show_pipeline_widget()
 
     def update_init_preview(self, file_path):
         self.image_navigation_widget.clear_images()
@@ -458,12 +468,17 @@ class PreviewWidget(QWidget):
 
     def update_preview(self, input_path, output_path):
         self.files_preview_info[input_path] = output_path
+        if self.stack.currentIndex() == 0:
+            self.stack.setCurrentIndex(1)
         self.image_navigation_widget.load_images([input_path], self.media_type)
 
     def _on_preview_file(self, path):
         out = self.files_preview_info.get(path)
-        if self.media_type == "image" and out:
-            self.image_viewer.set_images(img1=path, img2=out)
+        if self.media_type == "image":
+            if out and out != path:
+                self.image_viewer.set_images(img1=path, img2=out)
+            else:
+                self.image_viewer.set_images(img1=path, img2=path)
 
     def _cancel_tasks(self):
         cancelled = 0
@@ -550,6 +565,7 @@ class HeaderWidget(QWidget):
         )
         task_params["output_path"] = output_file
         if not os.path.exists(input_path):
+            global_event_bus.imageEdit_PreviewMode.emit("single")
             input_path = output_file
 
         global_event_bus.imageEdit_ImageNavigationInit.emit()

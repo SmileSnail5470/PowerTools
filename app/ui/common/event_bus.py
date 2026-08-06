@@ -39,6 +39,7 @@ class GlobalEventBus(QObject):
     imageEdit_PreviewFile = Signal(str)
     imageEdit_ImageNavigationInit = Signal()
     imageEdit_TaskFinishedByModel = Signal(str)
+    imageEdit_PreviewMode = Signal(str)
 
 
 global_event_bus = GlobalEventBus()
