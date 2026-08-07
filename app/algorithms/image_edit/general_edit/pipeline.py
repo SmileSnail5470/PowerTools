@@ -395,7 +395,6 @@ class Pipeline:
             sample = sample + dt * noise_pred.astype(np.float32)
             if callback_on_step_end is not None:
                 callback_on_step_end(self, index, float(self.scheduler.timesteps[index]), sample)
-            self._log(f"[onnx] step {index + 1}/{num_inference_steps}")
         latents = asnumpy(sample).astype(np.float32)
         timings["transformer"] = time.perf_counter() - mark
         transformer.clear_static_inputs()

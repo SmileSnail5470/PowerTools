@@ -38,7 +38,10 @@ class BlindWatermarkRemoveWork(BaseWorker):
         model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "reverse_edit")
         output_dir = output_path
         os.makedirs(output_dir, exist_ok=True)
-        output_file = os.path.join(output_dir, os.path.basename(input_path))
+        output_file = os.path.join(
+            output_dir,
+            f"{os.path.basename(input_path).rsplit(".", 1)[0]}_cleaned.{os.path.basename(input_path).rsplit(".", 1)[1]}"
+        )
         if "_feature_name_" in kwargs:
             os.environ["_feature_name_"] = kwargs["_feature_name_"]
         if progress_cb:
