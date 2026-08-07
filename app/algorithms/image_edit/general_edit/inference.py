@@ -1,3 +1,4 @@
+import math
 import os
 from pathlib import Path
 from PIL import Image
@@ -8,8 +9,11 @@ from app.algorithms.image_edit.general_edit.pipeline import Pipeline
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
 CROP_EXPAND_PIXELS = 120
-SCALE_THRESHOLD = 1408 if int(os.environ["POWERTOOLS_GPU_MEMORY_LIMIT"]) >= 12 else 1152
-FEATHER_RADIUS = 2
+MIN_CROP_SIDE = 256
+# pipeline 侧的长宽比校验上限是 8:1，留一点余量
+MAX_ASPECT_RATIO = 7.5
+# 原分辨率下的基础羽化半径，实际使用时按上采样倍率放大
+FEATHER_BASE_RADIUS = 0
 
 
 class ImageEditInference:
@@ -42,30 +46,53 @@ class ImageEditInference:
             return sorted(str(p) for p in path.iterdir() if p.suffix.lower() in IMAGE_SUFFIXES)
         return [str(path)]
 
-    def _update_dimensions_from_image(self, image_list):
+    @property
+    def _align(self) -> int:
+        return max(8, int(self.pipe.vae_scale_factor) * 2)
+
+    def _size_budget(self) -> tuple[int, int]:
         gpu_memory_limit = int(os.environ.get("POWERTOOLS_GPU_MEMORY_LIMIT", 16))
-        if image_list is None or len(image_list) == 0:
-            res_size = 1024 if gpu_memory_limit >= 12 else 960 if gpu_memory_limit >= 8 else 768
-            return res_size, res_size, None, None
-        max_side = 1024 if gpu_memory_limit >= 12 else 832
-        img = image_list[0]
-        img_width, img_height = img.size
-        if max(img_width, img_height) <= max_side:
-            new_height = img_height
-            new_width = img_width
+        if gpu_memory_limit >= 16:
+            area, max_side = 1024 * 1024, 1536
+        elif gpu_memory_limit >= 12:
+            area, max_side = 832 * 832, 1280
         else:
-            aspect_ratio = img_width / img_height
-            if aspect_ratio >= 1:
-                new_width = max_side
-                new_height = int(max_side / aspect_ratio)
+            area, max_side = 768 * 768, 1024
+        return min(area, int(self.pipe.max_condition_area)), max_side
+
+    def _compute_infer_size(self, width: int, height: int) -> tuple[int, int]:
+        align = self._align
+        min_side = max(64, align)
+        area, max_side = self._size_budget()
+        if (
+            width % align == 0
+            and height % align == 0
+            and width >= min_side
+            and height >= min_side
+            and width * height <= area
+            and max(width, height) <= max_side
+        ):
+            return width, height
+        scale = min(1.0, math.sqrt(area / float(max(width * height, 1))), max_side / float(max(width, height, 1)))
+        target_w = max(min_side, int(round(width * scale / align)) * align)
+        target_h = max(min_side, int(round(height * scale / align)) * align)
+        while target_w * target_h > area and (target_w > min_side or target_h > min_side):
+            if target_w >= target_h and target_w > min_side:
+                target_w -= align
+            elif target_h > min_side:
+                target_h -= align
             else:
-                new_height = max_side
-                new_width = int(max_side * aspect_ratio)
-        new_width = round(new_width / 8) * 8
-        new_height = round(new_height / 8) * 8
-        new_width = max(256, min(max_side, new_width))
-        new_height = max(256, min(max_side, new_height))
-        return new_width, new_height, img_width, img_height
+                break
+        return target_w, target_h
+
+    def _resolve_infer_size(self, image_list):
+        if not image_list:
+            area, _ = self._size_budget()
+            side = max(self._align, (int(math.sqrt(area)) // self._align) * self._align)
+            return side, side, None, None
+        img_width, img_height = image_list[0].size
+        infer_w, infer_h = self._compute_infer_size(img_width, img_height)
+        return infer_w, infer_h, img_width, img_height
 
     def _infer(self, prompt, input_images=None, seed=42, width=1024, height=1024, num_inference_steps=None):
         """
@@ -87,48 +114,80 @@ class ImageEditInference:
         if mask_np.ndim == 3:
             mask_np = mask_np[:, :, 0]
         binary = (mask_np > 127).astype(np.uint8)
-        num_labels, labels = cv2.connectedComponents(binary)
+        num_labels, _, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
         regions = []
         for label_id in range(1, num_labels):
-            ys, xs = np.where(labels == label_id)
-            if len(xs) == 0:
+            x, y, w, h, area = stats[label_id]
+            if area <= 0 or w <= 0 or h <= 0:
                 continue
-            regions.append((int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())))
+            regions.append((int(x), int(y), int(x + w - 1), int(y + h - 1)))
         return regions
 
-    @staticmethod
-    def _compute_crop_box(bbox: tuple[int, int, int, int], img_width: int, img_height: int, expand: int = CROP_EXPAND_PIXELS) -> tuple[int, int, int, int]:
+    def _align_span(
+        self,
+        lo: float,
+        hi: float,
+        limit: int,
+        min_size: int,
+        must_lo: float | None = None,
+        must_hi: float | None = None,
+    ) -> tuple[int, int]:
+        align = self._align
+        limit = int(limit)
+        max_size = (limit // align) * align
+        if max_size < align:
+            return 0, limit
+        need_lo = lo if must_lo is None else must_lo
+        need_hi = hi if must_hi is None else must_hi
+        need_lo = max(0.0, min(float(need_lo), float(limit)))
+        need_hi = max(0.0, min(float(need_hi), float(limit)))
+        if math.ceil(need_hi) - math.floor(need_lo) > max_size:
+            return 0, limit
+        size = max(int(min_size), int(math.ceil(hi - lo)))
+        size = ((size + align - 1) // align) * align
+        size = min(size, max_size)
+        center = (lo + hi) * 0.5
+        start = int(round(center - size / 2.0))
+        start = min(start, int(math.floor(need_lo)))
+        start = max(start, int(math.ceil(need_hi)) - size)
+        start = max(0, min(start, limit - size))
+        if start > need_lo or start + size < need_hi:
+            return 0, limit
+        return start, start + size
+
+    def _compute_crop_box(
+        self,
+        bbox: tuple[int, int, int, int],
+        img_width: int,
+        img_height: int,
+        expand: int = CROP_EXPAND_PIXELS,
+    ) -> tuple[int, int, int, int]:
         x_min, y_min, x_max, y_max = bbox
-        x1 = max(0, x_min - expand)
-        y1 = max(0, y_min - expand)
-        x2 = min(img_width, x_max + expand)
-        y2 = min(img_height, y_max + expand)
-        x1 = (x1 // 8) * 8
-        y1 = (y1 // 8) * 8
-        x2 = min(img_width, ((x2 + 7) // 8) * 8)
-        y2 = min(img_height, ((y2 + 7) // 8) * 8)
-        crop_w = x2 - x1
-        crop_h = y2 - y1
-        if crop_w < 256:
-            deficit = 256 - crop_w
-            x1 = max(0, x1 - deficit // 2)
-            x2 = min(img_width, x1 + 256)
-            x1 = max(0, x2 - 256)
-        if crop_h < 256:
-            deficit = 256 - crop_h
-            y1 = max(0, y1 - deficit // 2)
-            y2 = min(img_height, y1 + 256)
-            y1 = max(0, y2 - 256)
+        x1, x2 = self._align_span(x_min - expand, x_max + 1 + expand, img_width, MIN_CROP_SIDE, x_min, x_max + 1)
+        y1, y2 = self._align_span(y_min - expand, y_max + 1 + expand, img_height, MIN_CROP_SIDE, y_min, y_max + 1)
+        for _ in range(8):
+            crop_w, crop_h = x2 - x1, y2 - y1
+            if max(crop_w / crop_h, crop_h / crop_w) <= MAX_ASPECT_RATIO:
+                break
+            if crop_w > crop_h:
+                need = min(img_height, int(math.ceil(crop_w / MAX_ASPECT_RATIO)))
+                y1, y2 = self._align_span(y1, y2, img_height, need, y_min, y_max + 1)
+            else:
+                need = min(img_width, int(math.ceil(crop_h / MAX_ASPECT_RATIO)))
+                x1, x2 = self._align_span(x1, x2, img_width, need, x_min, x_max + 1)
+            if (x2 - x1, y2 - y1) == (crop_w, crop_h):
+                break
         return x1, y1, x2, y2
 
-    def _dilate_mask(self, mask_np: np.ndarray) -> np.ndarray:
-        if self.dilate_num <= 0:
+    def _dilate_mask(self, mask_np: np.ndarray, radius: int | None = None) -> np.ndarray:
+        radius = self.dilate_num if radius is None else radius
+        if radius <= 0:
             return mask_np
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * self.dilate_num + 1, 2 * self.dilate_num + 1))
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1))
         return cv2.dilate(mask_np, kernel, iterations=1)
 
     @staticmethod
-    def _feather_mask(mask_np: np.ndarray, radius: int = FEATHER_RADIUS) -> np.ndarray:
+    def _feather_mask(mask_np: np.ndarray, radius: int = FEATHER_BASE_RADIUS) -> np.ndarray:
         if radius <= 0:
             return (mask_np > 127).astype(np.float32)
         ksize = radius * 2 + 1
@@ -140,61 +199,70 @@ class ImageEditInference:
     def _blend_with_mask(original_np: np.ndarray, generated_np: np.ndarray, alpha: np.ndarray) -> np.ndarray:
         if alpha.ndim == 2:
             alpha = alpha[:, :, np.newaxis]
-        original = original_np.astype(np.float32)
-        generated = generated_np.astype(np.float32)
+        original = original_np.astype(np.float32, copy=False)
+        generated = generated_np.astype(np.float32, copy=False)
         blended = original * (1.0 - alpha) + generated * alpha
         return np.clip(blended, 0, 255).astype(np.uint8)
+
+    def _harmonize(self, original_np: np.ndarray, generated_np: np.ndarray, blend_mask: np.ndarray, feather_radius: int) -> np.ndarray:
+        original_f32 = original_np.astype(np.float32, copy=False)
+        fixed = calibrate_color_fix(
+            original_bgr=cv2.cvtColor(original_np, cv2.COLOR_RGB2BGR),
+            generated_bgr=cv2.cvtColor(generated_np, cv2.COLOR_RGB2BGR),
+            mask_gray=blend_mask
+        )
+        fixed = np.array(fixed)
+        alpha = self._feather_mask(blend_mask, radius=feather_radius)
+        return self._blend_with_mask(original_f32, fixed, alpha)
 
     def _infer_crop_region(self, prompt: str, image: Image.Image, mask_np: np.ndarray, crop_box: tuple[int, int, int, int]) -> Image.Image:
         x1, y1, x2, y2 = crop_box
         crop_w, crop_h = x2 - x1, y2 - y1
         cropped_image = image.crop((x1, y1, x2, y2))
-        dilated_mask = self._dilate_mask(mask_np)
-        crop_mask = dilated_mask[y1:y2, x1:x2]
-        infer_w, infer_h, _, _ = self._update_dimensions_from_image([cropped_image])
-        condition_resized = cropped_image.resize((infer_w, infer_h), resample=Image.Resampling.LANCZOS)
-        result = self._infer(
-            prompt=prompt,
-            input_images=[condition_resized],
-            width=infer_w,
-            height=infer_h,
-        )
-        result_resized = result.resize((crop_w, crop_h), resample=Image.Resampling.LANCZOS)
-        cropped_np = np.array(cropped_image)
-        result_np = np.array(result_resized)
-        fixed_result = calibrate_color_fix(
-            original_bgr=cropped_np,
-            generated_bgr=result_np,
-            mask_gray=crop_mask,
-        )
-        alpha = self._feather_mask(crop_mask, radius=FEATHER_RADIUS)
-        blended_crop = self._blend_with_mask(cropped_np, fixed_result, alpha)
-        output = image.copy()
-        output_np = np.array(output)
+        infer_w, infer_h = self._compute_infer_size(crop_w, crop_h)
+        scale = max(crop_w / float(infer_w), crop_h / float(infer_h))
+        feather_radius = max(FEATHER_BASE_RADIUS, int(round(FEATHER_BASE_RADIUS * scale)))
+        blend_mask = self._dilate_mask(mask_np)[y1:y2, x1:x2]
+        if (infer_w, infer_h) == (crop_w, crop_h):
+            condition = cropped_image
+        else:
+            condition = cropped_image.resize((infer_w, infer_h), resample=Image.Resampling.LANCZOS)
+        result = self._infer(prompt=prompt, input_images=[condition], width=infer_w, height=infer_h)
+        if result.size != (crop_w, crop_h):
+            result = result.resize((crop_w, crop_h), resample=Image.Resampling.LANCZOS)
+
+        # blended_crop = self._harmonize(
+        #     original_np=np.asarray(cropped_image, dtype=np.float32),
+        #     generated_np=np.asarray(result, dtype=np.float32),
+        #     blend_mask=blend_mask,
+        #     feather_radius=feather_radius,
+        # )
+        blended_crop = np.array(result)
+        output_np = np.array(image)
         output_np[y1:y2, x1:x2] = blended_crop
         return Image.fromarray(output_np)
 
     def _infer_scale(self, prompt: str, image: Image.Image, mask_np: np.ndarray) -> Image.Image:
         img_width, img_height = image.size
-        image_np = np.array(image)
-        dilated_mask = self._dilate_mask(mask_np)
-        infer_w, infer_h, _, _ = self._update_dimensions_from_image([image])
-        condition_resized = image.resize((infer_w, infer_h), resample=Image.Resampling.LANCZOS)
-        result = self._infer(
-            prompt=prompt,
-            input_images=[condition_resized],
-            width=infer_w,
-            height=infer_h,
-        )
-        result_resized = result.resize((img_width, img_height), resample=Image.Resampling.LANCZOS)
-        result_np = np.array(result_resized)
-        fixed_result = calibrate_color_fix(
-            original_bgr=image_np,
-            generated_bgr=result_np,
-            mask_gray=dilated_mask,
-        )
-        alpha = self._feather_mask(dilated_mask, radius=FEATHER_RADIUS)
-        blended = self._blend_with_mask(image_np, fixed_result, alpha)
+        infer_w, infer_h, _, _ = self._resolve_infer_size([image])
+        scale = max(img_width / float(infer_w), img_height / float(infer_h))
+        feather_radius = max(FEATHER_BASE_RADIUS, int(round(FEATHER_BASE_RADIUS * scale)))
+        blend_mask = self._dilate_mask(mask_np)
+        if (infer_w, infer_h) == (img_width, img_height):
+            condition = image
+        else:
+            condition = image.resize((infer_w, infer_h), resample=Image.Resampling.LANCZOS)
+        result = self._infer(prompt=prompt, input_images=[condition], width=infer_w, height=infer_h)
+        if result.size != (img_width, img_height):
+            result = result.resize((img_width, img_height), resample=Image.Resampling.LANCZOS)
+
+        # blended = self._harmonize(
+        #     original_np=np.asarray(image, dtype=np.float32),
+        #     generated_np=np.asarray(result, dtype=np.float32),
+        #     blend_mask=blend_mask,
+        #     feather_radius=feather_radius,
+        # )
+        blended = np.array(result)
         return Image.fromarray(blended)
 
     def infer_local_patches(self, prompt, image, mask_np):
@@ -227,9 +295,9 @@ class ImageEditInference:
         if mask is not None and image_list is None:
             raise ValueError("Mask is provided but no input images are available.")
         if mask is None:
-            width, height, ori_width, ori_height = self._update_dimensions_from_image(image_list)
+            width, height, ori_width, ori_height = self._resolve_infer_size(image_list)
             image = self._infer(prompt=prompt, input_images=image_list, width=width, height=height)
-            if ori_height and ori_width:
+            if ori_height and ori_width and image.size != (ori_width, ori_height):
                 image = image.resize((ori_width, ori_height), resample=Image.Resampling.LANCZOS)
             return np.array(image)
         else:

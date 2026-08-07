@@ -77,20 +77,57 @@ def wavelet_reconstruction(content_feat: np.ndarray, style_feat: np.ndarray) -> 
     return content_high_freq + style_low_freq
 
 
-def wavelet_color_fix(target: Image.Image, source: Image.Image) -> Image.Image:
-    """Transfer the color of `source` onto `target` via wavelet decomposition.
-    
-    """
+def calc_mean_std(feat: np.ndarray, mask: np.ndarray = None, eps: float = 1e-5) -> Tuple[np.ndarray, np.ndarray]:
+    assert feat.ndim == 4, "The input feature should be 4D array."
+    # Reshape to (N, C, H*W) and compute stats along spatial dims
+    n, c = feat.shape[:2]
+    if mask is None:
+        feat_flat = feat.reshape(n, c, -1)
+        feat_var = feat_flat.var(axis=2, ddof=0) + eps  # (N, C)
+        feat_std = np.sqrt(feat_var).reshape(n, c, 1, 1)
+        feat_mean = feat_flat.mean(axis=2).reshape(n, c, 1, 1)
+        return feat_mean, feat_std 
+    else:
+        valid_mask = (mask < 0.5).astype(feat.dtype)
+        valid_count = valid_mask.sum(axis=(2, 3), keepdims=True)
+        valid_count = np.maximum(valid_count, 1.0)
+        feat_mean = (feat * valid_mask).sum(axis=(2, 3), keepdims=True) / valid_count
+        feat_var = (((feat - feat_mean) ** 2) * valid_mask).sum(axis=(2, 3), keepdims=True) / valid_count
+        feat_std = np.sqrt(feat_var + eps)
+        return feat_mean, feat_std
+
+
+def adaptive_instance_normalization(content_feat: np.ndarray, style_feat: np.ndarray, style_mask: np.ndarray = None) -> np.ndarray:
+    style_mean, style_std = calc_mean_std(style_feat, mask=style_mask)
+    content_mean, content_std = calc_mean_std(content_feat)
+    normalized_feat = (content_feat - content_mean) / content_std
+    return normalized_feat * style_std + style_mean
+
+
+def adain_color_fix(target: Image.Image, source: Image.Image, mask_gray: Image.Image = None) -> Image.Image:
     target_tensor = _to_tensor(target)
     source_tensor = _to_tensor(source)
-
     if source_tensor.shape != target_tensor.shape:
         source = source.convert(target.mode).resize(target.size, Image.LANCZOS)
         source_tensor = _to_tensor(source)
+    mask_tensor = None
+    if mask_gray is not None:
+        if mask_gray.size != source.size:
+            mask_gray = mask_gray.resize(source.size, Image.NEAREST)
+        mask_tensor = _to_tensor(mask_gray)
+    result_tensor = adaptive_instance_normalization(target_tensor, source_tensor, style_mask=mask_tensor)
+    np.clip(result_tensor, 0.0, 1.0, out=result_tensor)
+    return _to_pil_image(result_tensor)
 
+
+def wavelet_color_fix(target: Image.Image, source: Image.Image) -> Image.Image:
+    target_tensor = _to_tensor(target)
+    source_tensor = _to_tensor(source)
+    if source_tensor.shape != target_tensor.shape:
+        source = source.convert(target.mode).resize(target.size, Image.LANCZOS)
+        source_tensor = _to_tensor(source)
     result_tensor = wavelet_reconstruction(target_tensor, source_tensor)
     np.clip(result_tensor, 0.0, 1.0, out=result_tensor)
-
     return _to_pil_image(result_tensor)
 
 
