@@ -75,7 +75,7 @@ jobs:
           TARGET_DIR="app/algorithms/image_dit/reverse_edit"
           rm -rf "$TARGET_DIR"
           mkdir -p "$TARGET_DIR"
-          find private_algorithms/reverse_edit -name "*.py" -exec cp {} "$TARGET_DIR/" \;
+          find private_algorithms/reverse_edit -name "*.py" ! -name "inference.py" -exec cp {} "$TARGET_DIR/" \;
           rm -rf private_algorithms
 
       - name: Generate Qt resources
