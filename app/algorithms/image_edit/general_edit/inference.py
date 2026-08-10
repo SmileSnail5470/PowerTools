@@ -4,6 +4,7 @@ from pathlib import Path
 from PIL import Image
 import cv2
 import numpy as np
+from app.algorithms.image_edit.color_fix import lab_color_fix
 from app.algorithms.image_edit.general_edit.pipeline import Pipeline
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
@@ -22,7 +23,7 @@ class ImageEditInference:
         use_cupy: bool = True,
         intra_op_num_threads: int | None = None,
         num_inference_steps: int = 4,
-        dilate_num: int = 4,
+        dilate_num: int = 2,
         verbose: bool = True,
     ):
         self.num_inference_steps = num_inference_steps
@@ -183,15 +184,28 @@ class ImageEditInference:
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1))
         return cv2.dilate(mask_np, kernel, iterations=1)
 
+    def _poisson_clone(self, target: Image.Image, source: Image.Image, x: int, y: int) -> Image.Image:
+        target_np = np.array(target.convert("RGB"))
+        source_np = np.array(source.convert("RGB"))
+        h, w = source_np.shape[:2]
+        mask = np.full((h, w), 255, dtype=np.uint8)
+        center = (x + w // 2, y + h // 2)
+        result = cv2.seamlessClone(
+            source_np,
+            target_np,
+            mask,
+            center,
+            cv2.NORMAL_CLONE,
+        )
+        return Image.fromarray(result)
+
     def _harmonize(self, original: Image.Image, generated: Image.Image, blend_mask: np.ndarray) -> np.ndarray:
-        original_np = np.asarray(original.convert("RGB"), dtype=np.uint8)
-        generated_np = np.asarray(generated.convert("RGB"), dtype=np.uint8)
-        alpha = (blend_mask > 0).astype(np.float32)
-        if alpha.ndim == 2:
-            alpha = alpha[:, :, np.newaxis]
-        blended = generated_np.astype(np.float32) * alpha + original_np.astype(np.float32) * (1.0 - alpha)
-        blended = np.clip(blended, 0, 255).astype(np.uint8)
-        return Image.fromarray(blended, mode="RGB")
+        blended = lab_color_fix(
+            original_img=original,
+            generated_img=generated,
+            mask_gray=blend_mask
+        )
+        return blended
 
     def _infer_crop_region(self, prompt: str, image: Image.Image, mask_np: np.ndarray, crop_box: tuple[int, int, int, int]) -> Image.Image:
         x1, y1, x2, y2 = crop_box
@@ -212,8 +226,7 @@ class ImageEditInference:
             generated=result,
             blend_mask=blend_mask,
         )
-        output = image.copy()
-        output.paste(blended_crop, (x1, y1))
+        output = self._poisson_clone(target=image, source=blended_crop, x=x1, y=y1)
         return output
 
     def _infer_scale(self, prompt: str, image: Image.Image, mask_np: np.ndarray) -> Image.Image:

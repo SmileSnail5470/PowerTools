@@ -129,3 +129,25 @@ def wavelet_color_fix(target: Image.Image, source: Image.Image) -> Image.Image:
     result_tensor = wavelet_reconstruction(target_tensor, source_tensor)
     np.clip(result_tensor, 0.0, 1.0, out=result_tensor)
     return _to_pil_image(result_tensor)
+
+def lab_color_fix(original_img: Image.Image, generated_img: Image.Image, mask_gray: np.ndarray = None) -> Image.Image:
+    orig_rgb = np.array(original_img.convert("RGB"))
+    gen_rgb = np.array(generated_img.convert("RGB"))
+    orig_lab = cv2.cvtColor(orig_rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
+    gen_lab = cv2.cvtColor(gen_rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
+    if mask_gray is None:
+        bg_mask = np.ones(orig_rgb.shape[:2], dtype=bool)
+    else:
+        bg_mask = (mask_gray == 0)
+        if not np.any(bg_mask):
+            bg_mask = np.ones_like(mask_gray, dtype=bool)
+    calibrated_lab = gen_lab.copy()
+    orig_l_bg = orig_lab[:, :, 0][bg_mask]
+    gen_l_bg = gen_lab[:, :, 0][bg_mask]
+    mean_orig, std_orig = np.mean(orig_l_bg), np.std(orig_l_bg)
+    mean_gen, std_gen = np.mean(gen_l_bg), np.std(gen_l_bg)
+    std_gen = max(std_gen, 1e-5)
+    calibrated_lab[:, :, 0] = (gen_lab[:, :, 0] - mean_gen) * (std_orig / std_gen) + mean_orig
+    calibrated_lab = np.clip(calibrated_lab, 0, 255).astype(np.uint8)
+    calibrated_rgb = cv2.cvtColor(calibrated_lab, cv2.COLOR_LAB2RGB)
+    return Image.fromarray(calibrated_rgb)
