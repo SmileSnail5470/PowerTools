@@ -207,7 +207,20 @@ class ImageEditInference:
         )
         return blended
 
-    def _infer_crop_region(self, prompt: str, image: Image.Image, mask_np: np.ndarray, crop_box: tuple[int, int, int, int]) -> Image.Image:
+    def _update_input_image_and_promot(self, prompt: str, image: Image.Image, mask_np: np.ndarray, task_type: str):
+        if task_type == "watermark_remove":
+            img_np = np.array(image, dtype=np.float32)
+            overlay = img_np.copy()
+            color = np.array([0, 0, 255], dtype=np.float32)
+            mask_bool = mask_np > 0
+            overlay[mask_bool] = overlay[mask_bool] * 0.55 + color * 0.45
+            overlay = np.clip(overlay, 0, 255).astype(np.uint8)
+            preprocess_image = Image.fromarray(overlay, mode="RGB")
+            prompt = "Remove the highlighted blue area."
+            return preprocess_image, prompt
+        return image, prompt
+
+    def _infer_crop_region(self, prompt: str, image: Image.Image, mask_np: np.ndarray, crop_box: tuple[int, int, int, int], task_type: str) -> Image.Image:
         x1, y1, x2, y2 = crop_box
         crop_w, crop_h = x2 - x1, y2 - y1
         cropped_image = image.crop((x1, y1, x2, y2))
@@ -217,6 +230,7 @@ class ImageEditInference:
             condition = cropped_image
         else:
             condition = cropped_image.resize((infer_w, infer_h), resample=Image.Resampling.LANCZOS)
+        condition, prompt = self._update_input_image_and_promot(prompt=prompt, image=condition, mask_np=blend_mask, task_type=task_type)
         result = self._infer(prompt=prompt, input_images=[condition], width=infer_w, height=infer_h)
         if result.size != (crop_w, crop_h):
             result = result.resize((crop_w, crop_h), resample=Image.Resampling.LANCZOS)
@@ -229,7 +243,7 @@ class ImageEditInference:
         output = self._poisson_clone(target=image, source=blended_crop, x=x1, y=y1)
         return output
 
-    def _infer_scale(self, prompt: str, image: Image.Image, mask_np: np.ndarray) -> Image.Image:
+    def _infer_scale(self, prompt: str, image: Image.Image, mask_np: np.ndarray, task_type: str) -> Image.Image:
         img_width, img_height = image.size
         infer_w, infer_h, _, _ = self._resolve_infer_size([image])
         blend_mask = self._dilate_mask(mask_np)
@@ -237,6 +251,7 @@ class ImageEditInference:
             condition = image
         else:
             condition = image.resize((infer_w, infer_h), resample=Image.Resampling.LANCZOS)
+        condition, prompt = self._update_input_image_and_promot(prompt=prompt, image=condition, mask_np=blend_mask, task_type=task_type)
         result = self._infer(prompt=prompt, input_images=[condition], width=infer_w, height=infer_h)
         if result.size != (img_width, img_height):
             result = result.resize((img_width, img_height), resample=Image.Resampling.LANCZOS)
@@ -248,7 +263,7 @@ class ImageEditInference:
         )
         return blended
 
-    def infer_local_patches(self, prompt, image, mask_np):
+    def infer_local_patches(self, prompt, image, mask_np, task_type):
         if isinstance(mask_np, Image.Image):
             mask_np = np.array(mask_np.convert("L"))
         if mask_np.ndim == 3:
@@ -260,17 +275,17 @@ class ImageEditInference:
             raise ValueError("No valid regions found in the mask.")
         num_regions = len(regions)
         if num_regions >= 16:
-            output = self._infer_scale(prompt, image, mask_np)
+            output = self._infer_scale(prompt, image, mask_np, task_type)
         else:
             output = image.copy()
             for region_bbox in regions:
                 crop_box = self._compute_crop_box(region_bbox, img_width, img_height)
-                output = self._infer_crop_region(prompt, output, mask_np, crop_box)
+                output = self._infer_crop_region(prompt, output, mask_np, crop_box, task_type)
         if output.size != (img_width, img_height):
             output = output.resize((img_width, img_height), resample=Image.Resampling.LANCZOS)
         return np.array(output)
 
-    def infer(self, prompt, input_path=None, mask=None):
+    def infer(self, prompt=None, input_path=None, mask=None, task_type="general_edit"):
         if input_path is not None:
             image_list = [Image.open(p).convert("RGB") for p in self._collect(input_path)]
         else:
@@ -278,10 +293,12 @@ class ImageEditInference:
         if mask is not None and image_list is None:
             raise ValueError("Mask is provided but no input images are available.")
         if mask is None:
+            if prompt is None:
+                raise ValueError("Mask is not provided but no promot are available")
             width, height, ori_width, ori_height = self._resolve_infer_size(image_list)
             image = self._infer(prompt=prompt, input_images=image_list, width=width, height=height)
             if ori_height and ori_width and image.size != (ori_width, ori_height):
                 image = image.resize((ori_width, ori_height), resample=Image.Resampling.LANCZOS)
             return np.array(image)
         else:
-            return self.infer_local_patches(prompt, image_list[0], mask)
+            return self.infer_local_patches(prompt, image_list[0], mask, task_type)

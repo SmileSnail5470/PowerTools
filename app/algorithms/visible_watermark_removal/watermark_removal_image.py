@@ -181,9 +181,9 @@ class WatermarkInpaint():
             dilate_num=self.dilate_num
         )
         result = general_edit_inpaint.infer(
-            prompt="Remove watermark and subtitle",
             input_path=image_path, 
-            mask=self.mask
+            mask=self.mask,
+            task_type="watermark_remove"
         )
         return result
 
