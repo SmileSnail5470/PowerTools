@@ -129,27 +129,3 @@ def wavelet_color_fix(target: Image.Image, source: Image.Image) -> Image.Image:
     result_tensor = wavelet_reconstruction(target_tensor, source_tensor)
     np.clip(result_tensor, 0.0, 1.0, out=result_tensor)
     return _to_pil_image(result_tensor)
-
-
-def calibrate_color_fix(original_bgr, generated_bgr, mask_gray=None):
-    orig_lab = cv2.cvtColor(original_bgr, cv2.COLOR_BGR2LAB).astype(np.float32)
-    gen_lab = cv2.cvtColor(generated_bgr, cv2.COLOR_BGR2LAB).astype(np.float32)
-    if mask_gray is None:
-        bg_mask = np.ones(original_bgr.shape[:2], dtype=bool)
-    else:
-        bg_mask = (mask_gray == 0)
-        if not np.any(bg_mask):
-            bg_mask = np.ones_like(mask_gray, dtype=bool)
-    calibrated_lab = gen_lab.copy()
-
-    # 对 L, A, B 三个通道分别计算并校正
-    for i in range(3):
-        orig_bg_pixels = orig_lab[:, :, i][bg_mask]
-        gen_bg_pixels = gen_lab[:, :, i][bg_mask]
-        mean_orig, std_orig = np.mean(orig_bg_pixels), np.std(orig_bg_pixels)
-        mean_gen, std_gen = np.mean(gen_bg_pixels), np.std(gen_bg_pixels)
-        std_gen = max(std_gen, 1e-5)
-        calibrated_lab[:, :, i] = (gen_lab[:, :, i] - mean_gen) * (std_orig / std_gen) + mean_orig
-    calibrated_lab = np.clip(calibrated_lab, 0, 255).astype(np.uint8)
-    calibrated_bgr = cv2.cvtColor(calibrated_lab, cv2.COLOR_LAB2BGR)
-    return calibrated_bgr

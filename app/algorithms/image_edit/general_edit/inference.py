@@ -4,7 +4,6 @@ from pathlib import Path
 from PIL import Image
 import cv2
 import numpy as np
-from app.algorithms.image_edit.color_fix import calibrate_color_fix
 from app.algorithms.image_edit.general_edit.pipeline import Pipeline
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
@@ -12,8 +11,6 @@ CROP_EXPAND_PIXELS = 120
 MIN_CROP_SIDE = 256
 # pipeline 侧的长宽比校验上限是 8:1，留一点余量
 MAX_ASPECT_RATIO = 7.5
-# 原分辨率下的基础羽化半径，实际使用时按上采样倍率放大
-FEATHER_BASE_RADIUS = 0
 
 
 class ImageEditInference:
@@ -186,42 +183,21 @@ class ImageEditInference:
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1))
         return cv2.dilate(mask_np, kernel, iterations=1)
 
-    @staticmethod
-    def _feather_mask(mask_np: np.ndarray, radius: int = FEATHER_BASE_RADIUS) -> np.ndarray:
-        if radius <= 0:
-            return (mask_np > 127).astype(np.float32)
-        ksize = radius * 2 + 1
-        blurred = cv2.GaussianBlur(mask_np.astype(np.float32), (ksize, ksize), 0)
-        blurred = blurred / 255.0
-        return np.clip(blurred, 0.0, 1.0)
-
-    @staticmethod
-    def _blend_with_mask(original_np: np.ndarray, generated_np: np.ndarray, alpha: np.ndarray) -> np.ndarray:
+    def _harmonize(self, original: Image.Image, generated: Image.Image, blend_mask: np.ndarray) -> np.ndarray:
+        original_np = np.asarray(original.convert("RGB"), dtype=np.uint8)
+        generated_np = np.asarray(generated.convert("RGB"), dtype=np.uint8)
+        alpha = (blend_mask > 0).astype(np.float32)
         if alpha.ndim == 2:
             alpha = alpha[:, :, np.newaxis]
-        original = original_np.astype(np.float32, copy=False)
-        generated = generated_np.astype(np.float32, copy=False)
-        blended = original * (1.0 - alpha) + generated * alpha
-        return np.clip(blended, 0, 255).astype(np.uint8)
-
-    def _harmonize(self, original_np: np.ndarray, generated_np: np.ndarray, blend_mask: np.ndarray, feather_radius: int) -> np.ndarray:
-        original_f32 = original_np.astype(np.float32, copy=False)
-        fixed = calibrate_color_fix(
-            original_bgr=cv2.cvtColor(original_np, cv2.COLOR_RGB2BGR),
-            generated_bgr=cv2.cvtColor(generated_np, cv2.COLOR_RGB2BGR),
-            mask_gray=blend_mask
-        )
-        fixed = np.array(fixed)
-        alpha = self._feather_mask(blend_mask, radius=feather_radius)
-        return self._blend_with_mask(original_f32, fixed, alpha)
+        blended = generated_np.astype(np.float32) * alpha + original_np.astype(np.float32) * (1.0 - alpha)
+        blended = np.clip(blended, 0, 255).astype(np.uint8)
+        return Image.fromarray(blended, mode="RGB")
 
     def _infer_crop_region(self, prompt: str, image: Image.Image, mask_np: np.ndarray, crop_box: tuple[int, int, int, int]) -> Image.Image:
         x1, y1, x2, y2 = crop_box
         crop_w, crop_h = x2 - x1, y2 - y1
         cropped_image = image.crop((x1, y1, x2, y2))
         infer_w, infer_h = self._compute_infer_size(crop_w, crop_h)
-        scale = max(crop_w / float(infer_w), crop_h / float(infer_h))
-        feather_radius = max(FEATHER_BASE_RADIUS, int(round(FEATHER_BASE_RADIUS * scale)))
         blend_mask = self._dilate_mask(mask_np)[y1:y2, x1:x2]
         if (infer_w, infer_h) == (crop_w, crop_h):
             condition = cropped_image
@@ -231,22 +207,18 @@ class ImageEditInference:
         if result.size != (crop_w, crop_h):
             result = result.resize((crop_w, crop_h), resample=Image.Resampling.LANCZOS)
 
-        # blended_crop = self._harmonize(
-        #     original_np=np.asarray(cropped_image, dtype=np.float32),
-        #     generated_np=np.asarray(result, dtype=np.float32),
-        #     blend_mask=blend_mask,
-        #     feather_radius=feather_radius,
-        # )
-        blended_crop = np.array(result)
-        output_np = np.array(image)
-        output_np[y1:y2, x1:x2] = blended_crop
-        return Image.fromarray(output_np)
+        blended_crop = self._harmonize(
+            original=cropped_image,
+            generated=result,
+            blend_mask=blend_mask,
+        )
+        output = image.copy()
+        output.paste(blended_crop, (x1, y1))
+        return output
 
     def _infer_scale(self, prompt: str, image: Image.Image, mask_np: np.ndarray) -> Image.Image:
         img_width, img_height = image.size
         infer_w, infer_h, _, _ = self._resolve_infer_size([image])
-        scale = max(img_width / float(infer_w), img_height / float(infer_h))
-        feather_radius = max(FEATHER_BASE_RADIUS, int(round(FEATHER_BASE_RADIUS * scale)))
         blend_mask = self._dilate_mask(mask_np)
         if (infer_w, infer_h) == (img_width, img_height):
             condition = image
@@ -256,14 +228,12 @@ class ImageEditInference:
         if result.size != (img_width, img_height):
             result = result.resize((img_width, img_height), resample=Image.Resampling.LANCZOS)
 
-        # blended = self._harmonize(
-        #     original_np=np.asarray(image, dtype=np.float32),
-        #     generated_np=np.asarray(result, dtype=np.float32),
-        #     blend_mask=blend_mask,
-        #     feather_radius=feather_radius,
-        # )
-        blended = np.array(result)
-        return Image.fromarray(blended)
+        blended = self._harmonize(
+            original=image,
+            generated=result,
+            blend_mask=blend_mask,
+        )
+        return blended
 
     def infer_local_patches(self, prompt, image, mask_np):
         if isinstance(mask_np, Image.Image):
