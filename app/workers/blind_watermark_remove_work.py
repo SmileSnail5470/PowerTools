@@ -28,6 +28,8 @@ class BlindWatermarkRemoveWork(BaseWorker):
         input_path = kwargs["input_path"]
         output_path = kwargs["output_path"]
         use_color_fix = kwargs.get("use_color_fix", True)
+        high_quality_output = kwargs.get("high_quality_output", False)
+        reserve_region = kwargs.get("reserve_region")
 
         if cancel_requested and cancel_requested():
             raise InterruptedError("Task was cancelled before start")
@@ -52,6 +54,8 @@ class BlindWatermarkRemoveWork(BaseWorker):
             input_path=input_path,
             output_path=output_file,
             prompt="",
+            region=reserve_region,
+            high_quality_output=high_quality_output,
         )
         if progress_cb:
             progress_cb("BlindWatermarkRemoveCompleted", "")

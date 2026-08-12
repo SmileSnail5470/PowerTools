@@ -39,6 +39,8 @@ param_name_map = {
     "drop_score": "OCR 识别置信度",
     "use_textline_ori": "文本行方向矫正",
     "use_color_fix": "颜色校正",
+    "high_quality_output": "启用高质量输出",
+    "reserve_region": "原图保留区域",
     "prompt": "编辑提示词",
     "mask_boxes": "编辑区域",
 }

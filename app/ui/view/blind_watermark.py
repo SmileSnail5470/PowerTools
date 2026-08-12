@@ -21,6 +21,7 @@ from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigation
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
 from app.ui.widgets.toggle_switch_widget import ToggleSwitch
+from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
 
 from app.ui.common.event_bus import global_event_bus
 from app.ui.common.task_params import bind_widget_to_param, TaskParams
@@ -78,6 +79,91 @@ class FileSelectorCard(HeaderCardWidget):
         self.pivot.addItem(routeKey=objectName, text=text)
 
 
+class ProcessRegionCard(HeaderCardWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setTitle(self.tr("🎯 原图保留区域（可选）"))
+        self.setBorderRadius(8)
+
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(8)
+        self.viewLayout.setContentsMargins(10, 10, 10, 10)
+        self.viewLayout.addLayout(main_layout)
+
+        self.select_button = PushButton(text=self.tr("🖼 框选原图保留区域"))
+        self.select_button.setEnabled(False)
+        self.select_button.setStyleSheet("""
+            PushButton { padding: 6px 12px; border-radius: 6px; font-size: 12px; }
+            PushButton {
+                background: #F1F5F9;
+                border: 1px solid #E2E8F0;
+                border-radius: 6px;
+                padding: 6px;
+                color: #0F172A;
+            }
+            PushButton:hover {
+                background: #E2E8F0;
+                border-color: #CBD5E1;
+            }
+            PushButton:pressed {
+                background: #CBD5E1;
+                padding-top: 7px;
+                padding-bottom: 5px;
+            }
+        """)
+        self.select_button.clicked.connect(self._on_select_region)
+        main_layout.addWidget(self.select_button)
+
+        self.region_info_label = CaptionLabel(self.tr("未选择区域，将处理整张图片"))
+        self.region_info_label.setWordWrap(True)
+        self.region_info_label.setStyleSheet("color: #999999;")
+        main_layout.addWidget(self.region_info_label)
+
+        hint_label = CaptionLabel(self.tr("仅支持单张图片；框选区域保留原图，其他区域使用处理结果"))
+        hint_label.setWordWrap(True)
+        hint_label.setStyleSheet("color: #999999;")
+        main_layout.addWidget(hint_label)
+
+        self._file_path = ""
+        global_event_bus.blindWatermarkRemove_InputFileUpdate.connect(self._on_file_selected)
+
+    def _on_file_selected(self, file_path):
+        self._file_path = file_path or ""
+        blind_watermark_remove_params.set_param("reserve_region", None)
+        self.region_info_label.setText(self.tr("未选择区域，将处理整张图片"))
+        can_select = bool(
+            self._file_path
+            and os.path.isfile(self._file_path)
+            and get_file_type(self._file_path) == "image"
+        )
+        self.select_button.setEnabled(can_select)
+        if self._file_path and os.path.isdir(self._file_path):
+            self.region_info_label.setText(self.tr("目录任务不使用区域框选，将处理每张图片"))
+        elif self._file_path and not can_select:
+            self.region_info_label.setText(self.tr("当前文件不是可框选的图片"))
+
+    def _on_select_region(self):
+        if not self._file_path:
+            return
+        dialog = AreaSelectorDialog(
+            file_path=self._file_path,
+            single_area_only=True,
+            parent=self.window(),
+        )
+        dialog.exec()
+        boxes = dialog.get_results()
+        region = boxes[0] if boxes else None
+        blind_watermark_remove_params.set_param("reserve_region", region)
+        if region:
+            self.region_info_label.setText(self.tr("已选择原图保留区域: X={0}, Y={1}, 宽={2}, 高={3}").format(
+                    region["x"], region["y"], region["w"], region["h"]
+                )
+            )
+        else:
+            self.region_info_label.setText(self.tr("未选择区域，将处理整张图片"))
+
+
 class ColorFixCard(HeaderCardWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -109,6 +195,46 @@ class ColorFixCard(HeaderCardWidget):
         main_layout.addLayout(toggle_layout)
 
         hint_label = CaptionLabel(self.tr("确保输出图片和输入图片的色彩空间一致"))
+        hint_label.setStyleSheet("color: #999999;")
+        main_layout.addWidget(hint_label)
+
+
+class HighQualityOutputCard(HeaderCardWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setTitle(self.tr("✨ 输出质量"))
+        self.setBorderRadius(8)
+
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(10)
+
+        self.viewLayout.setContentsMargins(10, 10, 10, 10)
+        self.viewLayout.addLayout(main_layout)
+
+        toggle_layout = QHBoxLayout()
+        toggle_layout.setContentsMargins(0, 0, 0, 0)
+        toggle_layout.setSpacing(10)
+
+        label = QLabel(self.tr("启用高质量输出"))
+        label.setStyleSheet("color: #666666;")
+        toggle_layout.addWidget(label)
+        toggle_layout.addStretch()
+        self.toggle = ToggleSwitch(self)
+        toggle_layout.addWidget(self.toggle)
+
+        bind_widget_to_param(
+            self.toggle,
+            "toggled",
+            blind_watermark_remove_params,
+            "high_quality_output",
+            transform=None,
+        )
+        self.toggle.toggled.emit(False)
+        main_layout.addLayout(toggle_layout)
+
+        hint_label = CaptionLabel(self.tr("提高输出质量，增加暗印去除概率，但耗时可能翻倍。"))
+        hint_label.setWordWrap(True)
         hint_label.setStyleSheet("color: #999999;")
         main_layout.addWidget(hint_label)
 
@@ -321,7 +447,9 @@ class ControlPanelWidget(ScrollArea):
         main_layout.setAlignment(Qt.AlignTop)
 
         main_layout.addWidget(FileSelectorCard(self))
+        main_layout.addWidget(ProcessRegionCard(self))
         main_layout.addWidget(ColorFixCard(self))
+        main_layout.addWidget(HighQualityOutputCard(self))
         main_layout.addWidget(ModelSelectCard(self))
         main_layout.addWidget(OutputSettingsCard(self))
         main_layout.addStretch(1)
@@ -583,6 +711,8 @@ class HeaderWidget(QWidget):
             return error_msg, task_params
         task_params["model_name"] = params["model_name"]
         task_params["use_color_fix"] = params.get("use_color_fix", True)
+        task_params["high_quality_output"] = params.get("high_quality_output", False)
+        task_params["reserve_region"] = params.get("reserve_region")
         if "output_path" not in params or not params["output_path"]:
             error_msg = self.tr("请设置文件保存位置")
             return error_msg, task_params
