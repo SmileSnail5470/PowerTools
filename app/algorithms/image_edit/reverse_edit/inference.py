@@ -103,8 +103,8 @@ class ReverseEditInference:
             x1, y1, x2, y2 = normalized_region
             output_image = processed_image.copy()
             output_image.paste(image_ori.crop((x1, y1, x2, y2)), (x1, y1))
-        # 处理图片超分
-        pass
+        if high_quality_output:
+            pass
         if self.use_color_fix and edit_prompt == prompt:
             output_image = wavelet_color_fix(output_image, image_ori)
         output_image.save(output_path)
