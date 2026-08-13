@@ -11,5 +11,3 @@ app/resources/deps/super_resolution/*
 *.pyd
 *.so
 *.lic
-app/algorithms/image_edit/reverse_edit/*
-!app/algorithms/image_edit/reverse_edit/inference.py

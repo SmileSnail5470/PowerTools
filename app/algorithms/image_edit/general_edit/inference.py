@@ -4,7 +4,7 @@ from pathlib import Path
 from PIL import Image
 import cv2
 import numpy as np
-from app.algorithms.image_edit.color_fix import lab_color_fix
+from app.algorithms.private.color_fix import lab_color_fix
 from app.algorithms.image_edit.general_edit.pipeline import Pipeline
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}

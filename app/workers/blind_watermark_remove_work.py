@@ -3,7 +3,7 @@ import os
 from app.ui.common.config import cfg
 from app.workers.work_base import BaseWorker, _resolve_hardware_variant
 from app.utils.logger.decorators import log_exception
-from app.algorithms.image_edit.reverse_edit.inference import ReverseEditInference  # type: ignore
+from app.algorithms.private.reverse_edit.inference import ReverseEditInference
 from app.workers.watermark_extract_work import WatermarkExtractInternal
 
 
