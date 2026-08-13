@@ -78,7 +78,7 @@ model_estimated_sizes = {
         "ocr": "217 MB",
         "video_inpainting": "183 MB",
         "tracker": "124 MB",
-        "image_edit": "3.20 GB"
+        "image_edit": "11.0 GB"
     },
     "cpu": {
         "blind_watermark_addition": "1.08 GB",
@@ -87,7 +87,7 @@ model_estimated_sizes = {
         "ocr": "217 MB",
         "video_inpainting": "261 MB",
         "tracker": "124 MB",
-        "image_edit": "3.20 GB"
+        "image_edit": "11.0 GB"
     }
 }
 
