@@ -1,0 +1,3 @@
+[submodule "app/algorithms/private"]
+	path = app/algorithms/private
+	url = https://github.com/SmileSnail5470/PowerToolsCore.git
