@@ -16,7 +16,11 @@ class DiagonalGaussianDistribution:
         self.var = np.exp(self.logvar)
 
     def sample(self, generator=None) -> np.ndarray:
-        noise = np.random.randn(*self.mean.shape).astype(self.mean.dtype)
+        if generator is None:
+            noise = np.random.randn(*self.mean.shape).astype(self.mean.dtype)
+        else:
+            noise = generator.standard_normal(self.mean.shape, dtype=np.float32)
+            noise = noise.astype(self.mean.dtype, copy=False)
         return self.mean + self.std * noise
 
     def mode(self) -> np.ndarray:
@@ -51,7 +55,7 @@ class Tokenizer:
             if bos_id is not None and eos_id is not None:
                 self._tokenizer.post_processor = RobertaProcessing(
                     sep=(eos_token, eos_id),
-                    cls=(bos_token, bos_id),
+                    cls_token=(bos_token, bos_id),
                     add_prefix_space=False,
                     trim_offsets=True,
                 )

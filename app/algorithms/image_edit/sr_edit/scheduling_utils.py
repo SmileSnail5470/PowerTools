@@ -1,4 +1,3 @@
-import os
 import numpy as np
 
 
@@ -39,9 +38,7 @@ class SchedulerMixin:
         self.config = type("Config", (), kwargs)()
 
     @classmethod
-    def from_pretrained(cls, pretrained_path: str | os.PathLike, subfolder: str | None = None, **kwargs):
-        if subfolder:
-            pretrained_path = os.path.join(pretrained_path, subfolder)
+    def from_pretrained(cls, **kwargs):
         config = SCHEDULER_CONFIG
         config.update(kwargs)
         return cls(**config)

@@ -1,8 +1,12 @@
+import os
+
+import cv2
 import numpy as np
 from PIL import Image
 from app.algorithms.image_edit.color_fix import wavelet_color_fix
 from app.algorithms.image_edit.reverse_edit.utils import RunConfig
 from app.algorithms.image_edit.reverse_edit.pipeline import ORTPipeline
+from app.algorithms.image_edit.sr_edit.inference import ImageSRInference
 
 
 class ReverseEditInference:
@@ -82,7 +86,21 @@ class ReverseEditInference:
         rec_image = rec_image.crop((0, 0, new_w, new_h))
         if rec_image.size != image.size:
             rec_image = rec_image.resize(image.size, Image.Resampling.LANCZOS)
-        return rec_image
+        return rec_image, new_w, new_h
+
+    def _sr_edit(self, image: Image.Image, resize_size=None):
+        ori_size = image.size
+        if resize_size:
+            image = image.resize((resize_size), Image.Resampling.LANCZOS)
+        sr_model_dir = os.path.join(os.path.dirname(self.model_dir), "sr_edit")
+        sr_edit_instance = ImageSRInference(model_dir=sr_model_dir)
+        arr = np.array(image.convert("RGB"))
+        bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+        result_bgr = sr_edit_instance.inference(img=bgr)
+        result = cv2.cvtColor(result_bgr, cv2.COLOR_BGR2RGB)
+        output = Image.fromarray(result)
+        output = output.resize(ori_size, Image.Resampling.LANCZOS)
+        return output
 
     def infer(
         self,
@@ -96,15 +114,15 @@ class ReverseEditInference:
         image_ori = Image.open(input_path).convert("RGB")
         edit_prompt = edit_prompt if edit_prompt is not None else prompt
         normalized_region = self._normalize_region(region, image_ori.size)
-        processed_image = self._infer_image(image_ori, prompt, edit_prompt)
+        processed_image, new_w, new_h = self._infer_image(image_ori, prompt, edit_prompt)
+        if high_quality_output:
+            processed_image = self._sr_edit(processed_image, resize_size=(new_w, new_h))
         if normalized_region is None:
             output_image = processed_image
         else:
             x1, y1, x2, y2 = normalized_region
             output_image = processed_image.copy()
             output_image.paste(image_ori.crop((x1, y1, x2, y2)), (x1, y1))
-        if high_quality_output:
-            pass
         if self.use_color_fix and edit_prompt == prompt:
             output_image = wavelet_color_fix(output_image, image_ori)
         output_image.save(output_path)

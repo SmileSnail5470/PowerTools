@@ -1,5 +1,5 @@
 import numpy as np
-from app.algorithms.image_edit.image_sr.scheduling_utils import SchedulerMixin, SchedulerOutput
+from app.algorithms.image_edit.sr_edit.scheduling_utils import SchedulerMixin, SchedulerOutput
 
 
 class Scheduler(SchedulerMixin):
@@ -161,14 +161,13 @@ class Scheduler(SchedulerMixin):
         sample = sample.astype(np.float32)
         sigma = self.sigmas[self._step_index]
         gamma = min(s_churn / (len(self.sigmas) - 1), 2**0.5 - 1) if s_tmin <= sigma <= s_tmax else 0.0
-        if noise is None:
-            noise_eps = np.random.randn(*model_output.shape).astype(np.float32)
-        else:
-            noise_eps = noise.astype(np.float32)
-        eps = noise_eps * s_noise
         sigma_hat = sigma * (gamma + 1)
         if gamma > 0:
-            sample = sample + eps * (sigma_hat**2 - sigma**2) ** 0.5
+            if noise is None:
+                noise_eps = np.random.randn(*model_output.shape).astype(np.float32)
+            else:
+                noise_eps = noise.astype(np.float32)
+            sample = sample + noise_eps * s_noise * (sigma_hat**2 - sigma**2) ** 0.5
         sigma_next = self.sigmas[self._step_index + 1]
         prediction_type = self.config.prediction_type
         if prediction_type == "epsilon":
