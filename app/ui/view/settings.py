@@ -1221,8 +1221,10 @@ class Settings(QWidget):
                 os.environ["CUDA_PATH"] = cuda_parent_dir
             os.makedirs(cfg.softwareInvalidPath, exist_ok=True)
             gpu_config_path = os.path.join(cfg.softwareInvalidPath, "gpu_env_config.json")
-            with open(gpu_config_path, "r") as fp:
-                data = json.loads(fp.read())
+            data = {}
+            if os.path.exists(gpu_config_path):
+                with open(gpu_config_path, "r") as fp:
+                    data = json.loads(fp.read())
             data["cuda_path"] = cuda_path
             with open(gpu_config_path, "w") as fp:
                 fp.write(json.dumps(data))
@@ -1253,8 +1255,10 @@ class Settings(QWidget):
                 os.environ["PATH"] = normalized_cudnn + os.pathsep + current_path
             os.makedirs(cfg.softwareInvalidPath, exist_ok=True)
             gpu_config_path = os.path.join(cfg.softwareInvalidPath, "gpu_env_config.json")
-            with open(gpu_config_path, "r") as fp:
-                data = json.loads(fp.read())
+            data = {}
+            if os.path.exists(gpu_config_path):
+                with open(gpu_config_path, "r") as fp:
+                    data = json.loads(fp.read())
             data["cudnn_path"] = cudnn_path
             with open(gpu_config_path, "w") as fp:
                 fp.write(json.dumps(data))
