@@ -41,7 +41,7 @@ def default_configs() -> dict:
     }
 
 
-class ImageSpliterNp:
+class ImageSpliter:
     def __init__(self, im, pch_size, stride, sf=1, extra_bs=1, weight_type="Gaussian"):
         assert weight_type in ["Gaussian", "ones"]
         assert stride <= pch_size
@@ -150,7 +150,7 @@ class ImageSpliterNp:
         return self.im_res
 
 
-def retrieve_timesteps_invsr(scheduler, timesteps):
+def retrieve_timesteps_sredit(scheduler, timesteps):
     num_inference_steps = len(timesteps)
     timesteps_arr = np.array(timesteps, dtype=np.float32) - 1
     scheduler.timesteps = timesteps_arr
@@ -452,9 +452,9 @@ class ImageSRInference:
             latents = self.scheduler.step(noise_pred, timestep, latents, return_dict=False)[0]
         return np.asarray(latents, dtype=np.float32)
 
-    def _run_tiles(self, spliter: ImageSpliterNp, sf: int) -> np.ndarray:
+    def _run_tiles(self, spliter: ImageSpliter, sf: int) -> np.ndarray:
         timings: dict[str, float] = {}
-        timesteps, _ = retrieve_timesteps_invsr(self.scheduler, self.configs["timesteps"])
+        timesteps, _ = retrieve_timesteps_sredit(self.scheduler, self.configs["timesteps"])
         latent_timestep = float(timesteps[0])
         sigma_init = float(self.scheduler.sigmas[0])
         groups = spliter.num_groups
@@ -541,7 +541,7 @@ class ImageSRInference:
         try:
             im_cond, pad_top, pad_left = self._pad_to_patch(im_cond, pch_size)
             im_cond = self._pad_to_multiple(im_cond, max(1, self.vae_scale_factor // sf * 8))
-            spliter = ImageSpliterNp(
+            spliter = ImageSpliter(
                 im_cond,
                 pch_size=pch_size,
                 stride=max(1, int(pch_size * 0.5)),
