@@ -1211,14 +1211,6 @@ class Settings(QWidget):
                 item_path = os.path.join(cuda_path, item)
                 if not os.path.exists(item_path):
                     return False, f"{item_path} 不存在"
-            current_path = os.environ.get("PATH", "")
-            path_list = [os.path.normpath(p) for p in current_path.split(os.pathsep) if p]
-            normalized_cuda = os.path.normpath(cuda_path)
-            if normalized_cuda not in path_list:
-                os.environ["PATH"] = normalized_cuda + os.pathsep + current_path
-            cuda_parent_dir = os.path.dirname(os.path.abspath(cuda_path))
-            if "CUDA_PATH" not in os.environ or os.environ["CUDA_PATH"] != cuda_parent_dir:
-                os.environ["CUDA_PATH"] = cuda_parent_dir
             os.makedirs(cfg.softwareInvalidPath, exist_ok=True)
             gpu_config_path = os.path.join(cfg.softwareInvalidPath, "gpu_env_config.json")
             data = {}
@@ -1228,6 +1220,7 @@ class Settings(QWidget):
             data["cuda_path"] = cuda_path
             with open(gpu_config_path, "w") as fp:
                 fp.write(json.dumps(data))
+            cfg.update_gpu_env()
             return True, ""
 
         def _check_cudnn_env(card: MultiConfigSoftwareCard):
@@ -1248,11 +1241,6 @@ class Settings(QWidget):
                 item_path = os.path.join(cudnn_path, item)
                 if not os.path.exists(item_path):
                     return False, f"{item_path} 不存在"
-            current_path = os.environ.get("PATH", "")
-            path_list = [os.path.normpath(p) for p in current_path.split(os.pathsep) if p]
-            normalized_cudnn = os.path.normpath(cudnn_path)
-            if normalized_cudnn not in path_list:
-                os.environ["PATH"] = normalized_cudnn + os.pathsep + current_path
             os.makedirs(cfg.softwareInvalidPath, exist_ok=True)
             gpu_config_path = os.path.join(cfg.softwareInvalidPath, "gpu_env_config.json")
             data = {}
@@ -1262,6 +1250,7 @@ class Settings(QWidget):
             data["cudnn_path"] = cudnn_path
             with open(gpu_config_path, "w") as fp:
                 fp.write(json.dumps(data))
+            cfg.update_gpu_env()
             return True, ""
 
         gpu_env_card = MultiConfigSoftwareCard(

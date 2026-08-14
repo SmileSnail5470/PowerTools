@@ -4,14 +4,15 @@ import numpy as np
 import onnxruntime as ort
 from app.algorithms import general_provider, general_session, general_inference_session, ORTEnvironment
 ORTEnvironment.initialize()
+try:
+    import cupy  # type: ignore
+    _HAS_CUPY = True
+except Exception:
+    _HAS_CUPY = False
 
 
 def cupy_available() -> bool:
-    try:
-        import cupy
-    except Exception:
-        return False
-    return True
+    return _HAS_CUPY
 
 
 def array_module(device: str, use_cupy: bool | None = None):

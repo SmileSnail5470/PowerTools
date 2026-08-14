@@ -2,7 +2,6 @@ import os
 import sys
 import subprocess
 import onnxruntime as ort
-ort.preload_dlls(directory="")
 from PySide6.QtCore import QObject
 from app.ui.common.config import cfg
 
@@ -25,6 +24,7 @@ def verify_gpu_environment():
     if not _has_cuda_gpu():
         return "CPU 运行", ""
     try:
+        ort.preload_dlls(directory="")
         ppt_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "license", "fusion.onnx")
         if not os.path.exists(ppt_onnx_path):
             ppt_onnx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "library", "fusion.onnx")
@@ -60,6 +60,11 @@ class BackendInfoCacheManager(QObject):
     def __init__(self):
         super().__init__()
         self._cache = {}
+        cfg.gpuEnvironmentChanged.connect(self._on_gpu_environment_changed)
+
+    def _on_gpu_environment_changed(self):
+        self.clear()
+        self.get()
 
     def get(self, key: str = "backend_info"):
         hw_type = cfg.get(cfg.hardwareOptimizationType)

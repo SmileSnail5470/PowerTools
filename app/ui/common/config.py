@@ -4,7 +4,7 @@ import sys
 import pathlib
 from enum import Enum
 
-from PySide6.QtCore import QLocale
+from PySide6.QtCore import QLocale, Signal
 from app.ui.library.qfluentwidgets import (
     QConfig, ConfigItem, OptionsConfigItem, BoolValidator, OptionsValidator, RangeConfigItem, 
     RangeValidator, Theme, ConfigSerializer, FolderValidator
@@ -41,6 +41,7 @@ def update_ffmpeg_path(path: str):
 
 class Config(QConfig):
     """ Config of application """
+    gpuEnvironmentChanged = Signal()
     softwareInvalidPath = os.path.join(pathlib.Path.home(), ".PowerTools")
     additionalParams = ConfigItem("AdditionalSettings", "additionalParams", {})
 
@@ -87,7 +88,7 @@ class Config(QConfig):
         self._config_file = os.path.join(pathlib.Path.home(), ".PowerTools", "settings.json")
         self._load_config()
         self._init_connect()
-        self._update_env()
+        self._update_gpu_env()
         
         os.environ["POWERTOOLS_FFMPEG_BIN"] = self.get(self.ffmpeg_path)
         self.ffmpeg_path.valueChanged.connect(update_ffmpeg_path)
@@ -96,7 +97,10 @@ class Config(QConfig):
         os.environ["POWERTOOLS_GPU_MEMORY_LIMIT"] = str(self.get(self.gpuMemoryLimit))
         self.gpuMemoryLimit.valueChanged.connect(lambda value: os.environ.update({"POWERTOOLS_GPU_MEMORY_LIMIT": str(value)}))
 
-    def _update_env(self):
+    def update_gpu_env(self):
+        self._update_gpu_env()
+
+    def _update_gpu_env(self):
         gpu_config_path = os.path.join(self.softwareInvalidPath, "gpu_env_config.json")
         if not os.path.exists(gpu_config_path):
             return
@@ -117,6 +121,7 @@ class Config(QConfig):
         cuda_parent_dir = os.path.dirname(os.path.abspath(cuda_path))
         if "CUDA_PATH" not in os.environ or os.environ["CUDA_PATH"] != cuda_parent_dir:
             os.environ["CUDA_PATH"] = cuda_parent_dir
+        self.gpuEnvironmentChanged.emit()
 
     def _init_connect(self):
         for name in dir(self.__class__):

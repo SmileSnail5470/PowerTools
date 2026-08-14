@@ -322,8 +322,6 @@ class IOBindingSession:
         return needs_sync
 
     def _bind_auto_outputs(self, binding, state):
-        if state.output_mode == "auto":
-            return
         if state.output_mode is not None:
             binding.clear_binding_outputs()
         device_type = self._device_type
