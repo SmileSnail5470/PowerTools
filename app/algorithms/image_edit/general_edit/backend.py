@@ -62,10 +62,18 @@ class OnnxModule:
         self.xp, self.uses_cupy = array_module("cuda" if self.is_gpu else "cpu", use_cupy)
         use_io_binding = self.is_gpu if use_io_binding is None else use_io_binding
         self.use_io_binding = bool(use_io_binding) and self.is_gpu
+        self.run_options = self._run_options(shrink_memory=True, use_cuda=self.is_gpu)
 
     @property
     def provider(self) -> str:
         return self.session.provider
+
+    def _run_options(self, shrink_memory=True, use_cuda=False):
+        options = ort.RunOptions()
+        if shrink_memory:
+            device = "gpu:0" if use_cuda else "cpu"
+            options.add_run_config_entry("memory.enable_memory_arena_shrinkage", device)
+        return options
 
     def cast(self, name: str, array) -> Any:
         want = self.input_dtypes.get(name)
@@ -89,6 +97,7 @@ class OnnxModule:
         return self.session.run_dict(
             feed,
             output_shapes=output_shapes,
+            run_options=self.run_options,
             prefer_cupy=self.uses_cupy,
             use_io_binding=self.use_io_binding,
         )

@@ -116,6 +116,8 @@ class Config(QConfig):
         normalized_cudnn = os.path.normpath(cudnn_path)
         if normalized_cudnn not in path_list:
             os.environ["PATH"] = normalized_cudnn + os.pathsep + current_path
+        current_path = os.environ.get("PATH", "")
+        path_list = [os.path.normpath(p) for p in current_path.split(os.pathsep) if p]
         if normalized_cuda not in path_list:
             os.environ["PATH"] = normalized_cuda + os.pathsep + current_path
         cuda_parent_dir = os.path.dirname(os.path.abspath(cuda_path))
