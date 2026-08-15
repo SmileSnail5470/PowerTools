@@ -61,7 +61,7 @@ class BackendInfoCacheManager(QObject):
         super().__init__()
         self._cache = {}
         cfg.gpuEnvironmentChanged.connect(self._on_gpu_environment_changed)
-        if "GPU_ENV_CHANGED" in os.environ and os.environ["GPU_ENV_CHANGED"]:
+        if "GPU_ENV_CHANGED" in os.environ and os.environ["GPU_ENV_CHANGED"] != "0":
             self._on_gpu_environment_changed()
 
     def _on_gpu_environment_changed(self):

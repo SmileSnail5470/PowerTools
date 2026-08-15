@@ -681,7 +681,7 @@ def general_session(
         "all": ort.GraphOptimizationLevel.ORT_ENABLE_ALL,
     }[graph_optimization_level]
     options.add_session_config_entry("session.use_env_allocators", "1")
-    options.add_session_config_entry("session.use_device_allocator_for_initializers", "1")
+    # options.add_session_config_entry("session.use_device_allocator_for_initializers", "1")
     options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
     if intra_op_num_threads:
         options.intra_op_num_threads = int(intra_op_num_threads)

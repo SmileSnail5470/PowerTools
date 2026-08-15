@@ -122,7 +122,7 @@ class Config(QConfig):
         if "CUDA_PATH" not in os.environ or os.environ["CUDA_PATH"] != cuda_parent_dir:
             os.environ["CUDA_PATH"] = cuda_parent_dir
         self.gpuEnvironmentChanged.emit()
-        os.environ["GPU_ENV_CHANGED"] = True
+        os.environ["GPU_ENV_CHANGED"] = "1"
 
     def _init_connect(self):
         for name in dir(self.__class__):
