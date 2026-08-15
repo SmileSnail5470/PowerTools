@@ -10,6 +10,8 @@ from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_tran
 
 
 class BidirectionalPropagationORT:
+    _ZERO_CACHE_LIMIT = 4
+    
     def __init__(
             self, 
             backward_onnx_path, 
@@ -36,6 +38,8 @@ class BidirectionalPropagationORT:
         key = (tuple(shape), via_cupy)
         buf = self._zero_cache.get(key)
         if buf is None:
+            while len(self._zero_cache) >= self._ZERO_CACHE_LIMIT:
+                self._zero_cache.pop(next(iter(self._zero_cache)))
             if via_cupy:
                 buf = _cupy_to_ortvalue(cp.zeros(tuple(shape), dtype=cp.float32))
             else:
@@ -53,31 +57,31 @@ class BidirectionalPropagationORT:
     def run_backward_step(self, feat_current, feat_prop_prev, feat_n2):
         if self._use_iobinding:
             feed = {"feat_current": self._to_ort(feat_current), "feat_prop_prev": self._to_ort(feat_prop_prev), "feat_n2": self._to_ort(feat_n2)}
-            return self.backward_session.run_ortvalues(feed, run_options=self.run_options)[0]
+            return self.backward_session.run_with_iobinding(feed, run_options=self.run_options)[0]
         return self.backward_session.run(None, {"feat_current": feat_current, "feat_prop_prev": feat_prop_prev, "feat_n2": feat_n2}, run_options=self.run_options)[0]
 
     def run_forward_step(self, feat_current, feat_prop_prev, feat_n2, feat_backward):
         if self._use_iobinding:
             feed = {"feat_current": self._to_ort(feat_current), "feat_prop_prev": self._to_ort(feat_prop_prev), "feat_n2": self._to_ort(feat_n2), "feat_backward": self._to_ort(feat_backward)}
-            return self.forward_session.run_ortvalues(feed, run_options=self.run_options)[0]
+            return self.forward_session.run_with_iobinding(feed, run_options=self.run_options)[0]
         return self.forward_session.run(None, {"feat_current": feat_current, "feat_prop_prev": feat_prop_prev, "feat_n2": feat_n2, "feat_backward": feat_backward}, run_options=self.run_options)[0]
 
     def run_backward_backbone(self, feat_current, feat_prop_prev):
         if self._use_iobinding:
             feed = {"feat_current": self._to_ort(feat_current), "feat_prop_prev": self._to_ort(feat_prop_prev)}
-            return self.backward_backbone_session.run_ortvalues(feed, run_options=self.run_options)[0]
+            return self.backward_backbone_session.run_with_iobinding(feed, run_options=self.run_options)[0]
         return self.backward_backbone_session.run(None, {"feat_current": feat_current, "feat_prop_prev": feat_prop_prev}, run_options=self.run_options)[0]
 
     def run_forward_backbone(self, feat_current, feat_backward, feat_prop_prev):
         if self._use_iobinding:
             feed = {"feat_current": self._to_ort(feat_current), "feat_backward": self._to_ort(feat_backward), "feat_prop_prev": self._to_ort(feat_prop_prev)}
-            return self.forward_backbone_session.run_ortvalues(feed, run_options=self.run_options)[0]
+            return self.forward_backbone_session.run_with_iobinding(feed, run_options=self.run_options)[0]
         return self.forward_backbone_session.run(None, {"feat_current": feat_current, "feat_backward": feat_backward, "feat_prop_prev": feat_prop_prev}, run_options=self.run_options)[0]
 
     def fusion_conv(self, x):
         if self._use_cupy:
             feed = {"x": _cupy_to_ortvalue(x) if isinstance(x, cp.ndarray) else x}
-            ort_out = self.fusion_session.run_ortvalues(feed, run_options=self.run_options)[0]
+            ort_out = self.fusion_session.run_with_iobinding(feed, run_options=self.run_options)[0]
             return _ortvalue_to_cupy(ort_out)
         if self._use_iobinding:
             return self.fusion_session.run_with_iobinding_numpy({"x": x}, run_options=self.run_options)[0]

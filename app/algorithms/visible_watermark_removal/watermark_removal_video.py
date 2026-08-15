@@ -554,13 +554,13 @@ class VideoWatermarkRemover:
             gpu_memory_limit = int(os.environ.get("POWERTOOLS_GPU_MEMORY_LIMIT", 16))
             if max(process_h, process_w) < 540:
                 resize_ratio = 1.0
-                subvideo_length = 80 if gpu_memory_limit >= 12 else 70 if gpu_memory_limit >= 8 else 60
+                subvideo_length = 80 if gpu_memory_limit > 12 else 70 if gpu_memory_limit > 8 else 60
             elif max(process_h, process_w) < 720:
                 resize_ratio = 540.0 / max(process_h, process_w)
-                subvideo_length = 70 if gpu_memory_limit >= 12 else 60 if gpu_memory_limit >= 8 else 50
+                subvideo_length = 70 if gpu_memory_limit > 12 else 60 if gpu_memory_limit > 8 else 50
             else:
                 resize_ratio = 720.0 / max(process_h, process_w)
-                subvideo_length = 60 if gpu_memory_limit >= 12 else 50 if gpu_memory_limit >= 8 else 40
+                subvideo_length = 60 if gpu_memory_limit > 12 else 50 if gpu_memory_limit > 8 else 40
             subvideo_length = min(subvideo_length, init_subvideo_length)
             logging.getLogger("subprocess").info(
                 f"Process video resize ratio {resize_ratio} and subvideo length {subvideo_length} and process size {(process_w, process_h)} and gpu memory limit {gpu_memory_limit}"

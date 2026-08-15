@@ -56,6 +56,7 @@ _NP_TO_ORT_DTYPE = {
 
 _SESSION_CACHE = {}
 _SESSION_CACHE_LOCK = threading.Lock()
+_MAX_OUTPUT_BUF_ENTRIES = 4
 
 
 def _is_cuda_session(session):
@@ -230,6 +231,7 @@ class IOBindingSession:
         self._static_inputs.clear()
 
     def clear_persistent_inputs(self):
+        self._static_inputs.clear()
         with self._states_lock:
             states = list(self._states)
         for state in states:
@@ -331,6 +333,11 @@ class IOBindingSession:
         state.output_mode = "auto"
         state.output_current = None
 
+    def _release_auto_outputs(self, binding, state):
+        binding.clear_binding_outputs()
+        state.output_mode = None
+        state.output_current = None
+
     def _alloc_output(self, name, shape, use_cupy):
         dtype = self._output_dtypes.get(name, np.float32)
         if use_cupy:
@@ -343,6 +350,9 @@ class IOBindingSession:
             return state.output_current
         if state.output_mode is not None:
             binding.clear_binding_outputs()
+        max_entries = _MAX_OUTPUT_BUF_ENTRIES * max(1, len(self._output_names))
+        while len(state.output_bufs) >= max_entries:
+            state.output_bufs.pop(next(iter(state.output_bufs)))
         buffers = {}
         for name in self._output_names:
             shape = tuple(output_shapes[name])
@@ -422,14 +432,9 @@ class IOBindingSession:
         if not self._use_cuda:
             return self._run_numpy_fallback(input_feed, run_options=run_options)
         binding, _ = self._run_bound(input_feed, run_options)
-        return binding.copy_outputs_to_cpu()
-
-    def run_ortvalues(self, input_feed, run_options=None):
-        if not self._use_cuda:
-            results = self._run_numpy_fallback(input_feed, run_options=run_options)
-            return [ort.OrtValue.ortvalue_from_numpy(r) for r in results]
-        binding, _ = self._run_bound(input_feed, run_options)
-        return binding.get_outputs()
+        outputs = binding.copy_outputs_to_cpu()
+        self._release_auto_outputs(binding, self._state)
+        return outputs
 
     def run_dict(
         self,
@@ -450,7 +455,9 @@ class IOBindingSession:
         use_cupy = bool(prefer_cupy) and output_shapes is not None
         binding, buffers = self._run_bound(input_feed, run_options, output_shapes=output_shapes, use_cupy=use_cupy)
         if buffers is None:
-            return dict(zip(self._output_names, binding.copy_outputs_to_cpu()))
+            outputs = dict(zip(self._output_names, binding.copy_outputs_to_cpu()))
+            self._release_auto_outputs(binding, self._state)
+            return outputs
         if use_cupy:
             return dict(buffers)
         return {name: buf.numpy() for name, buf in buffers.items()}

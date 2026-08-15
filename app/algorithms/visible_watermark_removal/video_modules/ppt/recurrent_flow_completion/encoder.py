@@ -22,7 +22,7 @@ class EncoderORT:
                 "masked_flows": _cupy_to_ortvalue(masked_flows) if isinstance(masked_flows, cp.ndarray) else masked_flows,
                 "masks": _cupy_to_ortvalue(masks) if isinstance(masks, cp.ndarray) else masks,
             }
-            ort_outputs = self.session.run_ortvalues(feed, run_options=self.run_options)
+            ort_outputs = self.session.run_with_iobinding(feed, run_options=self.run_options)
             return _ortvalue_to_cupy(ort_outputs[0]), _ortvalue_to_cupy(ort_outputs[1]), _ortvalue_to_cupy(ort_outputs[2])
         feed = {"masked_flows": masked_flows, "masks": masks}
         if self._use_iobinding:

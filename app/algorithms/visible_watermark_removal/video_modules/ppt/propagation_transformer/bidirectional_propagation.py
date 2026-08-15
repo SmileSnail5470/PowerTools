@@ -10,6 +10,8 @@ from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_tran
 
 
 class BidirectionalPropagationORT:
+    _ZERO_CACHE_LIMIT = 4
+    
     def __init__(
             self, 
             backward_step_path, 
@@ -37,6 +39,8 @@ class BidirectionalPropagationORT:
         buf = self._zero_cache.get(key)
         if buf is not None:
             return buf
+        while len(self._zero_cache) >= self._ZERO_CACHE_LIMIT:
+            self._zero_cache.pop(next(iter(self._zero_cache)))
         if via_cupy:
             buf = _cupy_to_ortvalue(cp.zeros(tuple(shape), dtype=cp.float32))
         else:
@@ -60,7 +64,7 @@ class BidirectionalPropagationORT:
                 "flow_check": self._to_ort(flow_check),
                 "mask_current": self._to_ort(mask_current),
             }
-            return self.backward_step.run_ortvalues(feed, run_options=self.run_options)[0]
+            return self.backward_step.run_with_iobinding(feed, run_options=self.run_options)[0]
         return self.backward_step.run(None, {
             "feat_current": feat_current, "feat_prop_prev": feat_prop_prev,
             "flow_prop": flow_prop, "flow_check": flow_check, "mask_current": mask_current,
@@ -75,7 +79,7 @@ class BidirectionalPropagationORT:
                 "flow_check": self._to_ort(flow_check),
                 "mask_current": self._to_ort(mask_current),
             }
-            return self.forward_step.run_ortvalues(feed, run_options=self.run_options)[0]
+            return self.forward_step.run_with_iobinding(feed, run_options=self.run_options)[0]
         return self.forward_step.run(
             None,
             {
@@ -91,13 +95,13 @@ class BidirectionalPropagationORT:
     def _run_backward_first(self, feat_current, mask_current):
         if self._use_iobinding:
             feed = {"feat_current": self._to_ort(feat_current), "mask_current": self._to_ort(mask_current)}
-            return self.backward_first.run_ortvalues(feed, run_options=self.run_options)[0]
+            return self.backward_first.run_with_iobinding(feed, run_options=self.run_options)[0]
         return self.backward_first.run(None, {"feat_current": feat_current, "mask_current": mask_current}, run_options=self.run_options)[0]
 
     def _run_forward_first(self, feat_current, mask_current):
         if self._use_iobinding:
             feed = {"feat_current": self._to_ort(feat_current), "mask_current": self._to_ort(mask_current)}
-            return self.forward_first.run_ortvalues(feed, run_options=self.run_options)[0]
+            return self.forward_first.run_with_iobinding(feed, run_options=self.run_options)[0]
         return self.forward_first.run(None, {"feat_current": feat_current, "mask_current": mask_current}, run_options=self.run_options)[0]
 
     def _run_fusion(self, outputs_b, outputs_f, mask_in, x_raw):
@@ -108,7 +112,7 @@ class BidirectionalPropagationORT:
                 "mask_in": self._to_ort(mask_in),
                 "x_raw": self._to_ort(x_raw),
             }
-            ort_out = self.fusion_sess.run_ortvalues(feed, run_options=self.run_options)[0]
+            ort_out = self.fusion_sess.run_with_iobinding(feed, run_options=self.run_options)[0]
             if self._use_cupy:
                 return _ortvalue_to_cupy(ort_out)
             return ortvalue_to_numpy(ort_out)
@@ -259,7 +263,7 @@ class ImgPropStepORT:
                 self.input_names[4]: self._to_ort(flow_prop),
                 self.input_names[5]: self._to_ort(flow_check),
             }
-            ort_outputs = self.session.run_ortvalues(feed, run_options=run_options)
+            ort_outputs = self.session.run_with_iobinding(feed, run_options=run_options)
             return ort_outputs[0], ort_outputs[1]
         outputs = self.session.run(None, {
             self.input_names[0]: feat_current if not isinstance(feat_current, ort.OrtValue) else feat_current.numpy(),
