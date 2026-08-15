@@ -11,6 +11,13 @@ ort.preload_dlls(directory="")
 import app.library._model_loader as model_loader
 from app.ui.common.utils import global_backend_info_cache
 from app.ui.common.config import cfg
+try:
+    import cupy
+except Exception:
+    pass
+
+
+algorithms_logger = logging.getLogger("algorithms")
 
 
 def is_gpu_device():
@@ -49,6 +56,7 @@ _NP_TO_ORT_DTYPE = {
 
 _SESSION_CACHE = {}
 _SESSION_CACHE_LOCK = threading.Lock()
+_MAX_OUTPUT_BUF_ENTRIES = 4
 
 
 def _is_cuda_session(session):
@@ -59,114 +67,100 @@ def _is_cuda_session(session):
         return False
 
 
+def _is_cupy_array(value):
+    return type(value).__module__.partition(".")[0] == "cupy"
+
+
+class _BindingState(threading.local):
+    def __init__(self, registry, lock):
+        self.binding = None
+        self.input_bufs = {}       # name -> [OrtValue, shape, np.dtype]
+        self.bound_inputs = {}     # name -> 当前已绑定的对象(避免重复 bind)
+        self.feed_keys = None      # 上一次喂入的输入名签名
+        self.output_bufs = {}      # (name, shape, is_cupy) -> buffer
+        self.output_mode = None    # None | "auto" | 固定输出形状 key
+        self.output_current = None  # 固定输出模式下 {name: buffer}
+        with lock:
+            registry.append(self)
+
+
 class IOBindingSession:
     def __init__(self, session):
         self._session = session
         self._use_cuda = _is_cuda_session(session)
+        self._device_type = "cuda" if self._use_cuda else "cpu"
+        self._device_id = 0
+        inputs = session.get_inputs()
+        outputs = session.get_outputs()
+        self._input_names = [inp.name for inp in inputs]
+        self._output_names = [out.name for out in outputs]
         self._input_dtypes = {}
-        self._input_names = [inp.name for inp in session.get_inputs()]
-        self._output_names = [out.name for out in session.get_outputs()]
-        for inp in session.get_inputs():
+        self._input_ort_dtypes = {}
+        self._input_shapes = {}
+        for inp in inputs:
             dtype = _ONNX_TO_NP_DTYPE.get(inp.type)
             if dtype is not None:
-                self._input_dtypes[inp.name] = dtype
-        self._persist_inputs = {}
+                self._input_dtypes[inp.name] = np.dtype(dtype)
+                self._input_ort_dtypes[inp.name] = inp.type
+            self._input_shapes[inp.name] = inp.shape
+        self._output_dtypes = {}
+        self._output_shapes = {}
+        for out in outputs:
+            dtype = _ONNX_TO_NP_DTYPE.get(out.type)
+            if dtype is not None:
+                self._output_dtypes[out.name] = np.dtype(dtype)
+            self._output_shapes[out.name] = out.shape
+        self._static_inputs = {}
+        self._states = []
+        self._states_lock = threading.Lock()
+        self._state = _BindingState(self._states, self._states_lock)
 
     @property
     def use_cuda(self):
         return self._use_cuda
 
+    @property
+    def device_type(self):
+        return self._device_type
+
+    @property
+    def device_id(self):
+        return self._device_id
+
+    @property
+    def input_names(self):
+        return self._input_names
+
+    @property
+    def output_names(self):
+        return self._output_names
+
+    @property
+    def input_dtypes(self):
+        return self._input_dtypes
+
+    @property
+    def output_dtypes(self):
+        return self._output_dtypes
+
+    @property
+    def input_shapes(self):
+        return self._input_shapes
+
+    @property
+    def output_shapes(self):
+        return self._output_shapes
+
+    @property
+    def provider(self):
+        providers = self._session.get_providers()
+        return providers[0] if providers else "CPUExecutionProvider"
+
     def expected_dtype(self, name):
         return self._input_dtypes.get(name)
 
-    def to_device(self, name, value):
-        if isinstance(value, ort.OrtValue):
-            return value
-        value = self._cast_input(name, value)
-        value = np.ascontiguousarray(value)
-        if self._use_cuda:
-            return ort.OrtValue.ortvalue_from_numpy(value, device_type="cuda", device_id=0)
-        return ort.OrtValue.ortvalue_from_numpy(value)
-
-    def _bind_numpy_input(self, io_binding, name, value):
-        value = self._cast_input(name, value)
-        value = np.ascontiguousarray(value)
-        buf = self._persist_inputs.get(name)
-        ort_dtype = _NP_TO_ORT_DTYPE.get(np.dtype(value.dtype))
-        if (
-            buf is not None
-            and tuple(buf.shape()) == value.shape
-            and buf.data_type() == ort_dtype
-        ):
-            buf.update_inplace(value)
-        else:
-            buf = ort.OrtValue.ortvalue_from_numpy(value, device_type="cuda", device_id=0)
-            self._persist_inputs[name] = buf
-        io_binding.bind_ortvalue_input(name, buf)
-
-    def _cast_input(self, name, value):
-        expected = self._input_dtypes.get(name)
-        if expected is not None and isinstance(value, np.ndarray) and value.dtype != expected:
-            return value.astype(expected)
-        return value
-
-    def clear_persistent_inputs(self):
-        self._persist_inputs.clear()
-
-    def run(self, output_names, input_feed, **kwargs):
-        casted_feed = {}
-        for name, value in input_feed.items():
-            casted_feed[name] = self._cast_input(name, value)
-        return self._session.run(output_names, casted_feed, **kwargs)
-
-    def run_with_iobinding(self, input_feed, run_options=None):
-        if not self._use_cuda:
-            numpy_feed = {}
-            for name, value in input_feed.items():
-                if isinstance(value, ort.OrtValue):
-                    numpy_feed[name] = value.numpy()
-                else:
-                    numpy_feed[name] = self._cast_input(name, value)
-            results = self._session.run(None, numpy_feed, run_options=run_options)
-            return [ort.OrtValue.ortvalue_from_numpy(r) for r in results]
-
-        io_binding = self._session.io_binding()
-        for name, value in input_feed.items():
-            if isinstance(value, ort.OrtValue):
-                expected = self._input_dtypes.get(name)
-                if expected is not None:
-                    ort_dtype = _NP_TO_ORT_DTYPE.get(np.dtype(expected))
-                    actual_dtype = value.data_type()
-                    if ort_dtype and actual_dtype != ort_dtype:
-                        arr = value.numpy().astype(expected)
-                        arr = np.ascontiguousarray(arr)
-                        value = ort.OrtValue.ortvalue_from_numpy(arr, device_type="cuda", device_id=0)
-                io_binding.bind_ortvalue_input(name, value)
-            elif isinstance(value, np.ndarray):
-                self._bind_numpy_input(io_binding, name, value)
-            else:
-                raise TypeError(f"Unsupported input type for IOBinding: {type(value)}")
-        for out_name in self._output_names:
-            io_binding.bind_output(out_name, device_type="cuda", device_id=0)
-        if run_options:
-            self._session.run_with_iobinding(io_binding, run_options)
-        else:
-            self._session.run_with_iobinding(io_binding)
-
-        outputs = io_binding.get_outputs()
-        return outputs
-
-    def run_with_iobinding_numpy(self, input_feed, run_options=None):
-        if not self._use_cuda:
-            numpy_feed = {}
-            for name, value in input_feed.items():
-                if isinstance(value, ort.OrtValue):
-                    numpy_feed[name] = value.numpy()
-                else:
-                    numpy_feed[name] = self._cast_input(name, value)
-            return self._session.run(None, numpy_feed, run_options=run_options)
-        ort_outputs = self.run_with_iobinding(input_feed, run_options=run_options)
-        return [o.numpy() for o in ort_outputs]
+    def output_dtype(self, name):
+        return self._output_dtypes.get(name)
 
     def get_inputs(self):
         return self._session.get_inputs()
@@ -178,7 +172,295 @@ class IOBindingSession:
         return self._session.get_providers()
 
     def __getattr__(self, name):
-        return getattr(self._session, name)
+        try:
+            session = self.__dict__["_session"]
+        except KeyError:
+            raise AttributeError(name)
+        return getattr(session, name)
+
+    def _prepare_numpy(self, name, value):
+        expected = self._input_dtypes.get(name)
+        if expected is not None and value.dtype != expected:
+            value = value.astype(expected, copy=False)
+        if not value.flags.c_contiguous:
+            value = np.ascontiguousarray(value)
+        return value
+
+    def _cast_input(self, name, value):
+        if isinstance(value, np.ndarray):
+            return self._prepare_numpy(name, value)
+        return value
+
+    def _to_numpy_input(self, name, value):
+        if isinstance(value, np.ndarray):
+            return self._prepare_numpy(name, value)
+        if isinstance(value, ort.OrtValue):
+            return self._prepare_numpy(name, value.numpy())
+        if _is_cupy_array(value):
+            return self._prepare_numpy(name, value.get())
+        return value
+
+    def to_device(self, name, value):
+        if isinstance(value, ort.OrtValue):
+            return value
+        if _is_cupy_array(value):
+            if not self._use_cuda:
+                value = value.get()
+            else:
+                return self._ortvalue_from_cupy(name, value)
+        value = self._prepare_numpy(name, value)
+        if self._use_cuda:
+            return ort.OrtValue.ortvalue_from_numpy(value, device_type=self._device_type, device_id=self._device_id)
+        return ort.OrtValue.ortvalue_from_numpy(value)
+
+    def _ortvalue_from_cupy(self, name, value):
+        value = cupy.ascontiguousarray(value)
+        try:
+            return ort.OrtValue.from_dlpack(value.toDlpack())
+        except Exception as e:
+            algorithms_logger.warning(f"OrtValue from_dlpack failed {e} and fallback ortvalue_from_numpy")
+            return ort.OrtValue.ortvalue_from_numpy(np.ascontiguousarray(value.get()), device_type="cuda", device_id=self._device_id)
+
+    def set_static_input(self, name, value):
+        if self._use_cuda:
+            self._static_inputs[name] = self.to_device(name, value)
+        else:
+            self._static_inputs[name] = self._to_numpy_input(name, value)
+
+    def clear_static_inputs(self):
+        self._static_inputs.clear()
+
+    def clear_persistent_inputs(self):
+        self._static_inputs.clear()
+        with self._states_lock:
+            states = list(self._states)
+        for state in states:
+            state.input_bufs.clear()
+            state.bound_inputs.clear()
+            state.feed_keys = None
+            state.output_bufs.clear()
+            state.output_current = None
+            state.output_mode = None
+            state.binding = None
+
+    def _binding(self, state):
+        binding = state.binding
+        if binding is None:
+            binding = state.binding = self._session.io_binding()
+        return binding
+
+    def _bind_input(self, binding, state, name, value, bound):
+        if isinstance(value, np.ndarray):
+            value = self._prepare_numpy(name, value)
+            if self._device_type != "cuda":
+                binding.bind_cpu_input(name, value)
+                if bound is not None:
+                    bound[name] = value
+                return False
+            entry = state.input_bufs.get(name)
+            if entry is not None and entry[1] == value.shape and entry[2] == value.dtype:
+                buf = entry[0]
+                buf.update_inplace(value)
+            else:
+                buf = ort.OrtValue.ortvalue_from_numpy(value, device_type=self._device_type, device_id=self._device_id)
+                state.input_bufs[name] = [buf, value.shape, value.dtype]
+            if bound is None:
+                binding.bind_ortvalue_input(name, buf)
+            elif bound.get(name) is not buf:
+                binding.bind_ortvalue_input(name, buf)
+                bound[name] = buf
+            return False
+        if isinstance(value, ort.OrtValue):
+            expected = self._input_ort_dtypes.get(name)
+            if expected is not None and value.data_type() != expected:
+                value = ort.OrtValue.ortvalue_from_numpy(
+                    self._prepare_numpy(name, value.numpy()),
+                    device_type=self._device_type,
+                    device_id=self._device_id,
+                )
+            if bound is None:
+                binding.bind_ortvalue_input(name, value)
+            elif bound.get(name) is not value:
+                binding.bind_ortvalue_input(name, value)
+                bound[name] = value
+            return False
+        if _is_cupy_array(value):
+            expected = self._input_dtypes.get(name)
+            if expected is not None and value.dtype != expected:
+                value = value.astype(expected, copy=False)
+            if not value.flags.c_contiguous:
+                value = cupy.ascontiguousarray(value)
+            binding.bind_input(
+                name,
+                "cuda",
+                self._device_id,
+                value.dtype,
+                value.shape,
+                value.data.ptr,
+            )
+            if bound is not None:
+                bound[name] = value
+            return True
+        raise TypeError(f"Unsupported input type for IOBinding: {type(value)}")
+
+    def _bind_inputs(self, binding, state, input_feed, bound):
+        if bound is not None:
+            keys = frozenset(input_feed)
+            if state.feed_keys != keys:
+                if state.feed_keys is not None:
+                    binding.clear_binding_inputs()
+                    bound.clear()
+                state.feed_keys = keys
+        needs_sync = False
+        for name, value in input_feed.items():
+            if self._bind_input(binding, state, name, value, bound):
+                needs_sync = True
+        if self._static_inputs:
+            for name, value in self._static_inputs.items():
+                if name in input_feed:
+                    continue
+                if self._bind_input(binding, state, name, value, bound):
+                    needs_sync = True
+        return needs_sync
+
+    def _bind_auto_outputs(self, binding, state):
+        if state.output_mode is not None:
+            binding.clear_binding_outputs()
+        device_type = self._device_type
+        device_id = self._device_id
+        for name in self._output_names:
+            binding.bind_output(name, device_type, device_id)
+        state.output_mode = "auto"
+        state.output_current = None
+
+    def _release_auto_outputs(self, binding, state):
+        binding.clear_binding_outputs()
+        state.output_mode = None
+        state.output_current = None
+
+    def _alloc_output(self, name, shape, use_cupy):
+        dtype = self._output_dtypes.get(name, np.float32)
+        if use_cupy:
+            return cupy.empty(shape, dtype=dtype)
+        return ort.OrtValue.ortvalue_from_shape_and_type(list(shape), dtype, self._device_type, self._device_id)
+
+    def _bind_fixed_outputs(self, binding, state, output_shapes, use_cupy):
+        key = (use_cupy, tuple(tuple(output_shapes[name]) for name in self._output_names))
+        if state.output_mode == key:
+            return state.output_current
+        if state.output_mode is not None:
+            binding.clear_binding_outputs()
+        max_entries = _MAX_OUTPUT_BUF_ENTRIES * max(1, len(self._output_names))
+        while len(state.output_bufs) >= max_entries:
+            state.output_bufs.pop(next(iter(state.output_bufs)))
+        buffers = {}
+        for name in self._output_names:
+            shape = tuple(output_shapes[name])
+            cache_key = (name, shape, use_cupy)
+            buf = state.output_bufs.get(cache_key)
+            if buf is None:
+                buf = self._alloc_output(name, shape, use_cupy)
+                state.output_bufs[cache_key] = buf
+            buffers[name] = buf
+            if use_cupy:
+                binding.bind_output(name, "cuda", self._device_id, buf.dtype, buf.shape, buf.data.ptr)
+            else:
+                binding.bind_ortvalue_output(name, buf)
+        state.output_mode = key
+        state.output_current = buffers
+        return buffers
+
+    def run(self, output_names, input_feed, **kwargs):
+        casted_feed = {}
+        for name, value in input_feed.items():
+            casted_feed[name] = self._to_numpy_input(name, value)
+        if self._static_inputs:
+            for name, value in self._static_inputs.items():
+                if name not in casted_feed:
+                    casted_feed[name] = self._to_numpy_input(name, value)
+        return self._session.run(output_names, casted_feed, **kwargs)
+
+    def _run_numpy_fallback(self, input_feed, run_options=None):
+        numpy_feed = {}
+        for name, value in input_feed.items():
+            numpy_feed[name] = self._to_numpy_input(name, value)
+        if self._static_inputs:
+            for name, value in self._static_inputs.items():
+                if name not in numpy_feed:
+                    numpy_feed[name] = self._to_numpy_input(name, value)
+        return self._session.run(None, numpy_feed, run_options=run_options)
+
+    def _run_bound(self, input_feed, run_options, output_shapes=None, use_cupy=False):
+        state = self._state
+        binding = self._binding(state)
+        needs_sync = self._bind_inputs(binding, state, input_feed, state.bound_inputs)
+        if output_shapes:
+            buffers = self._bind_fixed_outputs(binding, state, output_shapes, use_cupy)
+        else:
+            buffers = None
+            self._bind_auto_outputs(binding, state)
+        if needs_sync or use_cupy:
+            binding.synchronize_inputs()
+        self._session.run_with_iobinding(binding, run_options)
+        if needs_sync or use_cupy:
+            binding.synchronize_outputs()
+        return binding, buffers
+
+    def _run_fresh_outputs(self, input_feed, run_options):
+        state = self._state
+        binding = self._session.io_binding()
+        needs_sync = self._bind_inputs(binding, state, input_feed, None)
+        device_type = self._device_type
+        device_id = self._device_id
+        for name in self._output_names:
+            binding.bind_output(name, device_type, device_id)
+        if needs_sync:
+            binding.synchronize_inputs()
+        self._session.run_with_iobinding(binding, run_options)
+        if needs_sync:
+            binding.synchronize_outputs()
+        return binding
+
+    def run_with_iobinding(self, input_feed, run_options=None):
+        if not self._use_cuda:
+            results = self._run_numpy_fallback(input_feed, run_options=run_options)
+            return [ort.OrtValue.ortvalue_from_numpy(r) for r in results]
+        binding = self._run_fresh_outputs(input_feed, run_options)
+        return binding.get_outputs()
+
+    def run_with_iobinding_numpy(self, input_feed, run_options=None):
+        if not self._use_cuda:
+            return self._run_numpy_fallback(input_feed, run_options=run_options)
+        binding, _ = self._run_bound(input_feed, run_options)
+        outputs = binding.copy_outputs_to_cpu()
+        self._release_auto_outputs(binding, self._state)
+        return outputs
+
+    def run_dict(
+        self,
+        input_feed,
+        output_shapes=None,
+        run_options=None,
+        prefer_cupy=False,
+        use_io_binding=None,
+    ):
+        if use_io_binding is None:
+            use_io_binding = self._use_cuda
+        if not use_io_binding or not self._use_cuda:
+            outputs = self._run_numpy_fallback(input_feed, run_options=run_options)
+            return dict(zip(self._output_names, outputs))
+
+        if output_shapes is not None and not all(name in output_shapes for name in self._output_names):
+            output_shapes = None
+        use_cupy = bool(prefer_cupy) and output_shapes is not None
+        binding, buffers = self._run_bound(input_feed, run_options, output_shapes=output_shapes, use_cupy=use_cupy)
+        if buffers is None:
+            outputs = dict(zip(self._output_names, binding.copy_outputs_to_cpu()))
+            self._release_auto_outputs(binding, self._state)
+            return outputs
+        if use_cupy:
+            return dict(buffers)
+        return {name: buf.numpy() for name, buf in buffers.items()}
 
 
 def ortvalue_from_numpy(arr, use_cuda=True):
@@ -225,8 +507,7 @@ class CudaGraphRunner:
     def _build(self, input_feed):
         io = self._s._session.io_binding()
         for name, value in input_feed.items():
-            value = self._s._cast_input(name, value)
-            value = np.ascontiguousarray(value)
+            value = self._s._to_numpy_input(name, value)
             buf = ort.OrtValue.ortvalue_from_numpy(value, "cuda", self._device_id)
             self._in_bufs[name] = buf
             io.bind_ortvalue_input(name, buf)
@@ -246,8 +527,7 @@ class CudaGraphRunner:
                 self._s._session.run_with_iobinding(self._io)
             else:
                 for name, value in input_feed.items():
-                    value = self._s._cast_input(name, value)
-                    value = np.ascontiguousarray(value)
+                    value = self._s._to_numpy_input(name, value)
                     self._in_bufs[name].update_inplace(value)
                 self._s._session.run_with_iobinding(self._io)
             return {n: b.numpy() for n, b in self._out_bufs.items()}
@@ -382,11 +662,34 @@ def general_provider(enable_cuda_graph: bool = False, use_cpu: bool = False):
     return providers, provider_options
 
 
-def general_session():
-    sess = ort.SessionOptions()
-    sess.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-    sess.add_session_config_entry("session.use_env_allocators", "1")
-    sess.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-    sess.inter_op_num_threads = 1
-    sess.intra_op_num_threads = 0
-    return sess
+def general_session(
+    intra_op_num_threads: int | None = None,
+    inter_op_num_threads: int = 1,
+    graph_optimization_level: str = "all",
+    enable_cpu_mem_arena: bool = True,
+    enable_mem_pattern: bool = True,
+    optimized_model_path: str | None = None,
+    log_severity_level: int = 2,
+    free_dim_overrides: dict[str, int] | None = None,
+    ) -> ort.SessionOptions:
+    options = ort.SessionOptions()
+    options.log_severity_level = log_severity_level
+    options.graph_optimization_level = {
+        "disable": ort.GraphOptimizationLevel.ORT_DISABLE_ALL,
+        "basic": ort.GraphOptimizationLevel.ORT_ENABLE_BASIC,
+        "extended": ort.GraphOptimizationLevel.ORT_ENABLE_EXTENDED,
+        "all": ort.GraphOptimizationLevel.ORT_ENABLE_ALL,
+    }[graph_optimization_level]
+    options.add_session_config_entry("session.use_env_allocators", "1")
+    # options.add_session_config_entry("session.use_device_allocator_for_initializers", "1")
+    options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+    if intra_op_num_threads:
+        options.intra_op_num_threads = int(intra_op_num_threads)
+    options.inter_op_num_threads = int(inter_op_num_threads)
+    options.enable_cpu_mem_arena = bool(enable_cpu_mem_arena)
+    options.enable_mem_pattern = bool(enable_mem_pattern)
+    if optimized_model_path:
+        options.optimized_model_filepath = str(optimized_model_path)
+    for name, value in (free_dim_overrides or {}).items():
+        options.add_free_dimension_override_by_name(name, int(value))
+    return options

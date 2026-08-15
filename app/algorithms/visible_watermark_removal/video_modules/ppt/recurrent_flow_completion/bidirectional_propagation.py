@@ -10,6 +10,8 @@ from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_tran
 
 
 class BidirectionalPropagationORT:
+    _ZERO_CACHE_LIMIT = 4
+    
     def __init__(
             self, 
             backward_onnx_path, 
@@ -30,6 +32,20 @@ class BidirectionalPropagationORT:
         self.run_options = run_options
         self._use_iobinding = self.backward_session.use_cuda
         self._use_cupy = self._use_iobinding and _HAS_CUPY
+        self._zero_cache = {}
+
+    def _zero_ort(self, shape, via_cupy):
+        key = (tuple(shape), via_cupy)
+        buf = self._zero_cache.get(key)
+        if buf is None:
+            while len(self._zero_cache) >= self._ZERO_CACHE_LIMIT:
+                self._zero_cache.pop(next(iter(self._zero_cache)))
+            if via_cupy:
+                buf = _cupy_to_ortvalue(cp.zeros(tuple(shape), dtype=cp.float32))
+            else:
+                buf = ortvalue_from_numpy(np.zeros(tuple(shape), dtype=np.float32), use_cuda=True)
+            self._zero_cache[key] = buf
+        return buf
 
     def _to_ort(self, v):
         if isinstance(v, ort.OrtValue):
@@ -82,13 +98,14 @@ class BidirectionalPropagationORT:
 
         # Backward
         backward_results = [None] * T
-        feat_prop_prev = ortvalue_from_numpy(np.zeros_like(feat_list[0]), use_cuda=True) if self._use_iobinding else np.zeros_like(feat_list[0])
+        zero_shape = feat_list[0].shape
+        feat_prop_prev = self._zero_ort(zero_shape, False) if self._use_iobinding else np.zeros_like(feat_list[0])
         feat_n2_prev = None
         for i, idx in enumerate(range(T - 1, -1, -1)):
             if i == 0:
                 feat_prop = self.run_backward_backbone(feat_list[idx], feat_prop_prev)
             else:
-                feat_n2 = feat_n2_prev if i > 1 else (ortvalue_from_numpy(np.zeros(feat_prop_prev.shape(), dtype=np.float32), use_cuda=True) if self._use_iobinding else np.zeros_like(feat_prop_prev))
+                feat_n2 = feat_n2_prev if i > 1 else (self._zero_ort(feat_prop_prev.shape(), False) if self._use_iobinding else np.zeros_like(feat_prop_prev))
                 feat_prop = self.run_backward_step(feat_list[idx], feat_prop_prev, feat_n2)
             backward_results[idx] = ortvalue_to_numpy(feat_prop)
             feat_n2_prev = feat_prop_prev
@@ -96,13 +113,13 @@ class BidirectionalPropagationORT:
 
         # Forward
         forward_results = [None] * T
-        feat_prop_prev = ortvalue_from_numpy(np.zeros_like(feat_list[0]), use_cuda=True) if self._use_iobinding else np.zeros_like(feat_list[0])
+        feat_prop_prev = self._zero_ort(zero_shape, False) if self._use_iobinding else np.zeros_like(feat_list[0])
         feat_n2_prev = None
         for i, idx in enumerate(range(T)):
             if i == 0:
                 feat_prop = self.run_forward_backbone(feat_list[idx], backward_results[idx], feat_prop_prev)
             else:
-                feat_n2 = feat_n2_prev if i > 1 else (ortvalue_from_numpy(np.zeros(feat_prop_prev.shape(), dtype=np.float32), use_cuda=True) if self._use_iobinding else np.zeros_like(feat_prop_prev))
+                feat_n2 = feat_n2_prev if i > 1 else (self._zero_ort(feat_prop_prev.shape(), False) if self._use_iobinding else np.zeros_like(feat_prop_prev))
                 feat_prop = self.run_forward_step(feat_list[idx], feat_prop_prev, feat_n2, backward_results[idx])
             forward_results[idx] = ortvalue_to_numpy(feat_prop)
             feat_n2_prev = feat_prop_prev
@@ -121,15 +138,17 @@ class BidirectionalPropagationORT:
         feats_cp = cp.asarray(feats) if not isinstance(feats, cp.ndarray) else feats
         feat_list = [cp.ascontiguousarray(feats_cp[:, i]) for i in range(T)]
 
+        zero_shape = feat_list[0].shape
+
         # Backward
         backward_ort = [None] * T
-        feat_prop_prev = _cupy_to_ortvalue(cp.zeros_like(feat_list[0]))
+        feat_prop_prev = self._zero_ort(zero_shape, True)
         feat_n2_prev = None
         for i, idx in enumerate(range(T - 1, -1, -1)):
             if i == 0:
                 feat_prop = self.run_backward_backbone(feat_list[idx], feat_prop_prev)
             else:
-                feat_n2 = feat_n2_prev if i > 1 else _cupy_to_ortvalue(cp.zeros(feat_prop_prev.shape(), dtype=cp.float32))
+                feat_n2 = feat_n2_prev if i > 1 else self._zero_ort(feat_prop_prev.shape(), True)
                 feat_prop = self.run_backward_step(feat_list[idx], feat_prop_prev, feat_n2)
             backward_ort[idx] = feat_prop
             feat_n2_prev = feat_prop_prev
@@ -137,27 +156,26 @@ class BidirectionalPropagationORT:
 
         # Forward
         forward_ort = [None] * T
-        feat_prop_prev = _cupy_to_ortvalue(cp.zeros_like(feat_list[0]))
+        feat_prop_prev = self._zero_ort(zero_shape, True)
         feat_n2_prev = None
         for i, idx in enumerate(range(T)):
             if i == 0:
                 feat_prop = self.run_forward_backbone(feat_list[idx], backward_ort[idx], feat_prop_prev)
             else:
-                feat_n2 = feat_n2_prev if i > 1 else _cupy_to_ortvalue(cp.zeros(feat_prop_prev.shape(), dtype=cp.float32))
+                feat_n2 = feat_n2_prev if i > 1 else self._zero_ort(feat_prop_prev.shape(), True)
                 feat_prop = self.run_forward_step(feat_list[idx], feat_prop_prev, feat_n2, backward_ort[idx])
             forward_ort[idx] = feat_prop
             feat_n2_prev = feat_prop_prev
             feat_prop_prev = feat_prop
 
         # Fusion on GPU
-        backward_cp = [_ortvalue_to_cupy(r) for r in backward_ort]
-        forward_cp = [_ortvalue_to_cupy(r) for r in forward_ort]
         outputs = []
         for i in range(T):
-            fused = cp.ascontiguousarray(cp.concatenate([backward_cp[i], forward_cp[i]], axis=1))
+            fused = cp.concatenate([_ortvalue_to_cupy(backward_ort[i]), _ortvalue_to_cupy(forward_ort[i])], axis=1)
             outputs.append(self.fusion_conv(fused))
         outputs = cp.stack(outputs, axis=1)
-        return cp.asnumpy(outputs + feats_cp)
+        outputs += feats_cp
+        return outputs
 
     def __del__(self):
         self.backward_session = None

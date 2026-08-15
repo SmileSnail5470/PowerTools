@@ -44,6 +44,7 @@ def _subprocess_target(func, msg_queue, cancel_event, log_dir, task_tmp_dir, arg
         sys.stdout = log_stream
         sys.stderr = log_stream
     try:
+        logging.getLogger("subprocess").info(f"Task subprocess environment CUDA_PATH: {os.environ.get("CUDA_PATH", "None")} and PATH: {os.environ["PATH"]}")
         def progress_cb(v: str, msg: str):
             if cancel_event.is_set():
                 raise InterruptedError("Task was cancelled.")

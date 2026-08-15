@@ -456,6 +456,7 @@ class VideoWatermarkRemover:
         text_detection_onnx_path = args.get("text_detection_onnx_path")
         yolo_detection_onnx_path = args.get("yolo_detection_onnx_path")
         segment_onnx_dir = args.get("segment_onnx_dir")
+        general_edit_onnx_dir = args.get("general_edit_onnx_dir")
         refine_type = args.get("refine_type")
         watermark_type = args.get("watermark_type")
         ai_detect_type = args.get("ai_detect_type")
@@ -483,6 +484,7 @@ class VideoWatermarkRemover:
                 text_detection_onnx_path=text_detection_onnx_path,
                 yolo_detection_onnx_path=yolo_detection_onnx_path,
                 segment_onnx_dir=segment_onnx_dir,
+                general_edit_onnx_dir=general_edit_onnx_dir,
                 mask_path=str(tmp_mask_path),
                 refine_type=refine_type,
                 watermark_type=watermark_type,
@@ -549,16 +551,20 @@ class VideoWatermarkRemover:
             xmin, ymin, xmax, ymax = bbox
             process_w, process_h = xmax - xmin, ymax - ymin
             init_subvideo_length = int(os.environ.get("POWERTOOLS_SUBVIDEO_LENGTH", 100))
+            gpu_memory_limit = int(os.environ.get("POWERTOOLS_GPU_MEMORY_LIMIT", 16))
             if max(process_h, process_w) < 540:
                 resize_ratio = 1.0
-                subvideo_length = min(80, init_subvideo_length)
+                subvideo_length = 80 if gpu_memory_limit > 12 else 70 if gpu_memory_limit > 8 else 60
             elif max(process_h, process_w) < 720:
                 resize_ratio = 540.0 / max(process_h, process_w)
-                subvideo_length = min(70, init_subvideo_length)
+                subvideo_length = 70 if gpu_memory_limit > 12 else 60 if gpu_memory_limit > 8 else 50
             else:
                 resize_ratio = 720.0 / max(process_h, process_w)
-                subvideo_length = min(60, init_subvideo_length)
-            logging.getLogger("subprocess").info(f"Process video resize ratio {resize_ratio} and subvideo length {subvideo_length} and process size {(process_w, process_h)}")
+                subvideo_length = 60 if gpu_memory_limit > 12 else 50 if gpu_memory_limit > 8 else 40
+            subvideo_length = min(subvideo_length, init_subvideo_length)
+            logging.getLogger("subprocess").info(
+                f"Process video resize ratio {resize_ratio} and subvideo length {subvideo_length} and process size {(process_w, process_h)} and gpu memory limit {gpu_memory_limit}"
+            )
             pipeline = PPTInferenceORT(
                 onnx_paths=ONNX_PATHS,
                 resize_ratio=resize_ratio,
@@ -599,6 +605,7 @@ class VideoWatermarkRemover:
             segment_onnx_dir,
             ppt_onnx_basedir,
             tacker_onnx_dir,
+            general_edit_onnx_dir,
             mask_path: str = "",
             refine_type: str = "coordfill",
             use_cache_mask: bool = False,
@@ -710,6 +717,7 @@ class VideoWatermarkRemover:
                     "text_detection_onnx_path": text_detection_onnx_path,
                     "yolo_detection_onnx_path": yolo_detection_onnx_path,
                     "segment_onnx_dir": segment_onnx_dir,
+                    "general_edit_onnx_dir": general_edit_onnx_dir,
                     "refine_type": refine_type,
                     "watermark_type": watermark_type,
                     "ai_detect_type": ai_detect_type,

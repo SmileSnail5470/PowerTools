@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 import os
 import platform
@@ -62,6 +63,10 @@ models_deps_urls = {
     "tracker": {
         "cpu": {"path": "CPU/tracker", "sha256": None},
         "gpu": {"path": "GPU/tracker", "sha256": None},
+    },
+    "image_edit": {
+        "cpu": {"path": "CPU/image_edit", "sha256": None},
+        "gpu": {"path": "GPU/image_edit", "sha256": None},
     }
 }
 
@@ -72,7 +77,8 @@ model_estimated_sizes = {
         "segment": "1.69 GB",
         "ocr": "217 MB",
         "video_inpainting": "183 MB",
-        "tracker": "124 MB"
+        "tracker": "124 MB",
+        "image_edit": "11.0 GB"
     },
     "cpu": {
         "blind_watermark_addition": "1.08 GB",
@@ -80,7 +86,8 @@ model_estimated_sizes = {
         "segment": "899 MB",
         "ocr": "217 MB",
         "video_inpainting": "261 MB",
-        "tracker": "124 MB"
+        "tracker": "124 MB",
+        "image_edit": "11.0 GB"
     }
 }
 
@@ -625,6 +632,250 @@ class InitProgressDialog(QDialog):
     def disableCloseBtn(self):
         self.close_btn.hide()
 
+class MultiConfigSoftwareCard(QFrame):
+    def __init__(self, name: str, icon: dict, description: str, fields: list, parent=None):
+        super().__init__(parent)
+        self.setObjectName("softwareCard")
+        self._name = name
+        self._icon = icon
+        self._description = description
+        self._fields = fields
+        self._widgets: dict = {}
+        self._badges: dict = {}
+        self._setup_ui()
+
+    def get_widget(self, key: str):
+        return self._widgets.get(key)
+
+    def get_value(self, key: str):
+        w = self._widgets.get(key)
+        if w is None:
+            return None
+        if isinstance(w, QLineEdit):
+            return w.text()
+        return w.currentText()
+
+    def get_badge(self, key: str):
+        return self._badges.get(key)
+
+    def set_badge(self, key: str, text: str, color: str):
+        badge = self._badges.get(key)
+        if badge:
+            badge.setLabel(text=text, color=color)
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(16)
+        icon_label = QLabel(self._icon["symbol"])
+        icon_label.setFixedSize(40, 40)
+        icon_label.setAlignment(Qt.AlignCenter)
+        setFont(icon_label, 20)
+        g0, g1 = self._icon["gradient"]
+        icon_label.setStyleSheet(f"""
+            QLabel {{
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {g0}, stop:1 {g1});
+                border-radius: 10px;
+                color: white;
+            }}
+        """)
+        name_info = QVBoxLayout()
+        name_info.setSpacing(2)
+        name_label = QLabel(self.tr(self._name))
+        setFont(name_label, 16, QFont.Bold)
+        name_label.setStyleSheet("color: #1f2937;")
+        desc_label = QLabel(self.tr(self._description))
+        setFont(desc_label, 12, QFont.Bold)
+        desc_label.setStyleSheet("color: #6b7280;")
+        name_info.addWidget(name_label)
+        name_info.addWidget(desc_label)
+
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(10)
+        header_layout.addWidget(icon_label)
+        header_layout.addLayout(name_info)
+        header_layout.addStretch()
+        layout.addLayout(header_layout)
+
+        for field in self._fields:
+            row = self._build_field_row(field)
+            layout.addLayout(row)
+
+        self.setStyleSheet("""
+            QFrame#softwareCard {
+                background: #fafafa;
+                border: 1px solid #e5e7eb;
+                border-radius: 12px;
+            }
+            QFrame#softwareCard:hover {
+                background: #f9fafb;
+                border: 1px solid #4f46e5;
+            }
+        """)
+
+    def _build_field_row(self, field: dict) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        label = QLabel(self.tr(field["label"]))
+        setFont(label, 13, QFont.DemiBold)
+        label.setStyleSheet("color: #374151;")
+        row.addWidget(label)
+        field_type = field.get("type", "path")
+        if field_type == "combo":
+            row = self._build_combo_row(row, field)
+        else:
+            row = self._build_path_row(row, field)
+        return row
+
+    def _build_path_row(self, row: QHBoxLayout, field: dict) -> QHBoxLayout:
+        cfg_item = field["cfg_item"]
+        edit = QLineEdit()
+        if cfg.get(cfg_item) != cfg.softwareInvalidPath:
+            edit.setText(cfg.get(cfg_item))
+        else:
+            if "placeholder" in field:
+                edit.setPlaceholderText(self.tr(field["placeholder"]))
+        edit.textChanged.connect(lambda val, item=cfg_item, field=field: self._update_global_config(item, val, field))
+        setFont(edit, 13)
+        edit.setStyleSheet(self._input_style())
+
+        browse_btn = QPushButton()
+        browse_btn.setIcon(FluentIcon.FOLDER_ADD.qicon())
+        browse_btn.setStyleSheet(self._btn_style(bg="#f3f4f6", hover="#d1d5db"))
+        browse_btn.clicked.connect(lambda _=False, e=edit: self._select_folder(e))
+
+        row.addWidget(edit)
+        row.addWidget(browse_btn)
+        self._append_verify(row, field)
+        self._widgets[field["key"]] = edit
+        return row
+
+    def _build_combo_row(self, row: QHBoxLayout, field: dict) -> QHBoxLayout:
+        cfg_item = field["cfg_item"]
+        value_map: dict = field.get("value_map", {})
+        save_map: dict = field.get("save_map", {})
+        combo = ComboBox()
+        setFont(combo, 13)
+        combo.addItems(field.get("options", []))
+        current_stored = str(cfg.get(cfg_item))
+        display_text = value_map.get(current_stored, current_stored)
+        combo.setText(display_text)
+
+        def _on_changed(text: str, item=cfg_item, smap=save_map):
+            cfg.set(item, smap.get(text, text))
+
+        combo.currentTextChanged.connect(_on_changed)
+        row.addWidget(combo)
+        if "hint" in field:
+            hint = QLabel(self.tr(field["hint"]))
+            setFont(hint, 11)
+            hint.setStyleSheet("color: #9ca3af;")
+            row.addWidget(hint)
+        self._append_verify(row, field)
+        row.addStretch()
+        self._widgets[field["key"]] = combo
+        return row
+
+    def _append_verify(self, row: QHBoxLayout, field: dict):
+        verify_cfg = field.get("verify")
+        if not verify_cfg:
+            return
+        badge = StatusBadge(text=self.tr("未验证"), color="#eab308")
+        self._badges[field["key"]] = badge
+        try:
+            text = cfg.get(cfg.additionalParams)["SoftwareSettings"][f"{self._name}_{field["key"]}_status_info"]["text"]
+            color = cfg.get(cfg.additionalParams)["SoftwareSettings"][f"{self._name}_{field["key"]}_status_info"]["color"]
+            badge.setLabel(text=text, color=color)
+        except Exception:
+            pass
+        row.addWidget(badge, alignment=Qt.AlignVCenter)
+        btn_label = self.tr(verify_cfg.get("label", "验证"))
+        verify_btn = QPushButton(btn_label)
+        setFont(verify_btn, 12, QFont.Bold)
+        verify_btn.setStyleSheet(self._btn_style(bg="#4f46e5", hover="#4338ca", color="white"))
+        on_verify = verify_cfg.get("on_verify")
+        if callable(on_verify):
+            verify_btn.clicked.connect(lambda _=False, fn=on_verify, b=badge, field=field: self._run_verify(fn, b, field))
+        row.addWidget(verify_btn)
+
+    def _run_verify(self, on_verify, badge: StatusBadge, field: dict):
+        try:
+            result, err_msg = on_verify(self)
+            if result:
+                text = "OK"
+                color = "#16a34a"
+            else:
+                text = "Failed"
+                color = "#dc2626"
+                TeachingTip.create(
+                    target=badge,
+                    icon=InfoBarIcon.ERROR,
+                    title=self.tr("警告"),
+                    content=self.tr(err_msg),
+                    isClosable=True,
+                    tailPosition=TeachingTipTailPosition.BOTTOM,
+                    duration=3000,
+                    parent=self
+                )
+        except Exception:
+            text = "Failed"
+            color = "#dc2626"
+        finally:
+            badge.setLabel(text=self.tr(text), color=color)
+            tmp = cfg.get(cfg.additionalParams).get("SoftwareSettings", {})
+            tmp.update({f"{self._name}_{field["key"]}_status_info": {"text": text, "color": color}})
+            cfg.additionalParams.value.update({"SoftwareSettings": tmp})
+
+    @staticmethod
+    def _input_style() -> str:
+        return """
+            QLineEdit {
+                padding: 8px 12px;
+                border: 1px solid #d1d5db;
+                border-radius: 8px;
+                background: white;
+                color: #333;
+            }
+            QLineEdit:focus { border: 1px solid #4f46e5; }
+        """
+
+    @staticmethod
+    def _btn_style(bg: str, hover: str, color: str = "#374151") -> str:
+        return f"""
+            QPushButton {{
+                padding: 8px 12px;
+                background: {bg};
+                color: {color};
+                border: none;
+                border-radius: 8px;
+            }}
+            QPushButton:hover {{ background: {hover}; }}
+            QPushButton:pressed {{ background: {hover}; padding: 9px 12px; margin-top: 1px; }}
+        """
+
+    def _select_folder(self, target: QLineEdit):
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "选择文件夹",
+            "",
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog if sys.platform == "darwin" else QFileDialog.Option(0),
+        )
+        if directory:
+            if not directory.isascii():
+                MessageBox(title=self.tr("提醒"), content="不支持非英文路径", parent=self.window()).exec()
+                return
+            target.setText(directory)
+
+    def _update_global_config(self, item, path: str, field: dict):
+        cfg.set(item, path)
+        # 状态提示信息恢复默认
+        badge = self.get_badge(field["key"])
+        text = "未验证"
+        color = "#eab308"
+        badge.setLabel(text=text, color=color)
+        tmp = cfg.get(cfg.additionalParams).get("SoftwareSettings", {})
+        tmp.update({f"{self._name}_{field["key"]}_status_info": {"text": text, "color": color}})
+        cfg.additionalParams.value.update({"SoftwareSettings": tmp})
 
 class SoftwareCard(QFrame):
     global_config_params_name_map = {}
@@ -680,9 +931,9 @@ class SoftwareCard(QFrame):
         header_layout = QHBoxLayout()
         header_layout.addLayout(name_layout)
         header_layout.addStretch()
-        header_layout.addWidget(self.status_label, alignment=Qt.AlignVCenter)
 
         path_layout = QHBoxLayout()
+        path_layout.setSpacing(8)
         self.path_input = QLineEdit()
         default_path = cfg.get(self.global_config_params_name_map[self.name.lower()])
         if default_path and default_path != cfg.softwareInvalidPath:
@@ -721,6 +972,7 @@ class SoftwareCard(QFrame):
 
         path_layout.addWidget(self.path_input)
         path_layout.addWidget(browse_btn)
+        path_layout.addWidget(self.status_label)
         path_layout.addWidget(test_btn)
 
         layout.addLayout(header_layout)
@@ -865,6 +1117,7 @@ class SoftwareCard(QFrame):
         tmp.update({f"{self.name}_status_info": {"text": text, "color": color}})
         cfg.additionalParams.value.update({"SoftwareSettings": tmp})
 
+
 class Settings(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
@@ -936,8 +1189,111 @@ class Settings(QWidget):
             status=""
         )
 
-        self.software_cards = [ffmpeg_card]
+        def _check_cuda_env(card: MultiConfigSoftwareCard):
+            cuda_path = card.get_value("cuda")
+            if platform.system().lower() == "windows":
+                cuda_dll_paths = [
+                    "cublasLt64_12.dll",
+                    "cublas64_12.dll",
+                    "cufft64_11.dll",
+                    "cudart64_12.dll",
+                ]
+            else:
+                cuda_dll_paths = [
+                    "libcublasLt.so.12",
+                    "libcublas.so.12",
+                    "libnvrtc.so.12",
+                    "libcurand.so.10",
+                    "libcufft.so.11",
+                    "libcudart.so.12",
+                ]
+            for item in cuda_dll_paths:
+                item_path = os.path.join(cuda_path, item)
+                if not os.path.exists(item_path):
+                    return False, f"{item_path} 不存在"
+            os.makedirs(cfg.softwareInvalidPath, exist_ok=True)
+            gpu_config_path = os.path.join(cfg.softwareInvalidPath, "gpu_env_config.json")
+            data = {}
+            if os.path.exists(gpu_config_path):
+                with open(gpu_config_path, "r") as fp:
+                    data = json.loads(fp.read())
+            data["cuda_path"] = cuda_path
+            with open(gpu_config_path, "w") as fp:
+                fp.write(json.dumps(data))
+            cfg.update_gpu_env()
+            return True, ""
 
+        def _check_cudnn_env(card: MultiConfigSoftwareCard):
+            cudnn_path = card.get_value("cudnn")
+            if platform.system().lower() == "windows":
+                cudnn_dll_paths = [
+                    "cudnn_engines_runtime_compiled64_9.dll",
+                    "cudnn_engines_precompiled64_9.dll",
+                    "cudnn_heuristic64_9.dll",
+                    "cudnn_ops64_9.dll",
+                    "cudnn_adv64_9.dll",
+                    "cudnn_graph64_9.dll",
+                    "cudnn64_9.dll",
+                ]
+            else:
+                cudnn_dll_paths = ["libcudnn.so.9"]
+            for item in cudnn_dll_paths:
+                item_path = os.path.join(cudnn_path, item)
+                if not os.path.exists(item_path):
+                    return False, f"{item_path} 不存在"
+            os.makedirs(cfg.softwareInvalidPath, exist_ok=True)
+            gpu_config_path = os.path.join(cfg.softwareInvalidPath, "gpu_env_config.json")
+            data = {}
+            if os.path.exists(gpu_config_path):
+                with open(gpu_config_path, "r") as fp:
+                    data = json.loads(fp.read())
+            data["cudnn_path"] = cudnn_path
+            with open(gpu_config_path, "w") as fp:
+                fp.write(json.dumps(data))
+            cfg.update_gpu_env()
+            return True, ""
+
+        gpu_env_card = MultiConfigSoftwareCard(
+            name="GPU",
+            icon={"symbol": "🎮", "gradient": ["#06b6d4", "#0284c7"]},
+            description="CUDA / cuDNN 路径与显存设置",
+            fields=[
+                {
+                    "key":       "vram",
+                    "label":     "显存上限",
+                    "type":      "combo",
+                    "cfg_item":  cfg.gpuMemoryLimit,
+                    "options":   ["6 GB", "8 GB", "12 GB", "16 GB", "24 GB"],
+                    "value_map": {"6": "6 GB", "8": "8 GB", "12": "12 GB", "16": "16 GB", "24": "24 GB"},
+                    "save_map": {"6 GB": "6", "8 GB": "8", "12 GB": "12", "16 GB": "16", "24 GB": "24"},
+                    "hint": "最大显存用于指导算法成功运行"
+                },
+                {
+                    "key":         "cuda",
+                    "label":       "CUDA",
+                    "type":        "path",
+                    "cfg_item":    cfg.cudaPath,
+                    "placeholder": "设置 cuda 安装路径，指定到驱动文件一级目录",
+                    "verify": {
+                        "label":     "验证",
+                        "on_verify": _check_cuda_env,
+                    },
+                },
+                {
+                    "key":         "cudnn",
+                    "label":       "cuDNN",
+                    "type":        "path",
+                    "cfg_item":    cfg.cudnnPath,
+                    "placeholder": "设置 cudnn 安装路径，指定到驱动文件一级目录",
+                    "verify": {
+                        "label":     "验证",
+                        "on_verify": _check_cudnn_env,
+                    },
+                },
+            ],
+            parent=self,
+        )
+        self.software_cards = [ffmpeg_card, gpu_env_card]
         for card in self.software_cards:
             group.addCard(card=card)
 
@@ -1166,7 +1522,7 @@ class Settings(QWidget):
         self.ai_toggle_switchs.append(video_inpainting_switch)
         video_inpainting_switch.setActive(cfg.get(cfg.localVideoInpaintingEnabled))
         video_inpainting_switch.toggled.connect(lambda flag: cfg.set(cfg.localVideoInpaintingEnabled, flag))
-        video_inpainting_status = StatusBadge(text=self.tr("未启用"), color="#726e62", name="video_inpainting")
+        video_inpainting_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="video_inpainting")
         try:
             text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{video_inpainting_status.name}_status_info"]["text"]
             color = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{video_inpainting_status.name}_status_info"]["color"]
@@ -1215,6 +1571,33 @@ class Settings(QWidget):
         object_tracking_card.vBoxLayout.addWidget(object_tracking_panel)
         object_tracking_card.setSeparatorVisible(True)
         ai_settings_cards.append(object_tracking_card)
+
+        image_edit_switch = ToggleSwitch()
+        self.ai_toggle_switchs.append(image_edit_switch)
+        image_edit_switch.setActive(cfg.get(cfg.localImageEditEnabled))
+        image_edit_switch.toggled.connect(lambda flag: cfg.set(cfg.localImageEditEnabled, flag))
+        image_edit_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="image_edit")
+        try:
+            text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{image_edit_status.name}_status_info"]["text"]
+            color = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{image_edit_status.name}_status_info"]["color"]
+            image_edit_status.setLabel(text=text, color=color)
+        except Exception:
+            pass
+        image_edit_panel = ModelVariantPanel(config_key="image_edit", parent=self)
+        self._bind_ai_toggle(
+            switch=image_edit_switch,
+            badge=image_edit_status,
+            local_ai_type="image_edit",
+            panel=image_edit_panel
+        )
+        image_edit_chevron = self._create_chevron_btn(image_edit_panel)
+        image_edit_card = CustomCardGroupWidget(title=self.tr("图像编辑AI能力"), content=self.tr("智能修复、增强与编辑图像内容"), parent=self)
+        image_edit_card.addWidget(image_edit_status, stretch=0)
+        image_edit_card.addWidget(image_edit_switch, stretch=0)
+        image_edit_card.addWidget(image_edit_chevron, stretch=0)
+        image_edit_card.vBoxLayout.addWidget(image_edit_panel)
+        image_edit_card.setSeparatorVisible(True)
+        ai_settings_cards.append(image_edit_card)
 
         for card in ai_settings_cards:
             ai_settings.addCard(card=card)
@@ -1378,6 +1761,7 @@ class Settings(QWidget):
             "ocr": ("OCR 能力", cfg.get(cfg.localOCREnabled)),
             "video_inpainting": ("视频修复AI能力", cfg.get(cfg.localVideoInpaintingEnabled)),
             "tracker": ("对象跟踪AI能力", cfg.get(cfg.localObjectTrackingEnabled)),
+            "image_edit": ("图像编辑AI能力", cfg.get(cfg.localImageEditEnabled)),
         }
         deps_path = cfg.get(cfg.localAIModelDeps)
         missing = []

@@ -12,6 +12,7 @@ from app.algorithms.visible_watermark_removal.modules.lama_inpaint import LamaIn
 from app.algorithms.visible_watermark_removal.modules.text_detection import detect_text_watermarks
 from app.algorithms.visible_watermark_removal.modules.yolo_detecttion import YOLODetection
 from app.algorithms.segment.inference import SegmentationInference
+from app.algorithms.image_edit.general_edit.inference import ImageEditInference
 
 
 class WatermarkSegment():
@@ -156,6 +157,7 @@ class WatermarkInpaint():
             lama_onnx_path,
             emdf_onnx_path,
             grig_onnx_path,
+            general_edit_onnx_dir,
             model_type="lama",
             dilate_num=2,
         ):
@@ -167,10 +169,23 @@ class WatermarkInpaint():
         self.lama_onnx_path = lama_onnx_path
         self.emdf_onnx_path = emdf_onnx_path
         self.grig_onnx_path = grig_onnx_path
+        self.general_edit_onnx_dir = general_edit_onnx_dir
 
     def _save_watermark_removed_image(self, image, output_path):
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         cv2.imwrite(output_path, image)
+
+    def _process_image_with_general_edit(self, image_path):
+        general_edit_inpaint = ImageEditInference(
+            model_dir=self.general_edit_onnx_dir,
+            dilate_num=self.dilate_num
+        )
+        result = general_edit_inpaint.infer(
+            input_path=image_path, 
+            mask=self.mask,
+            task_type="watermark_remove"
+        )
+        return result
 
     def _process_image_with_lama(self, image_path):
         lama_inpaint = LamaInpaint()
@@ -263,6 +278,8 @@ class WatermarkInpaint():
             img = self._process_image_with_grig(image_path=image_path)
         elif self.model_type == "emdf":
             img = self._process_image_with_emdf(image_path=image_path)
+        elif self.model_type == "general_edit":
+            img = self._process_image_with_general_edit(image_path=image_path)
         else:
             raise Exception(f"not support {self.model_type}")
         
@@ -312,6 +329,7 @@ class ImageWatermarkRemove():
             text_detection_onnx_path,
             yolo_detection_onnx_path,
             segment_onnx_dir,
+            general_edit_onnx_dir,
             mask_path: str = "",
             refine_type: str = "patchwiper",                    # patchwiper/lama/transparent/cv2/coordfill/grig/emdf
             watermark_type: str = "all",                        # text / all
@@ -365,6 +383,7 @@ class ImageWatermarkRemove():
             lama_onnx_path=lama_onnx_path,
             emdf_onnx_path=emdf_onnx_path,
             grig_onnx_path=grig_onnx_path,
+            general_edit_onnx_dir=general_edit_onnx_dir,
             model_type=refine_type,
             dilate_num=dilate_num,
         )

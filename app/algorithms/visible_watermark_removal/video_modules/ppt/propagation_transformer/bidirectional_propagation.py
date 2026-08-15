@@ -10,6 +10,8 @@ from app.algorithms.visible_watermark_removal.video_modules.ppt.propagation_tran
 
 
 class BidirectionalPropagationORT:
+    _ZERO_CACHE_LIMIT = 4
+    
     def __init__(
             self, 
             backward_step_path, 
@@ -30,6 +32,21 @@ class BidirectionalPropagationORT:
         self.run_options = run_options
         self._use_iobinding = self.backward_step.use_cuda
         self._use_cupy = self._use_iobinding and _HAS_CUPY
+        self._zero_cache = {}
+
+    def _zero_ort(self, shape, via_cupy):
+        key = (tuple(shape), via_cupy)
+        buf = self._zero_cache.get(key)
+        if buf is not None:
+            return buf
+        while len(self._zero_cache) >= self._ZERO_CACHE_LIMIT:
+            self._zero_cache.pop(next(iter(self._zero_cache)))
+        if via_cupy:
+            buf = _cupy_to_ortvalue(cp.zeros(tuple(shape), dtype=cp.float32))
+        else:
+            buf = ortvalue_from_numpy(np.zeros(tuple(shape), dtype=np.float32), use_cuda=True)
+        self._zero_cache[key] = buf
+        return buf
 
     def _to_ort(self, v):
         if isinstance(v, ort.OrtValue):
@@ -125,7 +142,7 @@ class BidirectionalPropagationORT:
 
         # Backward
         backward_results = [None] * t
-        feat_prop_prev = ortvalue_from_numpy(np.zeros_like(feat_list[0]), use_cuda=True) if self._use_iobinding else np.zeros_like(feat_list[0])
+        feat_prop_prev = self._zero_ort(feat_list[0].shape, False) if self._use_iobinding else np.zeros_like(feat_list[0])
         for i, idx in enumerate(range(t - 1, -1, -1)):
             if i == 0:
                 feat_prop = self._run_backward_first(feat_list[idx], mask_list[idx])
@@ -138,7 +155,7 @@ class BidirectionalPropagationORT:
 
         # Forward
         forward_results = [None] * t
-        feat_prop_prev = ortvalue_from_numpy(np.zeros(backward_results[0].shape(), dtype=np.float32), use_cuda=True) if self._use_iobinding else np.zeros_like(ortvalue_to_numpy(backward_results[0]))
+        feat_prop_prev = self._zero_ort(backward_results[0].shape(), False) if self._use_iobinding else np.zeros_like(ortvalue_to_numpy(backward_results[0]))
         for i, idx in enumerate(range(t)):
             if i == 0:
                 feat_prop = self._run_forward_first(backward_results[idx], mask_list[idx])
@@ -177,7 +194,7 @@ class BidirectionalPropagationORT:
 
         # Backward propagation
         backward_results = [None] * t
-        feat_prop_prev = _cupy_to_ortvalue(cp.zeros_like(feat_list[0]))
+        feat_prop_prev = self._zero_ort(feat_list[0].shape, True)
         for i, idx in enumerate(range(t - 1, -1, -1)):
             if i == 0:
                 feat_prop = self._run_backward_first(feat_list[idx], mask_list[idx])
@@ -190,7 +207,7 @@ class BidirectionalPropagationORT:
 
         # Forward propagation
         forward_results = [None] * t
-        feat_prop_prev = _cupy_to_ortvalue(cp.zeros(backward_results[0].shape(), dtype=cp.float32))
+        feat_prop_prev = self._zero_ort(backward_results[0].shape(), True)
         for i, idx in enumerate(range(t)):
             if i == 0:
                 feat_prop = self._run_forward_first(backward_results[idx], mask_list[idx])

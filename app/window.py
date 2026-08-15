@@ -10,12 +10,13 @@ from app.ui.library.qfluentwidgets import FluentIcon as FIF
 
 from app.ui.view.home import Home
 from app.ui.view.settings import Settings
-from app.ui.view.image_edit import ImageEdit
+from app.ui.view.blind_watermark import BlindWatermarkRemove
 from app.ui.view.ocr import OCR
 from app.ui.view.screenshot import Screenshot
 from app.ui.view.scroll_screenshot import ScrollScreenshot
 from app.ui.view.watermark_add import WatermarkAdd
 from app.ui.view.watermark_remove import WatermarkRemove
+from app.ui.view.image_edit import ImageEdit
 from app.ui.view.license_view import LicenseView
 from app.ui.widgets.resources_monitor_widget import ResourcesMonitorWidget
 
@@ -48,6 +49,7 @@ class MainWindow(FluentWindow):
         self.screenshotInterface = Screenshot(self)
         self.scrollScreenshotInterface = ScrollScreenshot(self)
         self.OCRInterface = OCR(self)
+        self.blindWatermarkRemoveInterface = BlindWatermarkRemove(self)
         self.imageEditInterface = ImageEdit(self)
 
         # enable acrylic effect
@@ -80,7 +82,9 @@ class MainWindow(FluentWindow):
 
         self.addSubInterface(self.OCRInterface, Icon.OCR, self.tr("文字提取"), pos, parent=None)
 
-        self.addSubInterface(self.imageEditInterface, Icon.IMAGE_EDIT, self.tr("暗水印去除"), pos, parent=None)
+        self.addSubInterface(self.blindWatermarkRemoveInterface, Icon.SCREENSHOT, self.tr("暗印去除"), pos, parent=None)
+
+        self.addSubInterface(self.imageEditInterface, Icon.IMAGE_EDIT, self.tr("图像编辑"), pos, parent=None)
 
         # add custom widget to bottom
         self.navigationInterface.addItem(

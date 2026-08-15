@@ -289,8 +289,10 @@ class SyncImageViewer(QWidget):
     _img1_loaded = Signal(object)
     _img2_loaded = Signal(object)
 
-    def __init__(self, img1: str = "", img2: str = "", parent=None):
+    def __init__(self, img1: str = "", img2: str = "", parent=None, compare_mode: bool = True):
         super().__init__(parent=parent)
+        self._compare_mode = compare_mode
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -325,10 +327,19 @@ class SyncImageViewer(QWidget):
             }
         """)
 
+        self.view1.setVisible(self._compare_mode)
+
+    def set_compare_mode(self, enabled: bool):
+        if self._compare_mode == enabled:
+            return
+        self._compare_mode = enabled
+        self.view1.setVisible(enabled)
+
     def set_images(self, img1: str, img2: str):
-        worker1 = _ImageLoadWorker(img1, self._img1_loaded.emit)
+        if self._compare_mode:
+            worker1 = _ImageLoadWorker(img1, self._img1_loaded.emit)
+            InternalTaskManager.get_pool().start(worker1)
         worker2 = _ImageLoadWorker(img2, self._img2_loaded.emit)
-        InternalTaskManager.get_pool().start(worker1)
         InternalTaskManager.get_pool().start(worker2)
 
     def init_scene(self):
@@ -721,6 +732,8 @@ class ImageNavigationWidget(QWidget):
                         global_event_bus.OCR_PreviewFile.emit(thumb.image_path)
                     elif self.task_type == "blind_watermark_remove":
                         global_event_bus.blindWatermarkRemove_PreviewFile.emit(thumb.image_path)
+                    elif self.task_type == "image_edit":
+                        global_event_bus.imageEdit_PreviewFile.emit(thumb.image_path)
         self.prev_btn.setEnabled(len(self.total_images) > 1)
         self.next_btn.setEnabled(len(self.total_images) > 1)
 
