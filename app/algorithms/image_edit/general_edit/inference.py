@@ -251,6 +251,7 @@ class ImageEditInference:
             condition = image
         else:
             condition = image.resize((infer_w, infer_h), resample=Image.Resampling.LANCZOS)
+            blend_mask = cv2.resize(blend_mask, (infer_w, infer_h), interpolation=cv2.INTER_NEAREST)
         condition, prompt = self._update_input_image_and_promot(prompt=prompt, image=condition, mask_np=blend_mask, task_type=task_type)
         result = self._infer(prompt=prompt, input_images=[condition], width=infer_w, height=infer_h)
         if result.size != (img_width, img_height):
