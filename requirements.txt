@@ -25,3 +25,4 @@ cupy-cuda12x==14.1.1; platform_system!="Darwin"
 ftfy==6.3.1
 regex==2026.6.28
 tokenizers==0.23.1
+scenedetect==0.7.1
