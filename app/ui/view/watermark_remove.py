@@ -255,44 +255,72 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
         self.all_cards: list[StyleCard] = []
 
-        image_container = QWidget()
-        image_layout = QVBoxLayout(image_container)
+        self.image_container = QWidget()
+        image_layout = QVBoxLayout(self.image_container)
         image_layout.setContentsMargins(0, 6, 0, 6)
         image_layout.setSpacing(0)
 
         general_edit_card = StyleCard("#667eea", self.tr("智能重绘"), self.tr("语义理解强，细节丰富，复杂场景效果佳，速度较慢"))
         general_edit_card.set_name("general_edit")
         image_layout.addWidget(general_edit_card)
-        image_layout.addWidget(CardSeparator(self))
+        general_edit_separator = CardSeparator(self)
+        image_layout.addWidget(general_edit_separator)
 
         patchwiper_card = StyleCard("#4facfe", self.tr("细节增强"), self.tr("智能重建细节，提升清晰度，速度慢(不适合字幕)"))
         patchwiper_card.set_name("patchwiper")
         image_layout.addWidget(patchwiper_card)
-        image_layout.addWidget(CardSeparator(self))
-
-        emdf_card = StyleCard("#f093fb", self.tr("智能修补"), self.tr("效果稳定，可能丢失细节，速度稍慢"))
-        emdf_card.set_name("emdf")
-        image_layout.addWidget(emdf_card)
-        image_layout.addWidget(CardSeparator(self))
-
-        grig_card = StyleCard("#a18cd1", self.tr("平衡修复"), self.tr("结构保持好，可能丢失细节，速度快"))
-        grig_card.set_name("grig")
-        image_layout.addWidget(grig_card)
-        image_layout.addWidget(CardSeparator(self))
+        patchwiper_separator = CardSeparator(self)
+        image_layout.addWidget(patchwiper_separator)
 
         lama_card = StyleCard("#84fab0", self.tr("自然保守"), self.tr("画面衔接自然，可能丢失细节，速度适中"))
         lama_card.set_name("lama")
         image_layout.addWidget(lama_card)
-        image_layout.addWidget(CardSeparator(self))
+        lama_separator = CardSeparator(self)
+        image_layout.addWidget(lama_separator)
 
         coordfill_card = StyleCard("#fbc2eb", self.tr("快速填充"), self.tr("细节表现一般，适合简单背景，速度极快"))
         coordfill_card.set_name("coordfill")
         image_layout.addWidget(coordfill_card)
-        
+        coordfill_separator = CardSeparator(self)
+        image_layout.addWidget(coordfill_separator)
+
+        emdf_card = StyleCard("#f093fb", self.tr("智能修补"), self.tr("效果稳定，可能丢失细节，速度稍慢"))
+        emdf_card.set_name("emdf")
+        image_layout.addWidget(emdf_card)
+        emdf_separator = CardSeparator(self)
+        image_layout.addWidget(emdf_separator)
+
+        grig_card = StyleCard("#a18cd1", self.tr("平衡修复"), self.tr("结构保持好，可能丢失细节，速度快"))
+        grig_card.set_name("grig")
+        image_layout.addWidget(grig_card)
+
+        self.image_cards = [general_edit_card, patchwiper_card, lama_card, coordfill_card, emdf_card, grig_card]
+        self.image_card_separators = [general_edit_separator, patchwiper_separator, lama_separator, coordfill_card, emdf_separator]
+        self.image_model_visible_count = 4
+        self.image_models_expanded = False
+
+        self.image_more_button = QPushButton(self.tr("展开更多模型 ▾"), self.image_container)
+        self.image_more_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.image_more_button.setFixedHeight(32)
+        self.image_more_button.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #667eea;
+                border: none;
+                border-radius: 6px;
+                padding: 4px 8px;
+            }
+            QPushButton:hover {
+                background: #f1f3ff;
+            }
+        """)
+        self.image_more_button.clicked.connect(self.toggle_image_models)
+        image_layout.addWidget(self.image_more_button)
         image_layout.addStretch()
-        self.stacked_widget.addWidget(image_container)
-        
-        self.image_cards = [general_edit_card, patchwiper_card, emdf_card, grig_card, lama_card, coordfill_card]
+        self.stacked_widget.addWidget(self.image_container)
+
+        self._set_extra_image_models_visible(False)
+
         self.all_cards.extend(self.image_cards)
 
         video_container = QWidget()
@@ -322,6 +350,24 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         global_event_bus.License_update.connect(self.select_first_interactive)
         global_event_bus.watermarkRemove_TaskFinishedByModel.connect(self.update_model_card_info)
         main_layout.addStretch()
+
+    def _set_extra_image_models_visible(self, visible: bool):
+        for card in self.image_cards[self.image_model_visible_count:]:
+            card.setVisible(visible)
+        for separator in self.image_card_separators[self.image_model_visible_count:]:
+            separator.setVisible(visible)
+
+    def toggle_image_models(self):
+        self.image_models_expanded = not self.image_models_expanded
+        is_expanded = self.image_models_expanded
+        self._set_extra_image_models_visible(is_expanded)
+
+        self.image_more_button.setText(self.tr("收起模型 ▴") if is_expanded else self.tr("展开更多模型 ▾"))
+
+        self.image_container.layout().invalidate()
+        self.image_container.layout().activate()
+        content_height = self.get_current_page_height(0)
+        self.animate_height_change(content_height + 114)
 
     def update_model_card_info(self, model_name):
         current_index = self.stacked_widget.currentIndex()
