@@ -107,20 +107,6 @@ class ImageEditInference:
         self.last_timings = output.timings
         return output.images[0]
 
-    @staticmethod
-    def _find_mask_regions(mask_np: np.ndarray) -> list[tuple[int, int, int, int]]:
-        if mask_np.ndim == 3:
-            mask_np = mask_np[:, :, 0]
-        binary = (mask_np > 127).astype(np.uint8)
-        num_labels, _, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
-        regions = []
-        for label_id in range(1, num_labels):
-            x, y, w, h, area = stats[label_id]
-            if area <= 0 or w <= 0 or h <= 0:
-                continue
-            regions.append((int(x), int(y), int(x + w - 1), int(y + h - 1)))
-        return regions
-
     def _align_span(
         self,
         lo: float,
@@ -209,15 +195,7 @@ class ImageEditInference:
 
     def _update_input_image_and_promot(self, prompt: str, image: Image.Image, mask_np: np.ndarray, task_type: str):
         if task_type == "watermark_remove":
-            img_np = np.array(image, dtype=np.float32)
-            overlay = img_np.copy()
-            color = np.array([0, 0, 255], dtype=np.float32)
-            mask_bool = mask_np > 0
-            overlay[mask_bool] = overlay[mask_bool] * 0.55 + color * 0.45
-            overlay = np.clip(overlay, 0, 255).astype(np.uint8)
-            preprocess_image = Image.fromarray(overlay, mode="RGB")
-            prompt = "Remove the highlighted blue area."
-            return preprocess_image, prompt
+            prompt = "移除水印和水印的背景"
         return image, prompt
 
     def _infer_crop_region(self, prompt: str, image: Image.Image, mask_np: np.ndarray, crop_box: tuple[int, int, int, int], task_type: str) -> Image.Image:
@@ -264,12 +242,75 @@ class ImageEditInference:
         )
         return blended
 
+    @staticmethod
+    def _find_mask_regions(mask: np.ndarray, min_area_ratio: float = 0.001, min_area_abs: int = 300, max_gap: int = 8) -> list[tuple[int, int, int, int]]:
+        if mask.ndim == 3:
+            mask = mask[:, :, 0]
+        mask = mask.astype(np.uint8)
+        h, w = mask.shape
+        total_area = h * w
+        binary = (mask > 127).astype(np.uint8)
+        if binary.sum() == 0:
+            return []
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+        comps = []
+        for i in range(1, num_labels):
+            x, y, w0, h0, area = stats[i]
+            if area < 20:
+                continue
+            comps.append({
+                "id": i,
+                "bbox": (x, y, w0, h0),
+                "area": area,
+                "size": max(w0, h0),
+            })
+        if not comps:
+            return []
+
+        def bbox_gap(a, b):
+            xa, ya, wa, ha = a["bbox"]
+            xb, yb, wb, hb = b["bbox"]
+            gap_x = max(0, xb - (xa + wa), xa - (xb + wb))
+            gap_y = max(0, yb - (ya + ha), ya - (yb + hb))
+            return max(gap_x, gap_y)
+
+        min_area = max(int(total_area * min_area_ratio), min_area_abs)
+        visited = [False] * len(comps)
+        clusters = []
+        for i in range(len(comps)):
+            if visited[i]:
+                continue
+            stack = [i]
+            visited[i] = True
+            cluster = [i]
+            while stack:
+                cur = stack.pop()
+                for j in range(len(comps)):
+                    if visited[j]:
+                        continue
+                    gap = bbox_gap(comps[cur], comps[j])
+                    thresh = max(max_gap, int(0.2 * min(comps[cur]["size"], comps[j]["size"])))
+                    if gap <= thresh:
+                        visited[j] = True
+                        stack.append(j)
+                        cluster.append(j)
+            cluster_area = sum(comps[idx]["area"] for idx in cluster)
+            if cluster_area >= min_area:
+                clusters.append(cluster)
+        regions = []
+        for cluster in clusters:
+            x1 = min(comps[idx]["bbox"][0] for idx in cluster)
+            y1 = min(comps[idx]["bbox"][1] for idx in cluster)
+            x2 = max(comps[idx]["bbox"][0] + comps[idx]["bbox"][2] - 1 for idx in cluster)
+            y2 = max(comps[idx]["bbox"][1] + comps[idx]["bbox"][3] - 1 for idx in cluster)
+            regions.append((x1, y1, x2, y2))
+        return regions
+
     def infer_local_patches(self, prompt, image, mask_np, task_type):
         if isinstance(mask_np, Image.Image):
             mask_np = np.array(mask_np.convert("L"))
         if mask_np.ndim == 3:
             mask_np = mask_np[:, :, 0]
-        mask_np = mask_np.astype(np.uint8)
         img_width, img_height = image.size
         regions = self._find_mask_regions(mask_np)
         if not regions:

@@ -331,11 +331,18 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         video_seq_card = StyleCard("#9b59b6", self.tr("视频时序级擦除"), self.tr("跨帧追踪锁定，无闪烁，适合复杂动态视频"))
         video_seq_card.set_name("ppt")
         video_layout.addWidget(video_seq_card)
+        video_seq_separator = CardSeparator(self)
+        video_layout.addWidget(video_seq_separator)
+
+        video_engine_card = StyleCard("#2980b9", self.tr("关键帧级擦除"), self.tr("图片模型处理关键帧，智能传播至连续帧，兼顾效果与时序一致性"))
+        video_engine_card.set_name("video_engine")
+        video_layout.addWidget(video_engine_card)
+
         
         video_layout.addStretch()
         self.stacked_widget.addWidget(video_container)
         
-        self.video_cards = [video_seq_card]
+        self.video_cards = [video_seq_card, video_engine_card]
         self.all_cards.extend(self.video_cards)
 
         self.tab_image.toggled.connect(lambda checked: self.on_tab_changed(0, checked))
