@@ -7,18 +7,14 @@ from app.algorithms.private.video_engine.config import EngineConfig
 from app.algorithms.private.video_engine.engine import process_video
 
 
-# 关键帧任务插件 -> (开始阶段, 完成阶段)，与其它 worker 的进度语义保持一致
 PLUGIN_STAGES = {
     "watermark_removal": ("MaskStart", "WaterRemoved"),
     "reverse_edit": ("BlindWatermarkRemoveStart", "BlindWatermarkRemoveCompleted"),
-    "image_edit": ("EditStart", "EditDone"),
 }
 DEFAULT_PLUGIN = "watermark_removal"
 
 
 class VideoEngineWork(BaseWorker):
-    """视频编辑引擎（分镜 + 关键帧图片模型 + RIFE 插帧）的调用入口。"""
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.deps_path = cfg.get(cfg.localAIModelDeps)
@@ -40,7 +36,6 @@ class VideoEngineWork(BaseWorker):
             or kwargs.get("model_name")
         )
         if refine_type in (None, "", "video_engine"):
-            # 该入口的定位是"图片模型处理关键帧"，默认走通用图像编辑模型
             refine_type = "general_edit"
         return {
             "sr_segment_onnx_path": os.path.join(onnx_model_dir, "sr_segment.encmodel"),
@@ -78,21 +73,11 @@ class VideoEngineWork(BaseWorker):
             "reserve_region": kwargs.get("reserve_region"),
         }
 
-    def _image_edit_kwargs(self, kwargs: dict) -> dict:
-        return {
-            "model_dir": self._model_dir("image_edit", "general_edit"),
-            "prompt": kwargs.get("prompt"),
-            "task_type": kwargs.get("task_type"),
-            "dilate_num": int(kwargs.get("mask_dilate", 2)),
-        }
-
     def _plugin_kwargs(self, plugin_name: str, kwargs: dict) -> dict:
         if plugin_name == "watermark_removal":
             return self._watermark_removal_kwargs(kwargs)
         if plugin_name == "reverse_edit":
             return self._reverse_edit_kwargs(kwargs)
-        if plugin_name == "image_edit":
-            return self._image_edit_kwargs(kwargs)
         raise ValueError(f"Unsupported video engine plugin: {plugin_name}")
 
     @log_exception(logger=logging.getLogger('VideoEngine'), reraise=True, log_args=True, log_result=True)
