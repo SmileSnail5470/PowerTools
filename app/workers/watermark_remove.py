@@ -3,6 +3,8 @@ import os
 from app.ui.common.config import cfg
 from app.workers.work_base import BaseWorker, _resolve_hardware_variant
 from app.utils.logger.decorators import log_exception
+from app.algorithms.private.video_engine.config import EngineConfig
+from app.algorithms.private.video_engine.engine import process_video
 from app.algorithms.visible_watermark_removal.watermark_removal_image import ImageWatermarkRemove
 from app.algorithms.visible_watermark_removal.watermark_removal_video import VideoWatermarkRemover
 
@@ -75,7 +77,7 @@ class WatermarkRemoveWork(BaseWorker):
                 "progress_cb": progress_cb,
             }
             self._get_image_instance().run(**params)
-        else:
+        elif kwargs["model_name"] != "video_engine":
             ppt_onnx_basedir = os.path.join(self.deps_path, _resolve_hardware_variant(), "video_inpainting", "ppt")
             tacker_onnx_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "tracker")
             params = {
@@ -110,4 +112,48 @@ class WatermarkRemoveWork(BaseWorker):
                 "progress_cb": progress_cb,
             }
             self._get_video_instance().process_video(**params)
+        else:
+            video_config = EngineConfig(
+                prompt=kwargs.get("prompt", ""),
+                task_type=kwargs.get("task_type", "watermark_remove"),
+                rife_model_path=kwargs.get("rife_model_path") or os.path.join(self.deps_path, _resolve_hardware_variant(), "video_engine", "rife"),
+                keyframe_stride=int(kwargs.get("keyframe_stride", 0)),
+                ffmpeg_path=kwargs.get("ffmpeg_path") or os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
+                should_cancel=cancel_requested,
+                is_static_watermark=True if "watermark_format" in kwargs and kwargs["watermark_format"] == "static_watermark" else False,
+                progress_cb=progress_cb
+            )
+            if progress_cb:
+                progress_cb("MaskStart", "")
+            process_video(
+                input_video=input_path,
+                output_video=output_file,
+                plugin="watermark_removal",
+                config=video_config,
+                mask=None,
+                plugin_kwargs={
+                    "sr_segment_onnx_path": os.path.join(onnx_model_dir, "sr_segment.encmodel"),
+                    "pt_segment_onnx_path": os.path.join(onnx_model_dir, "pt_segment.encmodel"),
+                    "pt_inpaint_onnx_path": os.path.join(onnx_model_dir, "pt_inpaint.encmodel"), 
+                    "cf_onnx_path": os.path.join(onnx_model_dir, "cf.encmodel"), 
+                    "lama_onnx_path": os.path.join(onnx_model_dir, "lama_fp32.encmodel"),
+                    "emdf_onnx_path": os.path.join(onnx_model_dir, "emdf_inpaint.encmodel"),
+                    "grig_onnx_path": os.path.join(onnx_model_dir, "grig_inpaint.encmodel"),
+                    "text_detection_onnx_path": os.path.join(onnx_model_dir, "pp_ocr_det.encmodel"),
+                    "yolo_detection_onnx_path": os.path.join(onnx_model_dir, "yolo.encmodel"),
+                    "segment_onnx_dir": segment_model_dir,
+                    "general_edit_onnx_dir": general_edit_dir,
+                    "refine_type": "general_edit",
+                    "watermark_type": "text" if "watermark_content" in kwargs and kwargs["watermark_content"] == "text_watermark" else "subtitle" if "watermark_content" in kwargs and kwargs["watermark_content"] == "subtitle" else "all",
+                    "ai_detect_type": kwargs["watermark_detect_type"],
+                    "ai_interactive_type": kwargs["watermark_ai_interactive_type"] if "watermark_ai_interactive_type" in kwargs else "semantic_detect",
+                    "ai_interactive_prompt": kwargs["watermark_detect_prompt"] if "watermark_detect_prompt" in kwargs else "watermark",
+                    "ai_interactive_boxes": kwargs["watermark_boxes"] if "watermark_boxes" in kwargs else [],
+                    "watermark_confidence": kwargs["watermark_confidence"] if "watermark_confidence" in kwargs else 0.5,
+                    "watermark_boxes": kwargs["image_boxes"] if "image_boxes" in kwargs else [],
+                    "dilate_num": int(kwargs["mask_dilate"]),
+                },
+            )
+            if progress_cb:
+                progress_cb("WaterRemoved", "")
         return output_file
