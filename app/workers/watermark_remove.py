@@ -116,7 +116,7 @@ class WatermarkRemoveWork(BaseWorker):
             video_config = EngineConfig(
                 prompt=kwargs.get("prompt", ""),
                 task_type=kwargs.get("task_type", "watermark_remove"),
-                rife_model_path=kwargs.get("rife_model_path") or os.path.join(self.deps_path, _resolve_hardware_variant(), "video_engine", "rife"),
+                rife_model_path=kwargs.get("rife_model_path") or os.path.join(self.deps_path, _resolve_hardware_variant(), "video_engine"),
                 keyframe_stride=int(kwargs.get("keyframe_stride", 0)),
                 ffmpeg_path=kwargs.get("ffmpeg_path") or os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
                 should_cancel=cancel_requested,
@@ -125,6 +125,7 @@ class WatermarkRemoveWork(BaseWorker):
             )
             if progress_cb:
                 progress_cb("MaskStart", "")
+                progress_cb("MaskCompleted", "")
             process_video(
                 input_video=input_path,
                 output_video=output_file,
