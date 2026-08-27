@@ -234,6 +234,7 @@ class ImageEditInference:
         result = self._infer(prompt=prompt, input_images=[condition], width=infer_w, height=infer_h)
         if result.size != (img_width, img_height):
             result = result.resize((img_width, img_height), resample=Image.Resampling.LANCZOS)
+            blend_mask = cv2.resize(blend_mask, (img_width, img_height), interpolation=cv2.INTER_NEAREST)
 
         blended = self._harmonize(
             original=image,
