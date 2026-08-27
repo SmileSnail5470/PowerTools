@@ -195,7 +195,7 @@ class ImageEditInference:
 
     def _update_input_image_and_promot(self, prompt: str, image: Image.Image, mask_np: np.ndarray, task_type: str):
         if task_type == "watermark_remove":
-            prompt = "移除水印和水印的背景"
+            prompt = "去除图片的水印，包括所有的文字"
         return image, prompt
 
     def _infer_crop_region(self, prompt: str, image: Image.Image, mask_np: np.ndarray, crop_box: tuple[int, int, int, int], task_type: str) -> Image.Image:
