@@ -173,16 +173,43 @@ class ImageEditInference:
     def _poisson_clone(self, target: Image.Image, source: Image.Image, x: int, y: int) -> Image.Image:
         target_np = np.array(target.convert("RGB"))
         source_np = np.array(source.convert("RGB"))
+        target_h, target_w = target_np.shape[:2]
         h, w = source_np.shape[:2]
-        mask = np.full((h, w), 255, dtype=np.uint8)
-        center = (x + w // 2, y + h // 2)
-        result = cv2.seamlessClone(
-            source_np,
-            target_np,
-            mask,
-            center,
-            cv2.NORMAL_CLONE,
-        )
+        if h <= 0 or w <= 0 or h > target_h or w > target_w:
+            return target
+        x = max(0, min(int(x), target_w - w))
+        y = max(0, min(int(y), target_h - h))
+
+        margin = 4
+        pad = margin + 1
+        canvas = cv2.copyMakeBorder(target_np, pad, pad, pad, pad, cv2.BORDER_REFLECT_101)
+        source_pad = cv2.copyMakeBorder(source_np, pad, pad, pad, pad, cv2.BORDER_REFLECT_101)
+        sx, sy = x, y
+        region = canvas[sy:sy + source_pad.shape[0], sx:sx + source_pad.shape[1]]
+        outside = np.ones(region.shape[:2], dtype=bool)
+        iy0, ix0 = max(0, pad - sy), max(0, pad - sx)
+        iy1 = min(region.shape[0], pad + target_h - sy)
+        ix1 = min(region.shape[1], pad + target_w - sx)
+        if iy1 > iy0 and ix1 > ix0:
+            outside[iy0:iy1, ix0:ix1] = False
+        region[outside] = source_pad[outside]
+        mask = np.zeros(source_pad.shape[:2], dtype=np.uint8)
+        mask[1:-1, 1:-1] = 255
+        roi_w, roi_h = w + 2 * margin, h + 2 * margin
+        center = (x + pad - margin + roi_w // 2, y + pad - margin + roi_h // 2)
+        try:
+            blended = cv2.seamlessClone(
+                source_pad,
+                canvas,
+                mask,
+                center,
+                cv2.NORMAL_CLONE,
+            )
+        except cv2.error:
+            blended = canvas
+            blended[y + pad:y + pad + h, x + pad:x + pad + w] = source_np
+        result = target_np.copy()
+        result[y:y + h, x:x + w] = blended[y + pad:y + pad + h, x + pad:x + pad + w]
         return Image.fromarray(result)
 
     def _harmonize(self, original: Image.Image, generated: Image.Image, blend_mask: np.ndarray) -> np.ndarray:
