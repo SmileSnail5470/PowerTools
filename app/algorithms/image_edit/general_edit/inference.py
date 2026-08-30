@@ -4,14 +4,9 @@ from pathlib import Path
 from PIL import Image
 import cv2
 import numpy as np
-from app.algorithms.private.color_fix import lab_color_fix
 from app.algorithms.image_edit.general_edit.pipeline import Pipeline
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
-CROP_EXPAND_PIXELS = 120
-MIN_CROP_SIDE = 256
-# pipeline 侧的长宽比校验上限是 8:1，留一点余量
-MAX_ASPECT_RATIO = 7.5
 
 
 class ImageEditInference:
@@ -107,69 +102,6 @@ class ImageEditInference:
         self.last_timings = output.timings
         return output.images[0]
 
-    def _align_span(
-        self,
-        lo: float,
-        hi: float,
-        limit: int,
-        min_size: int,
-        must_lo: float | None = None,
-        must_hi: float | None = None,
-    ) -> tuple[int, int]:
-        align = self._align
-        limit = int(limit)
-        max_size = (limit // align) * align
-        if max_size < align:
-            return 0, limit
-        need_lo = lo if must_lo is None else must_lo
-        need_hi = hi if must_hi is None else must_hi
-        need_lo = max(0.0, min(float(need_lo), float(limit)))
-        need_hi = max(0.0, min(float(need_hi), float(limit)))
-        if math.ceil(need_hi) - math.floor(need_lo) > max_size:
-            return 0, limit
-        size = max(int(min_size), int(math.ceil(hi - lo)))
-        size = ((size + align - 1) // align) * align
-        size = min(size, max_size)
-        center = (lo + hi) * 0.5
-        start = int(round(center - size / 2.0))
-        start = min(start, int(math.floor(need_lo)))
-        start = max(start, int(math.ceil(need_hi)) - size)
-        start = max(0, min(start, limit - size))
-        if start > need_lo or start + size < need_hi:
-            return 0, limit
-        return start, start + size
-
-    def _compute_crop_box(
-        self,
-        bbox: tuple[int, int, int, int],
-        img_width: int,
-        img_height: int,
-        expand: int = CROP_EXPAND_PIXELS,
-    ) -> tuple[int, int, int, int]:
-        x_min, y_min, x_max, y_max = bbox
-        x1, x2 = self._align_span(x_min - expand, x_max + 1 + expand, img_width, MIN_CROP_SIDE, x_min, x_max + 1)
-        y1, y2 = self._align_span(y_min - expand, y_max + 1 + expand, img_height, MIN_CROP_SIDE, y_min, y_max + 1)
-        for _ in range(8):
-            crop_w, crop_h = x2 - x1, y2 - y1
-            if max(crop_w / crop_h, crop_h / crop_w) <= MAX_ASPECT_RATIO:
-                break
-            if crop_w > crop_h:
-                need = min(img_height, int(math.ceil(crop_w / MAX_ASPECT_RATIO)))
-                y1, y2 = self._align_span(y1, y2, img_height, need, y_min, y_max + 1)
-            else:
-                need = min(img_width, int(math.ceil(crop_h / MAX_ASPECT_RATIO)))
-                x1, x2 = self._align_span(x1, x2, img_width, need, x_min, x_max + 1)
-            if (x2 - x1, y2 - y1) == (crop_w, crop_h):
-                break
-        return x1, y1, x2, y2
-
-    def _dilate_mask(self, mask_np: np.ndarray, radius: int | None = None) -> np.ndarray:
-        radius = self.dilate_num if radius is None else radius
-        if radius <= 0:
-            return mask_np
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1))
-        return cv2.dilate(mask_np, kernel, iterations=1)
-
     def _poisson_clone(self, target: Image.Image, source: Image.Image, x: int, y: int) -> Image.Image:
         target_np = np.array(target.convert("RGB"))
         source_np = np.array(source.convert("RGB"))
@@ -212,66 +144,67 @@ class ImageEditInference:
         result[y:y + h, x:x + w] = blended[y + pad:y + pad + h, x + pad:x + pad + w]
         return Image.fromarray(result)
 
-    def _harmonize(self, original: Image.Image, generated: Image.Image, blend_mask: np.ndarray) -> np.ndarray:
-        blended = lab_color_fix(
-            original_img=original,
-            generated_img=generated,
-            mask_gray=blend_mask
-        )
+    def _direct_paste(self, target: Image.Image, source: Image.Image, x: int, y: int) -> Image.Image:
+        target_np = np.array(target.convert("RGB"))
+        source_np = np.array(source.convert("RGB"))
+        target_h, target_w = target_np.shape[:2]
+        h, w = source_np.shape[:2]
+        if h <= 0 or w <= 0 or h > target_h or w > target_w:
+            return target
+        x = max(0, min(int(x), target_w - w))
+        y = max(0, min(int(y), target_h - h))
+        result = target_np.copy()
+        result[y:y + h, x:x + w] = source_np
+        return Image.fromarray(result)
+
+    def _harmonize(self, original: Image.Image, generated: Image.Image, regions: list[tuple[int, int, int, int]]) -> Image.Image:
+        original = original.convert("RGB")
+        generated = generated.convert("RGB")
+        img_width, img_height = original.size
+        if generated.size != (img_width, img_height):
+            generated = generated.resize((img_width, img_height), resample=Image.Resampling.LANCZOS)
+        if not regions:
+            return original
+
+        expand = 2 * max(int(self.dilate_num), 0) + 1
+        blended = original
+        for x1, y1, x2, y2 in regions:
+            ex1 = max(0, int(x1) - expand)
+            ey1 = max(0, int(y1) - expand)
+            ex2 = min(img_width - 1, int(x2) + expand)
+            ey2 = min(img_height - 1, int(y2) + expand)
+            if ex2 <= ex1 or ey2 <= ey1:
+                continue
+            patch = generated.crop((ex1, ey1, ex2 + 1, ey2 + 1))
+            blended = self._poisson_clone(blended, patch, ex1, ey1)
         return blended
 
-    def _update_input_image_and_promot(self, prompt: str, image: Image.Image, mask_np: np.ndarray, task_type: str):
+    def _update_input_image_and_promot(self, prompt: str, image: Image.Image, task_type: str):
         if task_type == "watermark_remove":
-            prompt = "去除图片的水印，包括所有的文字"
+            prompt = "Remove all logo, text, watermark, subtitle, printed text."
         return image, prompt
 
-    def _infer_crop_region(self, prompt: str, image: Image.Image, mask_np: np.ndarray, crop_box: tuple[int, int, int, int], task_type: str) -> Image.Image:
-        x1, y1, x2, y2 = crop_box
-        crop_w, crop_h = x2 - x1, y2 - y1
-        cropped_image = image.crop((x1, y1, x2, y2))
-        infer_w, infer_h = self._compute_infer_size(crop_w, crop_h)
-        blend_mask = self._dilate_mask(mask_np)[y1:y2, x1:x2]
-        if (infer_w, infer_h) == (crop_w, crop_h):
-            condition = cropped_image
-        else:
-            condition = cropped_image.resize((infer_w, infer_h), resample=Image.Resampling.LANCZOS)
-        condition, prompt = self._update_input_image_and_promot(prompt=prompt, image=condition, mask_np=blend_mask, task_type=task_type)
-        result = self._infer(prompt=prompt, input_images=[condition], width=infer_w, height=infer_h)
-        if result.size != (crop_w, crop_h):
-            result = result.resize((crop_w, crop_h), resample=Image.Resampling.LANCZOS)
-
-        blended_crop = self._harmonize(
-            original=cropped_image,
-            generated=result,
-            blend_mask=blend_mask,
-        )
-        output = self._poisson_clone(target=image, source=blended_crop, x=x1, y=y1)
-        return output
-
-    def _infer_scale(self, prompt: str, image: Image.Image, mask_np: np.ndarray, task_type: str) -> Image.Image:
+    def _infer_scale(self, prompt: str, image: Image.Image, regions: list[tuple[int, int, int, int]], task_type: str) -> Image.Image:
         img_width, img_height = image.size
         infer_w, infer_h, _, _ = self._resolve_infer_size([image])
-        blend_mask = self._dilate_mask(mask_np)
         if (infer_w, infer_h) == (img_width, img_height):
             condition = image
         else:
             condition = image.resize((infer_w, infer_h), resample=Image.Resampling.LANCZOS)
-            blend_mask = cv2.resize(blend_mask, (infer_w, infer_h), interpolation=cv2.INTER_NEAREST)
-        condition, prompt = self._update_input_image_and_promot(prompt=prompt, image=condition, mask_np=blend_mask, task_type=task_type)
+        condition, prompt = self._update_input_image_and_promot(prompt=prompt, image=condition, task_type=task_type)
         result = self._infer(prompt=prompt, input_images=[condition], width=infer_w, height=infer_h)
         if result.size != (img_width, img_height):
             result = result.resize((img_width, img_height), resample=Image.Resampling.LANCZOS)
-            blend_mask = cv2.resize(blend_mask, (img_width, img_height), interpolation=cv2.INTER_NEAREST)
 
         blended = self._harmonize(
             original=image,
             generated=result,
-            blend_mask=blend_mask,
+            regions=regions,
         )
         return blended
 
     @staticmethod
-    def _find_mask_regions(mask: np.ndarray, min_area_ratio: float = 0.001, min_area_abs: int = 300, max_gap: int = 8) -> list[tuple[int, int, int, int]]:
+    def _find_mask_regions(mask: np.ndarray, min_area_ratio: float = 0.0006, min_area_abs: int = 300, max_gap: int = 8) -> list[tuple[int, int, int, int]]:
         if mask.ndim == 3:
             mask = mask[:, :, 0]
         mask = mask.astype(np.uint8)
@@ -343,14 +276,7 @@ class ImageEditInference:
         regions = self._find_mask_regions(mask_np)
         if not regions:
             raise ValueError("No valid regions found in the mask.")
-        num_regions = len(regions)
-        if num_regions >= 16:
-            output = self._infer_scale(prompt, image, mask_np, task_type)
-        else:
-            output = image.copy()
-            for region_bbox in regions:
-                crop_box = self._compute_crop_box(region_bbox, img_width, img_height)
-                output = self._infer_crop_region(prompt, output, mask_np, crop_box, task_type)
+        output = self._infer_scale(prompt, image, regions, task_type)
         if output.size != (img_width, img_height):
             output = output.resize((img_width, img_height), resample=Image.Resampling.LANCZOS)
         return np.array(output)
