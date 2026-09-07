@@ -4,6 +4,7 @@ from pathlib import Path
 from PIL import Image
 import cv2
 import numpy as np
+from app.algorithms.private.color_fix import POISSON_MASK_CONTEXT_MARGIN, poisson_clone
 from app.algorithms.image_edit.general_edit.pipeline import Pipeline
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
@@ -102,71 +103,21 @@ class ImageEditInference:
         self.last_timings = output.timings
         return output.images[0]
 
-    def _poisson_clone(self, target: Image.Image, source: Image.Image, x: int, y: int) -> Image.Image:
-        target_np = np.array(target.convert("RGB"))
-        source_np = np.array(source.convert("RGB"))
-        target_h, target_w = target_np.shape[:2]
-        h, w = source_np.shape[:2]
-        if h <= 0 or w <= 0 or h > target_h or w > target_w:
-            return target
-        x = max(0, min(int(x), target_w - w))
-        y = max(0, min(int(y), target_h - h))
-
-        margin = 4
-        pad = margin + 1
-        canvas = cv2.copyMakeBorder(target_np, pad, pad, pad, pad, cv2.BORDER_REFLECT_101)
-        source_pad = cv2.copyMakeBorder(source_np, pad, pad, pad, pad, cv2.BORDER_REFLECT_101)
-        sx, sy = x, y
-        region = canvas[sy:sy + source_pad.shape[0], sx:sx + source_pad.shape[1]]
-        outside = np.ones(region.shape[:2], dtype=bool)
-        iy0, ix0 = max(0, pad - sy), max(0, pad - sx)
-        iy1 = min(region.shape[0], pad + target_h - sy)
-        ix1 = min(region.shape[1], pad + target_w - sx)
-        if iy1 > iy0 and ix1 > ix0:
-            outside[iy0:iy1, ix0:ix1] = False
-        region[outside] = source_pad[outside]
-        mask = np.zeros(source_pad.shape[:2], dtype=np.uint8)
-        mask[1:-1, 1:-1] = 255
-        roi_w, roi_h = w + 2 * margin, h + 2 * margin
-        center = (x + pad - margin + roi_w // 2, y + pad - margin + roi_h // 2)
-        try:
-            blended = cv2.seamlessClone(
-                source_pad,
-                canvas,
-                mask,
-                center,
-                cv2.NORMAL_CLONE,
-            )
-        except cv2.error:
-            blended = canvas
-            blended[y + pad:y + pad + h, x + pad:x + pad + w] = source_np
-        result = target_np.copy()
-        result[y:y + h, x:x + w] = blended[y + pad:y + pad + h, x + pad:x + pad + w]
-        return Image.fromarray(result)
-
-    def _direct_paste(self, target: Image.Image, source: Image.Image, x: int, y: int) -> Image.Image:
-        target_np = np.array(target.convert("RGB"))
-        source_np = np.array(source.convert("RGB"))
-        target_h, target_w = target_np.shape[:2]
-        h, w = source_np.shape[:2]
-        if h <= 0 or w <= 0 or h > target_h or w > target_w:
-            return target
-        x = max(0, min(int(x), target_w - w))
-        y = max(0, min(int(y), target_h - h))
-        result = target_np.copy()
-        result[y:y + h, x:x + w] = source_np
-        return Image.fromarray(result)
-
-    def _harmonize(self, original: Image.Image, generated: Image.Image, regions: list[tuple[int, int, int, int]]) -> Image.Image:
+    def _harmonize(
+        self,
+        original: Image.Image,
+        generated: Image.Image,
+        regions: list[tuple[int, int, int, int]],
+        mask: np.ndarray,
+    ) -> Image.Image:
         original = original.convert("RGB")
         generated = generated.convert("RGB")
         img_width, img_height = original.size
         if generated.size != (img_width, img_height):
             generated = generated.resize((img_width, img_height), resample=Image.Resampling.LANCZOS)
-        if not regions:
+        if not regions or mask is None or not mask.any():
             return original
-
-        expand = 2 * max(int(self.dilate_num), 0) + 1
+        expand = POISSON_MASK_CONTEXT_MARGIN
         blended = original
         for x1, y1, x2, y2 in regions:
             ex1 = max(0, int(x1) - expand)
@@ -175,8 +126,11 @@ class ImageEditInference:
             ey2 = min(img_height - 1, int(y2) + expand)
             if ex2 <= ex1 or ey2 <= ey1:
                 continue
+            mask_patch = mask[ey1:ey2 + 1, ex1:ex2 + 1]
+            if not mask_patch.any():
+                continue
             patch = generated.crop((ex1, ey1, ex2 + 1, ey2 + 1))
-            blended = self._poisson_clone(blended, patch, ex1, ey1)
+            blended = poisson_clone(blended, patch, ex1, ey1, mask=mask_patch)
         return blended
 
     def _update_input_image_and_promot(self, prompt: str, image: Image.Image, task_type: str):
@@ -184,7 +138,14 @@ class ImageEditInference:
             prompt = "Remove all logo, text, watermark, subtitle, printed text."
         return image, prompt
 
-    def _infer_scale(self, prompt: str, image: Image.Image, regions: list[tuple[int, int, int, int]], task_type: str) -> Image.Image:
+    def _infer_scale(
+        self,
+        prompt: str,
+        image: Image.Image,
+        regions: list[tuple[int, int, int, int]],
+        task_type: str,
+        mask: np.ndarray,
+    ) -> Image.Image:
         img_width, img_height = image.size
         infer_w, infer_h, _, _ = self._resolve_infer_size([image])
         if (infer_w, infer_h) == (img_width, img_height):
@@ -200,6 +161,7 @@ class ImageEditInference:
             original=image,
             generated=result,
             regions=regions,
+            mask=mask,
         )
         return blended
 
@@ -267,16 +229,32 @@ class ImageEditInference:
             regions.append((x1, y1, x2, y2))
         return regions
 
+    def _prepare_mask(self, mask) -> np.ndarray:
+        if isinstance(mask, Image.Image):
+            mask = np.array(mask.convert("L"))
+        mask = np.asarray(mask)
+        if mask.ndim == 3:
+            mask = mask[:, :, 0]
+        if mask.dtype == np.bool_:
+            binary = mask.astype(np.uint8)
+        else:
+            threshold = 127 if mask.size and float(mask.max()) > 1.0 else 0
+            binary = (mask > threshold).astype(np.uint8)
+        radius = max(int(self.dilate_num), 0)
+        if radius > 0:
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1))
+            binary = cv2.dilate(binary, kernel)
+        return binary * 255
+
     def infer_local_patches(self, prompt, image, mask_np, task_type):
-        if isinstance(mask_np, Image.Image):
-            mask_np = np.array(mask_np.convert("L"))
-        if mask_np.ndim == 3:
-            mask_np = mask_np[:, :, 0]
         img_width, img_height = image.size
-        regions = self._find_mask_regions(mask_np)
+        mask = self._prepare_mask(mask_np)
+        if mask.shape[:2] != (img_height, img_width):
+            mask = cv2.resize(mask, (img_width, img_height), interpolation=cv2.INTER_NEAREST)
+        regions = self._find_mask_regions(mask)
         if not regions:
             raise ValueError("No valid regions found in the mask.")
-        output = self._infer_scale(prompt, image, regions, task_type)
+        output = self._infer_scale(prompt, image, regions, task_type, mask)
         if output.size != (img_width, img_height):
             output = output.resize((img_width, img_height), resample=Image.Resampling.LANCZOS)
         return np.array(output)
