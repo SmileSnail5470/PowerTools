@@ -53,6 +53,7 @@ class MainWindow(FluentWindow):
         self.blindWatermarkRemoveInterface = BlindWatermarkRemove(self)
         self.imageEditInterface = ImageEdit(self)
         self.tutorialInterface = Tutorial(self)
+        self.tutorialInterface.settingsRequested.connect(lambda: self.switchTo(self.settingInterface))
 
         # enable acrylic effect
         self.navigationInterface.setAcrylicEnabled(True)

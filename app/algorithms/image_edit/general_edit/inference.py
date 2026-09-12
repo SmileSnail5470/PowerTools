@@ -47,11 +47,11 @@ class ImageEditInference:
     def _size_budget(self) -> tuple[int, int]:
         gpu_memory_limit = int(os.environ.get("POWERTOOLS_GPU_MEMORY_LIMIT", 16))
         if gpu_memory_limit >= 16:
-            area, max_side = 1024 * 1024, 1536
+            area, max_side = 768 * 768, 1152
         elif gpu_memory_limit >= 12:
-            area, max_side = 832 * 832, 1280
+            area, max_side = 608 * 608, 912
         else:
-            area, max_side = 768 * 768, 1024
+            area, max_side = 512 * 512, 768
         return min(area, int(self.pipe.max_condition_area)), max_side
 
     def _compute_infer_size(self, width: int, height: int) -> tuple[int, int]:
