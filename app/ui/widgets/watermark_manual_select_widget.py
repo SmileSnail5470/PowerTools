@@ -298,7 +298,7 @@ class WatermarkMaskTool(MyMessageBoxBase):
         else:
             self.file_path = os.path.join(file_path, os.listdir(file_path)[0])
         self.is_video = is_video
-        self.mask_path = os.path.join(cfg.get(cfg.cachePath), "watermark_removal", os.path.basename(file_path).split(".")[0])
+        self.mask_path = os.path.join(cfg.get(cfg.cachePath), "watermark_removal", os.path.splitext(os.path.basename(file_path))[0])
         self.mask_file = ""
         self.temp_dir = None
         if os.path.exists(self.mask_path):
@@ -508,7 +508,7 @@ class WatermarkMaskTool(MyMessageBoxBase):
         self.canvas.set_brush_size(value)
 
     def _load_image(self, file_path):
-        mask_name = os.path.basename(file_path).split(".")[0] + ".png"
+        mask_name = os.path.splitext(os.path.basename(file_path))[0] + ".png"
         self.mask_file = os.path.join(self.mask_path, mask_name)
         self.canvas.load_image(file_path)
         self.canvas.save_mask(self.mask_file)  # Mask 占位符

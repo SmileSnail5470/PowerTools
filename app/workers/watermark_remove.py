@@ -36,14 +36,13 @@ class WatermarkRemoveWork(BaseWorker):
         input_path = kwargs["input_path"]
         output_path = kwargs["output_path"]
         output_format = kwargs["output_format"]
-        if output_format == "保持原格式":
-            output_file = os.path.join(output_path, "{0}_wm.{1}".format(os.path.basename(input_path).split(".")[0], os.path.basename(input_path).split(".")[1]))
-        else:
-            output_file = os.path.join(output_path, "{0}_wm.{1}".format(os.path.basename(input_path).split(".")[0], output_format.lower()))
+        base_name, source_ext = os.path.splitext(os.path.basename(input_path))
+        output_ext = source_ext.lstrip(".") if output_format == "保持原格式" else output_format.lower()
+        output_file = os.path.join(output_path, f"{base_name}_wm.{output_ext}")
 
         file_type = self.file_type(input_file=input_path)
         if file_type is None:
-            raise Exception("Not support file {0}".format(input_path.split(".")[-1]))
+            raise Exception("Not support file {0}".format(source_ext.lstrip(".")))
         onnx_model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "visible_watermark_removal")
         segment_model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "segment")
         general_edit_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "general_edit")

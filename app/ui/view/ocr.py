@@ -512,12 +512,10 @@ class HeaderWidget(QWidget):
             error_msg = self.tr("请在设置页面打开 'OCR 能力' 开关")
             return error_msg, task_params
         
-        if "input_path" not in params or not params["input_path"] or " " in params["input_path"]:
-            error_msg = self.tr("请选择要处理的文件或目录且路径不能有空格")
+        if "input_path" not in params or not params["input_path"]:
+            error_msg = self.tr("请选择要处理的文件或目录")
             return error_msg, task_params
         else:
-            if isinstance(params["input_path"], str) and not params["input_path"].isascii():
-                return self.tr("输入路径: 不支持非英文路径"), task_params
             task_params["input_path"] = params["input_path"]
 
         if "model_name" not in params or not params["model_name"]:

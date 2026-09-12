@@ -18,6 +18,7 @@ from app.ui.view.watermark_add import WatermarkAdd
 from app.ui.view.watermark_remove import WatermarkRemove
 from app.ui.view.image_edit import ImageEdit
 from app.ui.view.license_view import LicenseView
+from app.ui.view.tutorial import Tutorial
 from app.ui.widgets.resources_monitor_widget import ResourcesMonitorWidget
 
 from app.ui.common.config import cfg
@@ -51,6 +52,7 @@ class MainWindow(FluentWindow):
         self.OCRInterface = OCR(self)
         self.blindWatermarkRemoveInterface = BlindWatermarkRemove(self)
         self.imageEditInterface = ImageEdit(self)
+        self.tutorialInterface = Tutorial(self)
 
         # enable acrylic effect
         self.navigationInterface.setAcrylicEnabled(True)
@@ -71,6 +73,7 @@ class MainWindow(FluentWindow):
         self.addSubInterface(self.homeInterface, FIF.HOME, self.tr('主页'))
         self.addSubInterface(self.settingInterface, FIF.SETTING, self.tr("常规"))
         self.addSubInterface(self.licenseInterface, FIF.CERTIFICATE, self.tr("授权"))
+        self.addSubInterface(self.tutorialInterface, FIF.LIBRARY, self.tr("教程"))
         self.navigationInterface.addSeparator()
 
         pos = NavigationItemPosition.SCROLL

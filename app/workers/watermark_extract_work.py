@@ -90,8 +90,8 @@ class WatermarkExtractWork(BaseWorker):
 
         output_dir = os.path.join(self.cache_path, "blind_watermark_extract")
         os.makedirs(output_dir, exist_ok=True)
-        base, ext = os.path.basename(input_path).split(".")
-        output_path = os.path.join(output_dir, "{0}_wm_extract.{1}".format(base, ext))
+        base, ext = os.path.splitext(os.path.basename(input_path))
+        output_path = os.path.join(output_dir, f"{base}_wm_extract{ext}")
         img.save(output_path)
         return output_path
 
@@ -108,8 +108,8 @@ class WatermarkExtractWork(BaseWorker):
 
         output_dir = os.path.join(self.cache_path, "blind_watermark_extract")
         os.makedirs(output_dir, exist_ok=True)
-        base, ext = os.path.basename(input_path).split(".")
-        output_path = os.path.join(output_dir, "{0}_wm_extract.{1}".format(base, ext))
+        base, ext = os.path.splitext(os.path.basename(input_path))
+        output_path = os.path.join(output_dir, f"{base}_wm_extract{ext}")
 
         (
             ffmpeg
@@ -140,7 +140,7 @@ class WatermarkExtractWork(BaseWorker):
         input_path = kwargs["input_path"]
         file_type = self.file_type(input_file=input_path)
         if file_type is None:
-            raise Exception("Not support file {0}".format(input_path.split(".")[-1]))
+            raise Exception("Not support file {0}".format(os.path.splitext(input_path)[1].lstrip(".")))
         if "watermark_type" not in kwargs or kwargs["watermark_type"] != "blind":
             raise Exception("Error watermark type value, watermark type must be blind")
         if "blind_watermark_task_type" not in kwargs or kwargs["blind_watermark_task_type"] != "extract_blind_watermark":

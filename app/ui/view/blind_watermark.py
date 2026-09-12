@@ -700,11 +700,9 @@ class HeaderWidget(QWidget):
         if not cfg.get(cfg.localBlindWatermarkEnabled):
             error_msg = self.tr("请在设置页面打开 '盲水印AI能力' 开关")
             return error_msg, task_params
-        if "input_path" not in params or not params["input_path"] or " " in params["input_path"]:
-            error_msg = self.tr("请选择要处理的文件或目录且路径不能有空格")
+        if "input_path" not in params or not params["input_path"]:
+            error_msg = self.tr("请选择要处理的文件或目录")
             return error_msg, task_params
-        if isinstance(params["input_path"], str) and not params["input_path"].isascii():
-            return self.tr("输入路径: 不支持非英文路径"), task_params
         task_params["input_path"] = params["input_path"]
         if "model_name" not in params or not params["model_name"]:
             error_msg = self.tr("请选择去除模型")
@@ -716,8 +714,6 @@ class HeaderWidget(QWidget):
         if "output_path" not in params or not params["output_path"]:
             error_msg = self.tr("请设置文件保存位置")
             return error_msg, task_params
-        if isinstance(params["output_path"], str) and not params["output_path"].isascii():
-            return self.tr("输出路径: 不支持非英文路径"), task_params
         task_params["output_path"] = params["output_path"]
         return error_msg, task_params
 
