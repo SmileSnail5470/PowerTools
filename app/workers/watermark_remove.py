@@ -49,6 +49,8 @@ class WatermarkRemoveWork(BaseWorker):
         general_edit_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "general_edit")
         if "_feature_name_" in kwargs:
             os.environ["_feature_name_"] = kwargs["_feature_name_"]
+        if "POWERTOOLS_TMPE_DIR" not in os.environ:
+            os.environ["POWERTOOLS_TMPE_DIR"] = cfg.get(cfg.cachePath)
         if file_type == "image":
             params = {
                 "image_path": input_path, 
