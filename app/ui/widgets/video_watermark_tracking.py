@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QSizePolicy, QScrollArea, QWidget
 )
 from app.ui.library.qfluentwidgets import setFont, FlowLayout, SwitchButton, IndicatorPosition, CompactSpinBox
+from app.utils.image_io import open_video_capture
 
 
 class TimelineSliderWithMarkers(QSlider):
@@ -120,7 +121,7 @@ class VideoWatermarkTrackingDialog(QDialog):
         self._update_frame_display()
 
     def _init_video(self):
-        self.cap = cv2.VideoCapture(self.file_path)
+        self.cap = open_video_capture(self.file_path)
         if self.cap.isOpened():
             self.fps = self.cap.get(cv2.CAP_PROP_FPS)
             self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -750,18 +751,23 @@ class VideoWatermarkTrackingDialog(QDialog):
         self.trackingDataReady.emit(data)
         self.accept()
 
+    def _release_capture(self):
+        if self.cap:
+            self.cap.release()
+            self.cap = None
+
+    def accept(self):
+        self._release_capture()
+        super().accept()
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._update_frame_display()
 
     def closeEvent(self, event):
-        if self.cap:
-            self.cap.release()
-            self.cap = None
+        self._release_capture()
         super().closeEvent(event)
 
     def reject(self):
-        if self.cap:
-            self.cap.release()
-            self.cap = None
+        self._release_capture()
         super().reject()

@@ -10,6 +10,7 @@ import cv2
 from app.ui.widgets.image_preview_widget import ScrollBar
 from app.ui.library.qfluentwidgets import setFont
 from app.ui.common.utils import get_file_type
+from app.utils.image_io import open_video_capture
 
 
 COLOR_ACCENT = "#0071e3"
@@ -116,8 +117,14 @@ class AreaSelectorDialog(QDialog):
             self.slider.show()
             self._load_video(path=path)
 
+    def _release_capture(self) -> None:
+        if self.cap is not None:
+            self.cap.release()
+            self.cap = None
+
     def _load_video(self, path):
-        self.cap = cv2.VideoCapture(path)
+        self._release_capture()
+        self.cap = open_video_capture(path)
         if not self.cap.isOpened(): 
             return
         self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -330,6 +337,18 @@ class AreaSelectorDialog(QDialog):
     def clear_all(self):
         if self.saved_boxes: self.saved_boxes = []
         self.render_all()
+
+    def accept(self):
+        self._release_capture()
+        super().accept()
+
+    def reject(self):
+        self._release_capture()
+        super().reject()
+
+    def closeEvent(self, event):
+        self._release_capture()
+        super().closeEvent(event)
 
     def get_results(self):
         """ 供外部调用的接口 """

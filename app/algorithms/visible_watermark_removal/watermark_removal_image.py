@@ -365,10 +365,14 @@ class ImageWatermarkRemove():
         else:
             mask = self._read_mask(mask_path=mask_path)
         if progress_cb is not None:
-            if "visible_mask_path" in kwargs and kwargs["visible_mask_path"]:
+            if "POWERTOOLS_TMPE_DIR" in os.environ and os.environ["POWERTOOLS_TMPE_DIR"]:
+                mask_tmp_path = os.path.join(os.environ["POWERTOOLS_TMPE_DIR"], "tmpdir", "{0}_mask.png".format(os.path.basename(output_path.rsplit(".", 1)[0])))
+            elif "visible_mask_path" in kwargs and kwargs["visible_mask_path"]:
                 mask_tmp_path = kwargs["visible_mask_path"]
             else:
                 mask_tmp_path = "{0}_mask.png".format(output_path.rsplit(".", 1)[0])
+            if not os.path.exists(os.path.dirname(mask_tmp_path)):
+                os.makedirs(os.path.dirname(mask_tmp_path), exist_ok=True)
             self._save_mask_visualization(
                 img_path=image_path,
                 mask=mask,

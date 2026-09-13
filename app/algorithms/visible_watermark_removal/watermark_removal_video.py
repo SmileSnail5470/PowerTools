@@ -692,7 +692,12 @@ class VideoWatermarkRemover:
                         mask=cv2.imread(tmp_mask_path, cv2.IMREAD_GRAYSCALE),
                         file_path=os.path.join(tmp_visualzation_path, os.path.basename(str(frame_file)))
                     )
-                output_video_tmp_path = "{0}_mask_visualization.mp4".format(output_video_path.rsplit(".", 1)[0])
+                if "POWERTOOLS_TMPE_DIR" in os.environ and os.environ["POWERTOOLS_TMPE_DIR"]:
+                    output_video_tmp_path = os.path.join(os.environ["POWERTOOLS_TMPE_DIR"], "tmpdir", "{0}_mask_visualization.mp4".format(os.path.basename(output_video_path.rsplit(".", 1)[0])))
+                else:
+                    output_video_tmp_path = "{0}_mask_visualization.mp4".format(output_video_path.rsplit(".", 1)[0])
+                if not os.path.exists(os.path.dirname(output_video_tmp_path)):
+                    os.makedirs(os.path.dirname(output_video_tmp_path), exist_ok=True)
                 self._merge_video_prepare(frame_files, tmp_visualzation_path)
                 self._merge_processed_frames(
                     processed_frames_dir=Path(tmp_visualzation_path),

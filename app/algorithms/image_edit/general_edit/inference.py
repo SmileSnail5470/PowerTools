@@ -4,6 +4,8 @@ from pathlib import Path
 from PIL import Image
 import cv2
 import numpy as np
+import psutil
+from app.algorithms import is_gpu_device
 from app.algorithms.private.color_fix import POISSON_MASK_CONTEXT_MARGIN, poisson_clone
 from app.algorithms.image_edit.general_edit.pipeline import Pipeline
 
@@ -45,14 +47,24 @@ class ImageEditInference:
         return max(8, int(self.pipe.vae_scale_factor) * 2)
 
     def _size_budget(self) -> tuple[int, int]:
-        gpu_memory_limit = int(os.environ.get("POWERTOOLS_GPU_MEMORY_LIMIT", 16))
-        if gpu_memory_limit >= 16:
-            area, max_side = 1024 * 1024, 1536
-        elif gpu_memory_limit >= 12:
-            area, max_side = 832 * 832, 1280
+        if is_gpu_device():
+            gpu_memory_limit = int(os.environ.get("POWERTOOLS_GPU_MEMORY_LIMIT", 16))
+            if gpu_memory_limit >= 16:
+                area, max_side = 768 * 768, 1152
+            elif gpu_memory_limit >= 12:
+                area, max_side = 608 * 608, 912
+            else:
+                area, max_side = 448 * 448, 672
+            return min(area, int(self.pipe.max_condition_area)), max_side
         else:
-            area, max_side = 768 * 768, 1024
-        return min(area, int(self.pipe.max_condition_area)), max_side
+            system_memory = psutil.virtual_memory().total / (1024 ** 3)
+            if system_memory >= 30:
+                area, max_side = 960 * 960, 1440
+            elif system_memory >= 22:
+                area, max_side = 768 * 768, 1152
+            else:
+                area, max_side = 512 * 512, 768
+            return min(area, int(self.pipe.max_condition_area)), max_side
 
     def _compute_infer_size(self, width: int, height: int) -> tuple[int, int]:
         align = self._align

@@ -231,11 +231,8 @@ class Pipeline:
     def _module(self, name: str) -> OnnxModule:
         module = self._modules.get(name)
         if module is None:
-            path = self.model_dir / name
-            start = time.perf_counter()
-            module = OnnxModule(path, use_io_binding=self.use_io_binding, use_cupy=self.use_cupy, **self._session_kwargs)
+            module = OnnxModule(self.model_dir / name, use_io_binding=self.use_io_binding, use_cupy=self.use_cupy, verbose=self.verbose, **self._session_kwargs)
             self._modules[name] = module
-            self._log(f"[onnx] loaded {name} in {time.perf_counter() - start:.1f}s ({module.provider})")
         return module
 
     def unload(self, *names: str) -> None:
@@ -244,7 +241,6 @@ class Pipeline:
             if module is None:
                 continue
             module.unload()
-            self._log(f"[onnx] released {name}")
 
     @property
     def tokenizer(self):
@@ -398,6 +394,7 @@ class Pipeline:
         latents = asnumpy(sample).astype(np.float32)
         timings["transformer"] = time.perf_counter() - mark
         transformer.clear_static_inputs()
+        model_input = timestep = sample = outputs = noise_pred = None
         if self.low_memory:
             self.unload("transformer")
 

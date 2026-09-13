@@ -639,12 +639,6 @@ class HeaderWidget(QWidget):
             return error_msg, task_params
         task_params["prompt"] = params["prompt"].strip()
         if "input_path" in params and params["input_path"]:
-            if isinstance(params["input_path"], str) and " " in params["input_path"]:
-                error_msg = self.tr("输入路径不能包含空格")
-                return error_msg, task_params
-            if isinstance(params["input_path"], str) and not params["input_path"].isascii():
-                error_msg = self.tr("输入路径: 不支持非英文路径")
-                return error_msg, task_params
             task_params["input_path"] = params["input_path"]
         if "model_name" not in params or not params["model_name"]:
             error_msg = self.tr("请选择编辑模型")
@@ -654,9 +648,6 @@ class HeaderWidget(QWidget):
             task_params["mask_boxes"] = params["mask_boxes"]
         if "output_path" not in params or not params["output_path"]:
             error_msg = self.tr("请设置文件保存位置")
-            return error_msg, task_params
-        if isinstance(params["output_path"], str) and not params["output_path"].isascii():
-            error_msg = self.tr("输出路径: 不支持非英文路径")
             return error_msg, task_params
         task_params["output_path"] = params["output_path"]
         return error_msg, task_params
