@@ -649,7 +649,7 @@ def general_provider(enable_cuda_graph: bool = False, use_cpu: bool = False):
     elif "CUDAExecutionProvider" in available and is_gpu_device():
         providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
         cuda_opts = {
-            "arena_extend_strategy": "kNextPowerOfTwo",
+            "arena_extend_strategy": "kSameAsRequested",
             "cudnn_conv_algo_search": "HEURISTIC",
             "do_copy_in_default_stream": "1",
         }
