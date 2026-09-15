@@ -194,10 +194,6 @@ class Tutorial(QWidget):
     def _setup_content(self, main_layout: QVBoxLayout):
         scroll = ScrollArea(self)
         scroll.setObjectName("tutorialScroll")
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.enableTransparentBackground()
 
         page = QWidget(scroll)
         page_layout = QHBoxLayout(page)
@@ -219,6 +215,10 @@ class Tutorial(QWidget):
 
         page_layout.addWidget(content, 1, Qt.AlignTop)
         scroll.setWidget(page)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.enableTransparentBackground()
         main_layout.addWidget(scroll, 1)
 
     def _create_quick_start_section(self) -> QWidget:

@@ -304,6 +304,7 @@ class LicenseWidget(QWidget):
         # Buttons
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(12)
+        btn_layout.addStretch()
 
         self.browse_btn = QPushButton("📁 " + self.tr("选择许可证文件"))
         setFont(self.browse_btn, 12, QFont.Bold)
@@ -319,7 +320,7 @@ class LicenseWidget(QWidget):
             QPushButton:pressed { background: #3730a3; }
         """)
         self.browse_btn.clicked.connect(self._browse_license_file)
-        btn_layout.addWidget(self.browse_btn)
+        btn_layout.addWidget(self.browse_btn, alignment=Qt.AlignCenter)
 
         self.deactivate_btn = QPushButton("🗑️ " + self.tr("取消激活"), self)
         setFont(self.deactivate_btn, 12)
@@ -336,7 +337,7 @@ class LicenseWidget(QWidget):
         """)
         self.deactivate_btn.clicked.connect(self._deactivate_license)
         self.deactivate_btn.setVisible(self._license_manager.is_licensed)
-        btn_layout.addWidget(self.deactivate_btn)
+        btn_layout.addWidget(self.deactivate_btn, alignment=Qt.AlignCenter)
 
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
@@ -392,6 +393,12 @@ class LicenseWidget(QWidget):
             self._license_manager.deactivate()
             self._refresh_ui()
             self.license_changed.emit()
+
+    def activate_license_file(self, file_path: str):
+        self._activate_license(file_path)
+
+    def refresh(self):
+        self._refresh_ui()
 
     def _refresh_ui(self):
         self.status_card.refresh()

@@ -4,8 +4,10 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout
 from app.ui.library.qfluentwidgets import setFont, ScrollArea
 from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.license_widget import LicenseWidget
+from app.ui.widgets.auto_auth_widget import AutoAuthWidget
 from app.ui.widgets.custom_card_group_widget import CustomGroupBox
 from app.license.license_manager import LicenseManager
+from app.license.auto_auth import AutoAuthService
 from app.ui.common.event_bus import global_event_bus
 
 
@@ -14,6 +16,7 @@ class LicenseView(QWidget):
         super().__init__(parent=parent)
         self.setObjectName("LicenseView")
         self._license_manager = license_manager
+        self._auto_auth_service = AutoAuthService(license_manager=license_manager)
         self._setup_ui()
 
     def _setup_ui(self):
@@ -49,10 +52,17 @@ class LicenseView(QWidget):
 
         # License management group
         license_group = CustomGroupBox(title=self.tr("📋 许可证信息"))
-        license_widget = LicenseWidget(self._license_manager, self)
-        license_widget.license_changed.connect(lambda: global_event_bus.License_update.emit())
-        license_group.addCard(card=license_widget)
+        self.license_widget = LicenseWidget(self._license_manager, self)
+        self.license_widget.license_changed.connect(lambda: global_event_bus.License_update.emit())
+        license_group.addCard(card=self.license_widget)
         content_layout.addWidget(license_group)
+
+        # Auto authorization group
+        auto_auth_group = CustomGroupBox(title=self.tr("⚡ 自动授权服务"))
+        self.auto_auth_widget = AutoAuthWidget(self._auto_auth_service, self)
+        self.auto_auth_widget.license_activated.connect(self._on_license_activated)
+        auto_auth_group.addCard(card=self.auto_auth_widget)
+        content_layout.addWidget(auto_auth_group)
 
         # Instructions group
         instructions_group = CustomGroupBox(title=self.tr("📖 激活说明"))
@@ -67,6 +77,13 @@ class LicenseView(QWidget):
 
         main_layout.addWidget(scroll)
 
+    def _on_license_activated(self, license_path: str):
+        if license_path:
+            self.license_widget.activate_license_file(license_path)
+        else:
+            self.license_widget.refresh()
+            global_event_bus.License_update.emit()
+
     def _create_instructions(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
@@ -74,6 +91,10 @@ class LicenseView(QWidget):
         layout.setSpacing(8)
 
         steps = [
+            "🅰️  自动授权（推荐）：在「自动授权服务」中输入时长 → 点击「开始授权」→ 扫码付款，"
+            "到账后自动下发并激活与本机绑定的许可证",
+            "",
+            "🅱️  人工授权：",
             "1️⃣  复制上方的「设备标识码」",
             "2️⃣  将设备标识码发送给开发者",
             "3️⃣  收到 .lic 许可证文件后，拖拽到上方区域或点击「选择许可证文件」",
@@ -82,6 +103,7 @@ class LicenseView(QWidget):
             "💡 提示：",
             "• 许可证与设备绑定，换机器需要重新申请",
             "• 许可证到期前 7 天会收到续费提醒",
+            "• 每笔订单都有可追溯记录，付款异常可凭订单号申诉",
             "• 如遇问题请联系开发者获取帮助",
         ]
 
