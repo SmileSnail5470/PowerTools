@@ -521,7 +521,7 @@ class LicenseView(QWidget):
 
         grid.addWidget(self._create_instruction_card(
             badge="B",
-            title=self.tr("人工授权"),
+            title=self.tr("人工授权 (支持免费试用一天)"),
             steps=[
                 self.tr("复制上方的「设备标识码」"),
                 self.tr("将设备标识码发送给开发者 (QQ群: 1080076113)"),

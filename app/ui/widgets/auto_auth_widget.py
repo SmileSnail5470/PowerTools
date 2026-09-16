@@ -116,7 +116,7 @@ class PaymentDialog(MessageBoxBase):
         QTimer.singleShot(0, self._poll)
 
     def _setup_ui(self):
-        self.widget.setMinimumWidth(460)
+        self.widget.setMinimumWidth(512)
 
         title = QLabel(self.tr("扫码完成支付"))
         setFont(title, 16, QFont.Bold)
@@ -161,7 +161,7 @@ class PaymentDialog(MessageBoxBase):
         status_row.addWidget(self.spinner)
         self.status_label = QLabel(self.tr("等待扫码支付，完成后自动下发文件..."))
         setFont(self.status_label, 12)
-        self.status_label.setWordWrap(True)
+        # self.status_label.setWordWrap(True)
         self.status_label.setStyleSheet(f"color: {TEXT_SUB};")
         status_row.addWidget(self.status_label)
         status_row.addStretch()
@@ -181,7 +181,7 @@ class PaymentDialog(MessageBoxBase):
         layout.setSpacing(6)
 
         image = QLabel(card)
-        image.setFixedSize(160, 160)
+        image.setFixedSize(240, 240)
         image.setAlignment(Qt.AlignCenter)
         pixmap = QPixmap(resource_path)
         if pixmap.isNull():
@@ -189,7 +189,7 @@ class PaymentDialog(MessageBoxBase):
             setFont(image, 11)
             image.setStyleSheet(f"color: {DANGER};")
         else:
-            image.setPixmap(pixmap.scaled(160, 160, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            image.setPixmap(pixmap.scaled(240, 240, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         layout.addWidget(image, 0, Qt.AlignCenter)
 
         caption = QLabel(name, card)
@@ -219,8 +219,7 @@ class PaymentDialog(MessageBoxBase):
         elif progress.stage == AuthStage.UNAVAILABLE:
             self._timer.stop()
             self._set_status(
-                self.tr("自动到账校验暂未开放：付款后请点击「我已完成支付」，"
-                        "订单号与设备码会自动复制，发送给作者即可人工签发。"),
+                self.tr("付款后请点击「我已完成支付」，订单号与设备码会自动复制并发送给作者，等待作者签发。"),
                 WARNING,
                 spinning=False,
             )
@@ -371,7 +370,7 @@ class AutoAuthWidget(QWidget):
         price_group.addWidget(self.price_label)
 
         self.days_hint = QLabel("")
-        setFont(self.days_hint, 10)
+        setFont(self.days_hint, 12, QFont.Bold)
         self.days_hint.setAlignment(Qt.AlignRight)
         self.days_hint.setStyleSheet(f"color: {TEXT_SUB};")
         price_group.addWidget(self.days_hint)

@@ -221,8 +221,8 @@ class LicenseDropZone(QFrame):
         icon_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(icon_label)
 
-        text_label = QLabel(self.tr("拖拽 .lic 许可证文件到此处"))
-        setFont(text_label, 12)
+        text_label = QLabel(self.tr("拖拽 .lic 许可证文件到此处 (许可证变更后，建议重启软件)"))
+        setFont(text_label, 12, QFont.Bold)
         text_label.setAlignment(Qt.AlignCenter)
         text_label.setStyleSheet("color: #6b7280;")
         layout.addWidget(text_label)
