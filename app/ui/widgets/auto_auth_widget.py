@@ -35,7 +35,7 @@ class TierCard(QFrame):
         self.setObjectName("tierCard")
         self._tier = tier
         self._active = False
-        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         self.setMinimumWidth(160)
 
         layout = QVBoxLayout(self)
@@ -51,7 +51,7 @@ class TierCard(QFrame):
             badge.setStyleSheet(f"QLabel {{ background: {WARNING}; color: white; border-radius: 4px; padding: 1px 6px; }}")
             badge_row.addWidget(badge)
             layout.addLayout(badge_row)
-
+        layout.addStretch()
         self.name_label = QLabel(self.tr(tier.name))
         setFont(self.name_label, 12)
         self.name_label.setAlignment(Qt.AlignCenter)
