@@ -46,6 +46,7 @@ class WatermarkRemoveWork(BaseWorker):
         onnx_model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "visible_watermark_removal")
         segment_model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "segment")
         general_edit_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "general_edit")
+        image_restoration_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "image_restoration")
         if "_feature_name_" in kwargs:
             os.environ["_feature_name_"] = kwargs["_feature_name_"]
         if "POWERTOOLS_TMPE_DIR" not in os.environ:
@@ -65,6 +66,7 @@ class WatermarkRemoveWork(BaseWorker):
                 "yolo_detection_onnx_path": os.path.join(onnx_model_dir, "yolo.encmodel"),
                 "segment_onnx_dir": segment_model_dir,
                 "general_edit_onnx_dir": general_edit_dir,
+                "image_restoration_onnx_dir": image_restoration_dir,
                 "mask_path": kwargs["manual_watermark_mask_path"] if "manual_watermark_mask_path" in kwargs and kwargs["manual_watermark_mask_path"] else "",
                 "refine_type": kwargs["model_name"],
                 "watermark_type": "text" if "watermark_content" in kwargs and kwargs["watermark_content"] == "text_watermark" else "subtitle" if "watermark_content" in kwargs and kwargs["watermark_content"] == "subtitle" else "all",

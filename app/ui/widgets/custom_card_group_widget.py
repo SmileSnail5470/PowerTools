@@ -129,7 +129,7 @@ class StyleCard(QFrame):
 
     ICON_MAP = {
         "#4facfe": "✏️",   # PatchWiper：细节增强 / 手工修补感
-        "#f093fb": "🧠",   # EMDF：智能修补 / 自适应
+        "#f093fb": "🧠",   # EMDF：自适应修补 / CoTIR：文档智能修补
         "#a18cd1": "⚖️",   # GRIG：平衡修复
         "#84fab0": "🍃",   # LaMa：自然、保守、平滑
         "#fbc2eb": "🪣",   # CoordFill：快速填充

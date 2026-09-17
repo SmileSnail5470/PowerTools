@@ -237,16 +237,21 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         """)
         self.tab_group = QButtonGroup(self)
         self.tab_group.setExclusive(True)
-        self.tab_image = QPushButton(self.tr("图片模型"))
+        self.tab_image = QPushButton(self.tr("通用图片模型"))
         setFont(self.tab_image, fontSize=14, weight=QFont.DemiBold)
         self.tab_image.setCheckable(True)
         self.tab_image.setChecked(True)
+        self.tab_document = QPushButton(self.tr("文档图片模型"))
+        setFont(self.tab_document, fontSize=14, weight=QFont.DemiBold)
+        self.tab_document.setCheckable(True)
         self.tab_video = QPushButton(self.tr("视频模型"))
         setFont(self.tab_video, fontSize=14, weight=QFont.DemiBold)
         self.tab_video.setCheckable(True)
         self.tab_group.addButton(self.tab_image, 0)
-        self.tab_group.addButton(self.tab_video, 1)
+        self.tab_group.addButton(self.tab_document, 1)
+        self.tab_group.addButton(self.tab_video, 2)
         tab_layout.addWidget(self.tab_image)
+        tab_layout.addWidget(self.tab_document)
         tab_layout.addWidget(self.tab_video)
         main_layout.addWidget(tab_widget)
 
@@ -284,7 +289,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         coordfill_separator = CardSeparator(self)
         image_layout.addWidget(coordfill_separator)
 
-        emdf_card = StyleCard("#f093fb", self.tr("智能修补"), self.tr("效果稳定，可能丢失细节，速度稍慢"))
+        emdf_card = StyleCard("#f093fb", self.tr("自适应修补"), self.tr("效果稳定，可能丢失细节，速度稍慢"))
         emdf_card.set_name("emdf")
         image_layout.addWidget(emdf_card)
         emdf_separator = CardSeparator(self)
@@ -323,6 +328,21 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
         self.all_cards.extend(self.image_cards)
 
+        document_container = QWidget()
+        document_layout = QVBoxLayout(document_container)
+        document_layout.setContentsMargins(0, 6, 0, 6)
+        document_layout.setSpacing(0)
+
+        image_restoration_card = StyleCard("#f093fb", self.tr("智能修补"), self.tr("专为文档/截图设计，文字排版还原准确，速度较慢"))
+        image_restoration_card.set_name("image_restoration")
+        document_layout.addWidget(image_restoration_card)
+
+        document_layout.addStretch()
+        self.stacked_widget.addWidget(document_container)
+
+        self.document_cards = [image_restoration_card]
+        self.all_cards.extend(self.document_cards)
+
         video_container = QWidget()
         video_layout = QVBoxLayout(video_container)
         video_layout.setContentsMargins(0, 6, 0, 6)
@@ -347,7 +367,8 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         self.all_cards.extend(self.video_cards)
 
         self.tab_image.toggled.connect(lambda checked: self.on_tab_changed(0, checked))
-        self.tab_video.toggled.connect(lambda checked: self.on_tab_changed(1, checked))
+        self.tab_document.toggled.connect(lambda checked: self.on_tab_changed(1, checked))
+        self.tab_video.toggled.connect(lambda checked: self.on_tab_changed(2, checked))
 
         for card in self.all_cards:
             card.mousePressEvent = lambda event, c=card: self.on_card_clicked(c)
@@ -358,6 +379,9 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         global_event_bus.License_update.connect(self.select_first_interactive)
         global_event_bus.watermarkRemove_TaskFinishedByModel.connect(self.update_model_card_info)
         main_layout.addStretch()
+
+    def _card_pool(self, index: int) -> list:
+        return {0: self.image_cards, 1: self.document_cards, 2: self.video_cards}.get(index, self.image_cards)
 
     def _set_extra_image_models_visible(self, visible: bool):
         for card in self.image_cards[self.image_model_visible_count:]:
@@ -379,7 +403,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
     def update_model_card_info(self, model_name):
         current_index = self.stacked_widget.currentIndex()
-        active_pool = self.image_cards if current_index == 0 else self.video_cards
+        active_pool = self._card_pool(current_index)
         for one_card in active_pool:
             if one_card.get_name() != model_name:
                 continue
@@ -393,7 +417,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         if not checked:
             return
         self.stacked_widget.setCurrentIndex(index)
-        target_pool = self.image_cards if index == 0 else self.video_cards
+        target_pool = self._card_pool(index)
         if target_pool:
             self.on_card_clicked(target_pool[0])
         content_height = self.get_current_page_height(index)
@@ -406,7 +430,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         if not clicked_card.is_interactive():
             return
         current_index = self.stacked_widget.currentIndex()
-        active_pool = self.image_cards if current_index == 0 else self.video_cards
+        active_pool = self._card_pool(current_index)
         for c in active_pool:
             c.set_selected(False)
         clicked_card.set_selected(True)
@@ -414,7 +438,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
     def select_first_interactive(self):
         current_index = self.stacked_widget.currentIndex()
-        active_pool = self.image_cards if current_index == 0 else self.video_cards
+        active_pool = self._card_pool(current_index)
         if any(c.is_selected for c in active_pool):
             return
         for card in active_pool:
@@ -426,6 +450,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
     def update_default_models(self, file_path):
         if not file_path:
             self.tab_image.setEnabled(True)
+            self.tab_document.setEnabled(True)
             self.tab_video.setEnabled(True)
             self.tab_image.setChecked(True)
             return
@@ -435,16 +460,19 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
             file_type = get_file_type(os.path.join(file_path, os.listdir(file_path)[0]))
         if file_type == "image":
             self.tab_image.setEnabled(True)
+            self.tab_document.setEnabled(True)
             self.tab_video.setEnabled(False)
             self.tab_image.setChecked(True)
             self.on_tab_changed(index=0, checked=True)
         elif file_type == "video":
             self.tab_image.setEnabled(True)
+            self.tab_document.setEnabled(False)
             self.tab_video.setEnabled(True)
             self.tab_video.setChecked(True)
-            self.on_tab_changed(index=1, checked=True)
+            self.on_tab_changed(index=2, checked=True)
         else:
             self.tab_image.setEnabled(True)
+            self.tab_document.setEnabled(True)
             self.tab_video.setEnabled(True)
             self.tab_image.setChecked(True)
 
@@ -892,6 +920,10 @@ class HeaderWidget(QWidget):
 
         if task_params["model_name"] in ["ppt"] and not cfg.get(cfg.localVideoInpaintingEnabled):
             error_msg = self.tr("请在设置页面打开 '视频修复AI能力' 开关")
+            return error_msg, task_params
+
+        if task_params["model_name"] in ["image_restoration"] and not cfg.get(cfg.localImageEditEnabled):
+            error_msg = self.tr("请在设置页面打开 '图像编辑AI能力' 开关")
             return error_msg, task_params
 
         if "output_path" not in params or not params["output_path"]:

@@ -175,7 +175,8 @@ class TaskInfoMessageBox(MessageBoxBase):
                 "space_detect": "空间位置检测",
                 "general_edit": "智能重绘",
                 "patchwiper": "细节增强",
-                "emdf": "智能修补",
+                "emdf": "自适应修补",
+                "image_restoration": "智能修补",
                 "grig": "平衡修复",
                 "lama": "自然保守",
                 "coordfill": "快速填充"
