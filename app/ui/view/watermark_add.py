@@ -302,6 +302,7 @@ class BlindWatermarkModelCard(HeaderCardWidget):
 
         main_layout.addStretch()
         bind_widget_to_param(self, "blind_watermark_model_name", watermark_add_params, "blind_watermark_model_name", transform=None)
+        self.blind_watermark_model_name.emit("placeholder_model")
         self.select_first_interactive()
         global_event_bus.License_update.connect(self.select_first_interactive)
         global_event_bus.watermarkAdd_TaskFinishedByModel.connect(self.update_model_card_info)
@@ -820,11 +821,12 @@ class HeaderWidget(QWidget):
         if not w.exec():
             return
         
-        allowed_use, error_msg = feature_gate.can_use(feature_name=feature_gate.get_feature_name(watermark_add_params.to_dict()["blind_watermark_model_name"]), return_errmsg=True)
-        if not allowed_use:
-            MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
-            return
-        task_params["_feature_name_"] = feature_gate.get_feature_name(watermark_add_params.to_dict()["blind_watermark_model_name"])
+        if watermark_add_params.to_dict()["blind_watermark_model_name"] != "placeholder_model":
+            allowed_use, error_msg = feature_gate.can_use(feature_name=feature_gate.get_feature_name(watermark_add_params.to_dict()["blind_watermark_model_name"]), return_errmsg=True)
+            if not allowed_use:
+                MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
+                return
+            task_params["_feature_name_"] = feature_gate.get_feature_name(watermark_add_params.to_dict()["blind_watermark_model_name"])
         
         total_tasks = []
         input_path = task_params["input_path"]
@@ -936,7 +938,7 @@ class HeaderWidget(QWidget):
         
         if "blind_watermark_task_type" in params and params["blind_watermark_task_type"] == "extract_blind_watermark":
             task_params["blind_watermark_task_type"] = params["blind_watermark_task_type"]
-            if "blind_watermark_model_name" not in params:
+            if "blind_watermark_model_name" not in params or params["blind_watermark_model_name"] == "placeholder_model":
                 error_msg = self.tr("请选择盲水印算法")
                 return error_msg, task_params
             task_params["blind_watermark_model_name"] = params["blind_watermark_model_name"]
@@ -972,7 +974,7 @@ class HeaderWidget(QWidget):
             if not params["watermark_text"]:
                 error_msg = self.tr("请设置水印文本")
                 return error_msg, task_params
-            if "blind_watermark_model_name" not in params:
+            if "blind_watermark_model_name" not in params or params["blind_watermark_model_name"] == "placeholder_model":
                 error_msg = self.tr("请选择盲水印算法")
                 return error_msg, task_params
             task_params["watermark_text"] = params["watermark_text"]
