@@ -3,7 +3,7 @@ import sys
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSlider, QFileDialog,
                              QLabel, QPushButton, QLineEdit, QStackedWidget, 
                              QFrame, QGraphicsDropShadowEffect)
-from PySide6.QtCore import Qt, QPropertyAnimation, QPoint, QEasingCurve, QTimer, Signal
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal
 from PySide6.QtGui import QColor, QFont
 from app.ui.library.qfluentwidgets import setFont, MessageBox
 from app.ui.common.utils import get_file_type
@@ -83,7 +83,6 @@ class WatermarkDetectSettings(QWidget):
         self.setObjectName("WatermarkDetectSettings")
         self.init_ui()
         self.apply_styles()
-        QTimer.singleShot(50, lambda: self.switch_tab(0, animated=False))
 
     def init_ui(self):
         self.main_layout = QVBoxLayout(self)
@@ -103,11 +102,6 @@ class WatermarkDetectSettings(QWidget):
         self.tabs_layout = QHBoxLayout(self.tabs_container)
         self.tabs_layout.setContentsMargins(5, 5, 5, 5)
         self.tabs_layout.setSpacing(0)
-
-        # 动画滑块背景
-        self.slider = QFrame(self.tabs_container)
-        self.slider.setObjectName("slider")
-        self.slider.setAttribute(Qt.WA_TransparentForMouseEvents) 
         
         self.tab_btns = []
         for i, items in enumerate([(self.tr("AI 交互"), "ai_interactive_detect"), (self.tr("AI 全自动"), "ai_auto_detect"), (self.tr("手工标注"), "manual_detect")]):
@@ -121,9 +115,11 @@ class WatermarkDetectSettings(QWidget):
             btn.clicked.connect(lambda _, signal_value=signal_value: self.watermarkDetectType.emit(signal_value))
             self.tabs_layout.addWidget(btn)
             self.tab_btns.append(btn)
+            if i == 0:
+                btn.setChecked(True)
 
         self.card_layout.addWidget(self.tabs_container)
-        self.card_layout.addSpacing(20)
+        self.card_layout.addSpacing(12)
 
         self.stack = QStackedWidget()
         
@@ -399,10 +395,6 @@ class WatermarkDetectSettings(QWidget):
     
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        btn_width = self.tabs_container.width() // 3
-        self.slider.setFixedSize(btn_width - 10, self.tabs_container.height() - 10)
-        target_x = 5 + self.current_tab_index * btn_width
-        self.slider.move(target_x, 5)
 
     def get_current_page_height(self, index: int):
         widget = self.stack.widget(index)
@@ -431,21 +423,8 @@ class WatermarkDetectSettings(QWidget):
         target_height = content_height + extra_height
         self.animate_height_change(target_height)
 
-    def switch_tab(self, index, animated=True):
+    def switch_tab(self, index):
         self.current_tab_index = index
-        btn_width = self.tabs_container.width() // 3
-        self.slider.setFixedSize(btn_width - 10, self.tabs_container.height() - 10)
-        target_pos = QPoint(5 + index * btn_width, 5)
-        
-        if animated:
-            self.anim = QPropertyAnimation(self.slider, b"pos")
-            self.anim.setDuration(250)
-            self.anim.setEndValue(target_pos)
-            self.anim.setEasingCurve(QEasingCurve.OutCubic)
-            self.anim.start()
-        else:
-            self.slider.move(target_pos)
-
         self.stack.setCurrentIndex(index)
         for i, btn in enumerate(self.tab_btns):
             btn.setChecked(i == index)
@@ -467,10 +446,9 @@ class WatermarkDetectSettings(QWidget):
             #tabsContainer { background: #F1F5F9; border-radius: 14px; }
             #slider { background: white; border-radius: 10px; }
             #tabItem { 
-                border: none; background: transparent; color: #64748B; 
-                padding: 12px 0;
+                border: none; background: transparent; color: #64748B; padding: 12px; border-radius: 12px;
             }
-            #tabItem:checked { color: #2563EB; }
+            #tabItem:checked { color: #2563EB; background: white;}
             
             #labelTitle { color: #0F172A; }
             #labelDesc { color: #94A3B8; }

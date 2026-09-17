@@ -200,7 +200,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setTitle(self.tr("🎨 水印去除风格"))
+        self.setTitle(self.tr("🎨 水印去除模型"))
         self.setBorderRadius(8)
 
         main_layout = QVBoxLayout()
@@ -237,14 +237,14 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         """)
         self.tab_group = QButtonGroup(self)
         self.tab_group.setExclusive(True)
-        self.tab_image = QPushButton(self.tr("通用图片模型"))
+        self.tab_image = QPushButton(self.tr("通用图片"))
         setFont(self.tab_image, fontSize=14, weight=QFont.DemiBold)
         self.tab_image.setCheckable(True)
         self.tab_image.setChecked(True)
-        self.tab_document = QPushButton(self.tr("文档图片模型"))
+        self.tab_document = QPushButton(self.tr("文档图片"))
         setFont(self.tab_document, fontSize=14, weight=QFont.DemiBold)
         self.tab_document.setCheckable(True)
-        self.tab_video = QPushButton(self.tr("视频模型"))
+        self.tab_video = QPushButton(self.tr("视频"))
         setFont(self.tab_video, fontSize=14, weight=QFont.DemiBold)
         self.tab_video.setCheckable(True)
         self.tab_group.addButton(self.tab_image, 0)

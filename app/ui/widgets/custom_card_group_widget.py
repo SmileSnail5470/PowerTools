@@ -128,11 +128,11 @@ class StyleCard(QFrame):
     UpdateLicenseInfo = Signal()
 
     ICON_MAP = {
-        "#4facfe": "✏️",   # PatchWiper：细节增强 / 手工修补感
-        "#f093fb": "🧠",   # EMDF：自适应修补 / CoTIR：文档智能修补
-        "#a18cd1": "⚖️",   # GRIG：平衡修复
-        "#84fab0": "🍃",   # LaMa：自然、保守、平滑
-        "#fbc2eb": "🪣",   # CoordFill：快速填充
+        "#4facfe": "✏️",
+        "#f093fb": "🧠",
+        "#a18cd1": "⚖️",
+        "#84fab0": "🍃",
+        "#fbc2eb": "🪣",
     }
 
     MODEL_FREE = "free"
