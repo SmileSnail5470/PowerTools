@@ -215,6 +215,21 @@ class AuthOrderStore:
                 return order
         return None
 
+    def delete(self, order_id: str, reason: str = "user_deleted") -> bool:
+        with self._lock:
+            index = self._load_index()
+            data = index.pop(order_id, None)
+            if data is None:
+                return False
+            self._write_index(index)
+            order = AuthOrder.from_dict(data)
+            self._append_trail(order, "order_deleted", {"reason": reason})
+        logger.info(f"Auth order record deleted: {order_id} reason={reason}")
+        return True
+
+    def delete_many(self, order_ids: List[str], reason: str = "user_deleted") -> int:
+        return sum(1 for order_id in list(order_ids) if self.delete(order_id, reason=reason))
+
     def _last_trail_record(self) -> Optional[Dict[str, Any]]:
         if not os.path.exists(self._trail_file):
             return None
@@ -394,6 +409,12 @@ class AutoAuthService:
 
     def quote(self, days: Any) -> Quote:
         return self._policy.quote(days)
+
+    def list_orders(self) -> List[AuthOrder]:
+        return self._store.list_orders()
+
+    def delete_orders(self, order_ids: List[str], reason: str = "user_deleted") -> int:
+        return self._store.delete_many(order_ids, reason=reason)
 
     def create_order(self, days: Any, channel: str = "qrcode") -> AuthOrder:
         quote = self.quote(days)

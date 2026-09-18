@@ -43,6 +43,12 @@ param_name_map = {
     "reserve_region": "原图保留区域",
     "prompt": "编辑提示词",
     "mask_boxes": "编辑区域",
+    "task_type": "修复任务类型",
+    "num_inference_steps": "推理步数",
+    "guidance": "修复强度",
+    "seed": "随机种子",
+    "low_memory": "低显存模式",
+    "upscale": "放大倍数",
 }
 
 class TaskInfoMessageBox(MessageBoxBase):
@@ -339,6 +345,62 @@ class TaskInfoMessageBox(MessageBoxBase):
             body_layout.addWidget(scroll_area)
             body_layout.addWidget(output_section)
         
+        if self.task_type == "image-restoration":
+            value_map = {
+                "image_restoration": "智能修复",
+                "restoration": "综合修复",
+                "dehaze": "去雾",
+                "derain": "去雨",
+                "denoise": "去噪",
+                "deblur": "去模糊",
+                "super_resolution": "超分放大",
+                "lowlight": "低光增强",
+                "compression": "去压缩伪影",
+                "old_photo": "老照片修复",
+                "watermark_remove": "去水印",
+                "subtitle_remove": "去字幕",
+            }
+            input_section = self.create_section(self.tr("📁 输入文件路径"))
+            input_path = self.create_path_label(self.task_params["input_path"])
+            input_section.layout().addWidget(input_path)
+
+            scroll_area = QScrollArea()
+            scroll_area.setWidgetResizable(True)
+            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            scroll_area.setStyleSheet("""
+                QScrollArea {
+                    background-color: #f5f5f5;
+                    border: none;
+                    border-radius: 12px;
+                }
+            """)
+            params_section = self.create_section(self.tr("⚙️ 图像修复参数"))
+            params_grid = QGridLayout()
+            params_grid.setSpacing(10)
+
+            row, col = 0, 0
+            for key, value in self.task_params.items():
+                if key in ["input_path", "output_path"]:
+                    continue
+                param_widget = self.create_param_widget(
+                    param_name_map.get(key, key), value_map.get(str(value), str(value))
+                )
+                params_grid.addWidget(param_widget, row, col)
+                col += 1
+                if col >= 1:
+                    col = 0
+                    row += 1
+            params_section.layout().addLayout(params_grid)
+            scroll_area.setWidget(params_section)
+
+            output_section = self.create_section(self.tr("💾 输出保存设置"))
+            output_path = self.create_path_label(self.task_params["output_path"], header=self.tr("输出位置："))
+            output_section.layout().addWidget(output_path)
+
+            body_layout.addWidget(input_section)
+            body_layout.addWidget(scroll_area)
+            body_layout.addWidget(output_section)
+
         # 底部区域
         footer = QFrame()
         footer_layout = QHBoxLayout(footer)

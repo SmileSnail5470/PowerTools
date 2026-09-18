@@ -734,6 +734,8 @@ class ImageNavigationWidget(QWidget):
                         global_event_bus.blindWatermarkRemove_PreviewFile.emit(thumb.image_path)
                     elif self.task_type == "image_edit":
                         global_event_bus.imageEdit_PreviewFile.emit(thumb.image_path)
+                    elif self.task_type == "image_restoration":
+                        global_event_bus.imageRestoration_PreviewFile.emit(thumb.image_path)
         self.prev_btn.setEnabled(len(self.total_images) > 1)
         self.next_btn.setEnabled(len(self.total_images) > 1)
 

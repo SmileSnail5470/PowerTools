@@ -9,6 +9,7 @@ from app.ui.library.qfluentwidgets import (
 from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.license_widget import LicenseWidget, LicenseDropZone
 from app.ui.widgets.auto_auth_widget import AutoAuthWidget
+from app.ui.widgets.auth_records_widget import AuthRecordsWidget
 from app.ui.widgets.custom_card_group_widget import CustomGroupBox
 from app.license.license_manager import LicenseManager
 from app.license.auto_auth import AutoAuthService
@@ -169,6 +170,10 @@ class LicenseView(QWidget):
         auto_auth_group = CustomGroupBox(title=self.tr("⚡ 自动授权服务"))
         auto_auth_group.addCard(card=self._create_auto_auth_section())
         content_layout.addWidget(auto_auth_group)
+
+        records_group = CustomGroupBox(title=self.tr("🧾 授权记录"))
+        records_group.addCard(card=self._create_records_section())
+        content_layout.addWidget(records_group)
 
         instructions_group = CustomGroupBox(title=self.tr("📖 激活说明"))
         instructions_group.addCard(card=self._create_instructions())
@@ -499,6 +504,27 @@ class LicenseView(QWidget):
         else:
             self.license_widget.refresh()
             global_event_bus.License_update.emit()
+        self.auth_records_widget.refresh()
+
+    def _create_records_section(self) -> QWidget:
+        self.auth_records_widget = AuthRecordsWidget(self._auto_auth_service, self)
+        global_event_bus.License_update.connect(self.auth_records_widget.refresh)
+
+        section = QWidget()
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(SPACING_SM)
+
+        hint = QLabel(self.tr(
+            "每笔订单的下单时间、授权时长、状态与金额均落盘留痕；可按状态、时间范围或关键字筛选，"
+            "勾选行首复选框后可批量删除，双击行复制订单摘要；删除仅移除看板记录，审计流水不可篡改。"
+        ))
+        setFont(hint, 11)
+        hint.setWordWrap(True)
+        hint.setStyleSheet(f"color: {TEXT_SECONDARY};")
+        layout.addWidget(hint)
+        layout.addWidget(self.auth_records_widget)
+        return section
 
     def _create_instructions(self) -> QWidget:
         widget = QWidget()

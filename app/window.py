@@ -12,11 +12,10 @@ from app.ui.view.home import Home
 from app.ui.view.settings import Settings
 from app.ui.view.blind_watermark import BlindWatermarkRemove
 from app.ui.view.ocr import OCR
-from app.ui.view.screenshot import Screenshot
-from app.ui.view.scroll_screenshot import ScrollScreenshot
 from app.ui.view.watermark_add import WatermarkAdd
 from app.ui.view.watermark_remove import WatermarkRemove
 from app.ui.view.image_edit import ImageEdit
+from app.ui.view.image_restoration import ImageRestoration
 from app.ui.view.license_view import LicenseView
 from app.ui.view.tutorial import Tutorial
 from app.ui.widgets.resources_monitor_widget import ResourcesMonitorWidget
@@ -47,11 +46,10 @@ class MainWindow(FluentWindow):
         self.licenseInterface = LicenseView(self.license_manager, self)
         self.watermarkRemoveInterface = WatermarkRemove(self)
         self.watermarkAddInterface = WatermarkAdd(self)
-        self.screenshotInterface = Screenshot(self)
-        self.scrollScreenshotInterface = ScrollScreenshot(self)
         self.OCRInterface = OCR(self)
         self.blindWatermarkRemoveInterface = BlindWatermarkRemove(self)
         self.imageEditInterface = ImageEdit(self)
+        self.imageRestorationInterface = ImageRestoration(self)
         self.tutorialInterface = Tutorial(self)
         self.tutorialInterface.settingsRequested.connect(lambda: self.switchTo(self.settingInterface))
 
@@ -81,14 +79,13 @@ class MainWindow(FluentWindow):
         self.addSubInterface(self.watermarkAddInterface, Icon.WATERMARK_ADD, self.tr("水印添加"), pos, parent=None)
         self.addSubInterface(self.watermarkRemoveInterface, Icon.WATERMARK_REMOVE, self.tr("水印移除"), pos, parent=None)
 
-        # self.addSubInterface(self.screenshotInterface, Icon.SCREENSHOT, self.tr("屏幕截图"), pos, parent=None)
-        # self.addSubInterface(self.scrollScreenshotInterface, Icon.LONG_SCREENSHOT, self.tr("滚动截图"), pos, parent=None)
-
         self.addSubInterface(self.OCRInterface, Icon.OCR, self.tr("文字提取"), pos, parent=None)
 
         self.addSubInterface(self.blindWatermarkRemoveInterface, Icon.SCREENSHOT, self.tr("暗印去除"), pos, parent=None)
 
         self.addSubInterface(self.imageEditInterface, Icon.IMAGE_EDIT, self.tr("图像编辑"), pos, parent=None)
+
+        self.addSubInterface(self.imageRestorationInterface, Icon.LONG_SCREENSHOT, self.tr("图像修复"), pos, parent=None)
 
         # add custom widget to bottom
         self.navigationInterface.addItem(
