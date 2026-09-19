@@ -201,8 +201,8 @@ class Tutorial(QWidget):
 
         content = QWidget(page)
         content.setObjectName("tutorialContent")
-        content.setMaximumWidth(1080)
-        content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        # content.setMaximumWidth(1080)
+        # content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(24, 20, 24, 48)
         content_layout.setSpacing(28)
@@ -254,7 +254,7 @@ class Tutorial(QWidget):
             GuideCard(
                 FIF.SPEED_HIGH,
                 self.tr("GPU 加速"),
-                self.tr("AI 加速需 CUDA 12.x 与 cuDNN 9.x，安装后在设置中验证。"),
+                self.tr("AI 加速需 CUDA 12.x 与 cuDNN 9.x。安装后在设置中验证，需设置到 .dll 文件父目录。"),
                 tags=(self.tr("可选"), self.tr("NVIDIA")),
                 actions=(
                     (
@@ -338,13 +338,6 @@ class Tutorial(QWidget):
                 parent=self,
             ),
             GuideCard(
-                FIF.BROOM,
-                self.tr("暗印去除"),
-                self.tr("匹配暗印类型，可按需修复颜色与视频时序。"),
-                tags=(self.tr("图像编辑"),),
-                parent=self,
-            ),
-            GuideCard(
                 FIF.DOCUMENT,
                 self.tr("文字提取"),
                 self.tr("设置语言与置信度，识别后校对低清晰度文字。"),
@@ -352,10 +345,24 @@ class Tutorial(QWidget):
                 parent=self,
             ),
             GuideCard(
+                FIF.BROOM,
+                self.tr("暗印去除"),
+                self.tr("匹配暗印类型，可按需修复颜色与视频时序。"),
+                tags=(self.tr("图像编辑"),),
+                parent=self,
+            ),
+            GuideCard(
                 FIF.BRUSH,
                 self.tr("图像编辑"),
                 self.tr("使用提示词和选区描述目标效果，建议小范围迭代。"),
                 tags=(self.tr("图像编辑"),),
+                parent=self,
+            ),
+            GuideCard(
+                FIF.BRUSH,
+                self.tr("图像修复"),
+                self.tr("支持多种图像修复场景，可选微调修复提示词。"),
+                tags=(self.tr("图像修复"),),
                 parent=self,
             ),
         ]

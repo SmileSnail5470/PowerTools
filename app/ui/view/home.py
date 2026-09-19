@@ -178,7 +178,7 @@ class HeroSection(QWidget):
         setFont(self.title, 52, QFont.Bold)
         
         self.subtitle = QLabel(
-            self.tr("图像处理工具集，为您的创意工作提供支持。从水印管理到截图，从文字识别到暗水印去除，一站式解决您的需求。")
+            self.tr("图像处理工具集，为您的创意工作提供支持。从水印管理到图像编辑，从文字识别到暗水印去除，一站式解决您的需求。")
         )
         self.subtitle.setObjectName("hero_subtitle")
         self.subtitle.setAlignment(Qt.AlignCenter)
