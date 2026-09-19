@@ -357,6 +357,15 @@ class StyleCard(QFrame):
     def get_name(self):
         return self.name
 
+    def set_interactive(self, interactive):
+        if not self._is_authorized:
+            return
+        self._is_interactive = bool(interactive)
+        if not self._is_interactive and self.is_selected:
+            self.set_selected(False)
+        else:
+            self._update_interactive_style()
+
     def set_selected(self, selected):
         if selected and not self._is_interactive:
             return

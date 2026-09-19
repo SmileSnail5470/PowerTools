@@ -153,7 +153,8 @@ class FeatureCard(QFrame):
             'watermark-remove': 'qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #4facfe, stop:1 #00f2fe)',
             'text-extract': 'qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #f093fb, stop:1 #f5576c)',
             'blind-watermark-remove': 'qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #a8edea, stop:1 #fed6e3)',
-            'image-edit': 'qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #43e97b, stop:1 #38f9d7)'
+            'image-edit': 'qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #43e97b, stop:1 #38f9d7)',
+            'image-restoration': 'qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #6366F1, stop:1 #A855F7)'
         }
         return gradients.get(card_type, gradients['watermark-add'])
     
@@ -326,7 +327,8 @@ class Home(QWidget):
             ("🧹", "水印移除", "智能识别并移除图片中的水印，还原图片原始状态。采用先进的AI算法，确保移除效果自然。", "AI驱动", "watermark-remove"),
             ("📝", "文字提取", "OCR智能识别图片中的文字，支持多语言高精度识别。先进的识别引擎，确保文字提取准确率。", "AI驱动", "text-extract"),
             ("🔍", "暗水印去除", "智能识别并去除图片中的隐藏盲水印，还原图片原始状态。采用先进的AI算法，确保去除效果自然。", "AI驱动", "blind-watermark-remove"),
-            ("📸", "图像编辑", "AI图像创作平台，支持文生图、图片编辑等多种能力。", "AI驱动", "image-edit")
+            ("📸", "图像编辑", "AI图像创作平台，支持文生图、图片编辑等多种能力。", "AI驱动", "image-edit"),
+            ("🩹", "图像修复", "多场景下图像修复，增强图像质量，采用先进AI算法，高质量恢复修复图像。", "AI驱动", "image-restoration")
         ]
 
         features_map = {
@@ -334,7 +336,8 @@ class Home(QWidget):
             'watermark-remove': ['AI智能识别技术', '保持图片质量', '支持多种水印类型', '一键批量处理'],
             'text-extract': ['多语言支持', '高精度识别', '可编辑和导出', '表格识别功能'],
             'blind-watermark-remove': ['AI智能技术', '保持图片质量', '支持批量处理', '多种模型可选'],
-            'image-edit': ['文生图', '图片编辑', '先进AI算法驱动', '高质量输出']
+            'image-edit': ['文生图', '图片编辑', '先进AI算法驱动', '高质量输出'],
+            'image-restoration': ['多场景图像修复', '支持批量处理', '保持图像质量', '先进AI算法驱动']
         }
         
         self.cards = []
@@ -352,11 +355,12 @@ class Home(QWidget):
     
     def handle_card_click(self, card_type):
         card_index = {
-            'watermark-add': 3,
-            'watermark-remove': 4,
-            'text-extract': 5,
-            'blind-watermark-remove': 6,
-            'image-edit': 7,
+            'watermark-add': 4,
+            'watermark-remove': 5,
+            'text-extract': 6,
+            'blind-watermark-remove': 7,
+            'image-edit': 8,
+            'image-restoration': 9,
         }
         index = card_index.get(card_type, 0)
         self.window().stackedWidget.setCurrentIndex(index)

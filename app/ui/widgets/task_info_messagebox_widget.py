@@ -348,6 +348,7 @@ class TaskInfoMessageBox(MessageBoxBase):
         if self.task_type == "image-restoration":
             value_map = {
                 "image_restoration": "智能修复",
+                "image_sr": "图像高清",
                 "restoration": "综合修复",
                 "dehaze": "去雾",
                 "derain": "去雨",

@@ -300,6 +300,7 @@ class ModelSelectCard(HeaderCardWidget):
                 card.set_selected(True)
                 self.model_name.emit(card.get_name())
                 return
+        self.model_name.emit("")
 
     def _on_task_finished_by_model(self, model_name):
         current_index = self.stacked_widget.currentIndex()

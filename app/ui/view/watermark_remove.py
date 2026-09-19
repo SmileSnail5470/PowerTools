@@ -446,6 +446,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
                 card.set_selected(True)
                 self.model_name.emit(card.get_name())
                 return
+        self.model_name.emit("")
 
     def update_default_models(self, file_path):
         if not file_path:

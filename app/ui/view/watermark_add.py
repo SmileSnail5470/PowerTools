@@ -339,6 +339,7 @@ class BlindWatermarkModelCard(HeaderCardWidget):
                 card_instance.set_selected(True)
                 self.blind_watermark_model_name.emit(model_name)
                 return
+        self.blind_watermark_model_name.emit("")
 
     def set_watermark_type(self, type_name: str):
         if type_name == "blind":

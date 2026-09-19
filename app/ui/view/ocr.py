@@ -136,6 +136,7 @@ class ModelStyleCard(HeaderCardWidget):
                 card.set_selected(True)
                 self.model_name.emit(card.get_name())
                 return
+        self.model_name.emit("")
 
 class SettingsCard(HeaderCardWidget):
     language_map = {

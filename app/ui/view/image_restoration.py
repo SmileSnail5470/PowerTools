@@ -36,10 +36,7 @@ from app.license.globals import feature_gate
 
 image_restoration_params = TaskParams()
 image_restoration_task_status_model = TaskStatusModel()
-# 当前批次已提交的任务 future，用于支持一次性取消
 image_restoration_active_futures = []
-
-# 任务类型：(key, 图标, 名称, 说明, 主题色)，后续新增算法只需追加配置
 IMAGE_TASK_TYPES = (
     ("restoration", "✨", "综合修复", "自动判断退化类型，整体重建画质", "#667eea"),
     ("dehaze", "🌫️", "去雾", "去除雾霾，恢复通透的对比度", "#38bdf8"),
@@ -58,10 +55,7 @@ TASK_TYPE_NAME_MAP = {key: name for key, _icon, name, _desc, _color in IMAGE_TAS
 
 
 class TaskTypeCardItem(QFrame):
-    """流式布局中的单个任务类型卡片"""
-
     clicked = Signal(str)
-
     NORMAL_STYLE = """
         TaskTypeCardItem {
             background-color: #ffffff;
@@ -85,16 +79,16 @@ class TaskTypeCardItem(QFrame):
         super().__init__(parent)
         self.key = key
         self.is_selected = False
-        self.setFixedSize(156, 60)
+        self.setFixedSize(105, 45)
         self.setCursor(Qt.PointingHandCursor)
         self.setToolTip(f"{name}：{description}")
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(8)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(6)
 
         icon_label = QLabel(icon, self)
-        icon_label.setFixedSize(26, 26)
+        icon_label.setFixedSize(20, 20)
         icon_label.setAlignment(Qt.AlignCenter)
         icon_label.setStyleSheet(f"""
             QLabel {{
@@ -110,16 +104,10 @@ class TaskTypeCardItem(QFrame):
         text_layout.setSpacing(0)
 
         title_label = QLabel(name, self)
-        setFont(title_label, 12, QFont.DemiBold)
+        setFont(title_label, 12)
         title_label.setStyleSheet("color: #1f2937; background: transparent;")
         text_layout.addWidget(title_label)
 
-        desc_label = QLabel(self)
-        setFont(desc_label, 9)
-        desc_label.setStyleSheet("color: #94a3b8; background: transparent;")
-        metrics = QFontMetrics(desc_label.font())
-        desc_label.setText(metrics.elidedText(description, Qt.ElideRight, 96))
-        text_layout.addWidget(desc_label)
         layout.addLayout(text_layout)
 
         self.setStyleSheet(self.NORMAL_STYLE)
@@ -137,8 +125,6 @@ class TaskTypeCardItem(QFrame):
 
 
 class TaskTypeCard(HeaderCardWidget):
-    """流式卡片形式的任务类型选择"""
-
     task_type = Signal(str)
 
     def __init__(self, parent=None):
@@ -152,7 +138,7 @@ class TaskTypeCard(HeaderCardWidget):
         self.viewLayout.setContentsMargins(10, 10, 10, 10)
         self.viewLayout.addLayout(main_layout)
 
-        flow_layout = FlowLayout(needAni=False)
+        flow_layout = FlowLayout(needAni=True)
         flow_layout.setContentsMargins(0, 0, 0, 0)
         flow_layout.setHorizontalSpacing(8)
         flow_layout.setVerticalSpacing(8)
@@ -175,8 +161,6 @@ class TaskTypeCard(HeaderCardWidget):
 
 
 class ModelSelectCard(HeaderCardWidget):
-    """修复模型：分图片模型与视频模型，视频模型暂未接入"""
-
     model_name = Signal(str)
 
     def __init__(self, parent=None):
@@ -246,15 +230,19 @@ class ModelSelectCard(HeaderCardWidget):
         image_layout.setContentsMargins(0, 6, 0, 6)
         image_layout.setSpacing(0)
 
-        restoration_card = StyleCard(
-            "#f093fb", self.tr("智能修复"), self.tr("统一的图像修复模型，覆盖多种退化场景，速度较慢")
-        )
+        restoration_card = StyleCard("#f093fb", self.tr("智能修复"), self.tr("统一的图像修复模型，覆盖多种退化场景，速度较慢"))
         restoration_card.set_name("image_restoration")
         image_layout.addWidget(restoration_card)
         image_layout.addWidget(CardSeparator(self))
+
+        super_resolution_card = StyleCard("#84fab0", self.tr("图像高清"), self.tr("提高图像分辨率，增强图像清晰度和细节，速度较慢"))
+        super_resolution_card.set_name("image_sr")
+        image_layout.addWidget(super_resolution_card)
+        image_layout.addWidget(CardSeparator(self))
+
         image_layout.addStretch()
         self.stacked_widget.addWidget(image_container)
-        self.image_cards: list[StyleCard] = [restoration_card]
+        self.image_cards: list[StyleCard] = [restoration_card, super_resolution_card]
 
         # 视频模型（占位，待算法接入）
         video_container = QWidget(self)
@@ -277,10 +265,30 @@ class ModelSelectCard(HeaderCardWidget):
         self.tab_video.toggled.connect(lambda checked: self._on_tab_changed(1, checked))
 
         bind_widget_to_param(self, "model_name", image_restoration_params, "model_name", transform=None)
+        self._update_card_interactive()
         self.select_first_interactive()
-        global_event_bus.License_update.connect(self.select_first_interactive)
+        global_event_bus.License_update.connect(lambda: (self._update_card_interactive(), self.select_first_interactive()))
         global_event_bus.imageRestoration_TaskFinishedByModel.connect(self._on_task_finished_by_model)
         main_layout.addStretch()
+
+        image_restoration_params.param_changed.connect(self._on_param_changed)
+
+    def _update_card_interactive(self):
+        if "task_type" not in image_restoration_params.to_dict():
+            return
+        is_super_resolution_task = True if image_restoration_params.to_dict()["task_type"] == "super_resolution" else False
+        for card in self.all_cards:
+            card.set_selected(False)
+            if card.get_name() == "image_sr":
+                card.set_interactive(is_super_resolution_task is True)
+            else:
+                card.set_interactive(is_super_resolution_task is False)
+        
+    def _on_param_changed(self, key, value):
+        if key != "task_type":
+            return
+        self._update_card_interactive()
+        self.select_first_interactive()
 
     @property
     def cards(self) -> list:
@@ -311,6 +319,7 @@ class ModelSelectCard(HeaderCardWidget):
                 card.set_selected(True)
                 self.model_name.emit(card.get_name())
                 return
+        self.model_name.emit("")
 
     def _on_task_finished_by_model(self, model_name):
         for card in self.all_cards:
@@ -381,8 +390,8 @@ class SettingsCard(HeaderCardWidget):
         self.viewLayout.addLayout(main_layout)
 
         self.upscale_combox = ComboBox()
-        setFont(self.upscale_combox, 12)
-        self.upscale_combox.addItems(["2x", "3x", "4x"])
+        setFont(self.upscale_combox, 14)
+        self.upscale_combox.addItems(["4x", "3x", "2x"])
         self.upscale_card = CustomCardGroupWidget(
             title=self.tr("放大倍数"),
             content=self.tr("仅超分放大任务生效"),
@@ -396,61 +405,9 @@ class SettingsCard(HeaderCardWidget):
             self.upscale_combox, "currentTextChanged", image_restoration_params, "upscale",
             transform=lambda text: int(str(text).rstrip("xX") or 1)
         )
-        self.upscale_combox.currentTextChanged.emit("2x")
+        self.upscale_combox.currentTextChanged.emit("4x")
         self.upscale_card.hide()
         main_layout.addWidget(self.upscale_card)
-
-        steps_spin_box = SpinBox()
-        steps_spin_box.setRange(1, 30)
-        steps_spin_box.setValue(5)
-        steps_spin_box.setFixedWidth(120)
-        steps_card = CustomCardGroupWidget(
-            title=self.tr("推理步数"),
-            content=self.tr("步数越大细节越稳定，耗时也越长"),
-            parent=self,
-            text_layout_contents_margins=(12, 0, 0, 0),
-            label_v_space=2
-        )
-        steps_card.addWidget(steps_spin_box, stretch=0)
-        steps_card.setSeparatorVisible(True)
-        bind_widget_to_param(steps_spin_box, "valueChanged", image_restoration_params, "num_inference_steps", transform=int)
-        steps_spin_box.valueChanged.emit(5)
-        main_layout.addWidget(steps_card)
-
-        guidance_spin_box = DoubleSpinBox()
-        guidance_spin_box.setRange(1.0, 8.0)
-        guidance_spin_box.setSingleStep(0.5)
-        guidance_spin_box.setValue(4.0)
-        guidance_spin_box.setFixedWidth(120)
-        guidance_card = CustomCardGroupWidget(
-            title=self.tr("修复强度"),
-            content=self.tr("数值越大越贴合任务描述，过大可能失真"),
-            parent=self,
-            text_layout_contents_margins=(12, 0, 0, 0),
-            label_v_space=2
-        )
-        guidance_card.addWidget(guidance_spin_box, stretch=0)
-        guidance_card.setSeparatorVisible(True)
-        bind_widget_to_param(guidance_spin_box, "valueChanged", image_restoration_params, "guidance", transform=float)
-        guidance_spin_box.valueChanged.emit(4.0)
-        main_layout.addWidget(guidance_card)
-
-        seed_spin_box = SpinBox()
-        seed_spin_box.setRange(0, 999999)
-        seed_spin_box.setValue(42)
-        seed_spin_box.setFixedWidth(120)
-        seed_card = CustomCardGroupWidget(
-            title=self.tr("随机种子"),
-            content=self.tr("固定种子可复现同一修复结果"),
-            parent=self,
-            text_layout_contents_margins=(12, 0, 0, 0),
-            label_v_space=2
-        )
-        seed_card.addWidget(seed_spin_box, stretch=0)
-        seed_card.setSeparatorVisible(True)
-        bind_widget_to_param(seed_spin_box, "valueChanged", image_restoration_params, "seed", transform=int)
-        seed_spin_box.valueChanged.emit(42)
-        main_layout.addWidget(seed_card)
 
         low_memory_btn = ToggleSwitch(on_color="#667eea")
         low_memory_btn.setActive(True)
@@ -493,9 +450,7 @@ class SettingsCard(HeaderCardWidget):
             }
         """)
         setFont(self.prompt_edit, fontSize=13)
-        self.prompt_edit.textChanged.connect(
-            lambda: image_restoration_params.set_param("prompt", self.prompt_edit.toPlainText())
-        )
+        self.prompt_edit.textChanged.connect(lambda: image_restoration_params.set_param("prompt", self.prompt_edit.toPlainText()))
         prompt_layout.addWidget(self.prompt_edit)
         main_layout.addLayout(prompt_layout)
 
@@ -527,9 +482,7 @@ class OutputSettingsCard(HeaderCardWidget):
         self.save_location_line_edit.setPlaceholderText(self.tr("选择保存位置"))
         save_location_action = QAction(FluentIcon.FOLDER_ADD.qicon(), "", triggered=self.save_location_browse)
         self.save_location_line_edit.addAction(save_location_action, QLineEdit.TrailingPosition)
-        bind_widget_to_param(
-            self.save_location_line_edit, "textChanged", image_restoration_params, "output_path", transform=None
-        )
+        bind_widget_to_param(self.save_location_line_edit, "textChanged", image_restoration_params, "output_path", transform=None)
         output_settings_layout.addWidget(self.save_location_line_edit)
 
         self.viewLayout.addLayout(output_settings_layout)
@@ -801,7 +754,6 @@ class HeaderWidget(QWidget):
         )
 
     def _license_check(self, model_name):
-        """返回 (是否允许, 错误信息, 特性名)，许可异常时一律拒绝"""
         try:
             if feature_gate.is_pro:
                 return True, "", ""
@@ -859,9 +811,6 @@ class HeaderWidget(QWidget):
             error_msg = self.tr("请选择修复模型")
             return error_msg, task_params
         task_params["model_name"] = params["model_name"]
-        task_params["num_inference_steps"] = int(params.get("num_inference_steps", 5))
-        task_params["guidance"] = float(params.get("guidance", 4.0))
-        task_params["seed"] = int(params.get("seed", 42))
         task_params["low_memory"] = bool(params.get("low_memory", True))
         if params["task_type"] == "super_resolution":
             task_params["upscale"] = int(params.get("upscale", 2))
