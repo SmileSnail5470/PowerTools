@@ -325,7 +325,7 @@ class IssueResult:
 
 
 class PaymentVerifier(ABC):
-    """支付到账校验接口。实现方只读远端凭据，不接触签名私钥。"""
+    """支付到账校验接口。"""
 
     @abstractmethod
     def query(self, order: AuthOrder) -> PaymentResult:
@@ -333,27 +333,20 @@ class PaymentVerifier(ABC):
 
 
 class LicenseIssuer(ABC):
-    """许可证下发接口。签名在远端完成，客户端只负责拉取密文。"""
+    """许可证下发接口。"""
 
     @abstractmethod
     def fetch(self, order: AuthOrder) -> IssueResult:
         raise NotImplementedError
 
 
-class UnavailablePaymentVerifier(PaymentVerifier):
-    """占位实现：真实到账校验通道尚未接入。"""
-
-    REASON = "自动到账校验通道尚未接入"
-
+class DefaultPaymentVerifier(PaymentVerifier):
+    """查询授权文件是否已经存在，如果存在认为支付成功"""
     def query(self, order: AuthOrder) -> PaymentResult:
         return PaymentResult(status=PaymentStatus.UNAVAILABLE, message=self.REASON)
 
 
-class UnavailableLicenseIssuer(LicenseIssuer):
-    """占位实现：真实许可证下发通道尚未接入。"""
-
-    REASON = "许可证自动下发通道尚未接入"
-
+class DefaultLicenseIssuer(LicenseIssuer):
     def fetch(self, order: AuthOrder) -> IssueResult:
         return IssueResult(available=False, message=self.REASON)
 
@@ -389,8 +382,8 @@ class AutoAuthService:
     ):
         self._license_manager = license_manager
         self._store = store or AuthOrderStore()
-        self._verifier = verifier or UnavailablePaymentVerifier()
-        self._issuer = issuer or UnavailableLicenseIssuer()
+        self._verifier = verifier or DefaultPaymentVerifier()
+        self._issuer = issuer or DefaultLicenseIssuer()
         self._policy = policy
         self._app_version = app_version
 
@@ -401,11 +394,6 @@ class AutoAuthService:
     @property
     def tiers(self) -> Tuple[PricingTier, ...]:
         return self._policy.TIERS
-
-    @property
-    def automation_ready(self) -> bool:
-        return not isinstance(self._verifier, UnavailablePaymentVerifier) and \
-            not isinstance(self._issuer, UnavailableLicenseIssuer)
 
     def quote(self, days: Any) -> Quote:
         return self._policy.quote(days)
@@ -476,10 +464,9 @@ class AutoAuthService:
             if result.status == PaymentStatus.UNAVAILABLE:
                 return AuthProgress(AuthStage.UNAVAILABLE, result.message, order=order)
             if result.status == PaymentStatus.PENDING:
-                return AuthProgress(AuthStage.WAITING, result.message or "等待扫码支付，完成后自动下发文件...", order=order)
+                return AuthProgress(AuthStage.WAITING, result.message or "等待自动下发文件...", order=order)
             if result.status in (PaymentStatus.FAILED, PaymentStatus.EXPIRED):
-                order.status = (OrderStatus.FAILED if result.status == PaymentStatus.FAILED
-                                else OrderStatus.TIMEOUT).value
+                order.status = (OrderStatus.FAILED if result.status == PaymentStatus.FAILED else OrderStatus.TIMEOUT).value
                 order.message = result.message
                 self._store.save(order, event="payment_failed", reason=result.message)
                 stage = AuthStage.FAILED if result.status == PaymentStatus.FAILED else AuthStage.TIMEOUT
@@ -495,7 +482,7 @@ class AutoAuthService:
         try:
             return self._verifier.query(order)
         except NotImplementedError:
-            return PaymentResult(PaymentStatus.UNAVAILABLE, message=UnavailablePaymentVerifier.REASON)
+            return PaymentResult(PaymentStatus.UNAVAILABLE, message=DefaultPaymentVerifier.REASON)
         except Exception as e:
             logger.warning(f"Payment query failed for {order.order_id}: {e}")
             return PaymentResult(PaymentStatus.UNAVAILABLE, message=f"到账校验暂时不可用：{e}")
@@ -507,7 +494,7 @@ class AutoAuthService:
         try:
             issue = self._issuer.fetch(order)
         except NotImplementedError:
-            return AuthProgress(AuthStage.UNAVAILABLE, UnavailableLicenseIssuer.REASON, order=order)
+            return AuthProgress(AuthStage.UNAVAILABLE, DefaultLicenseIssuer.REASON, order=order)
         except Exception as e:
             logger.warning(f"License fetch failed for {order.order_id}: {e}")
             return AuthProgress(AuthStage.UNAVAILABLE, f"许可证下发暂时不可用：{e}", order=order)

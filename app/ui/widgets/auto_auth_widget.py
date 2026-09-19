@@ -113,7 +113,7 @@ class PaymentDialog(MessageBoxBase):
         self._timer.setInterval(self.POLL_INTERVAL_MS)
         self._timer.timeout.connect(self._poll)
         self._timer.start()
-        QTimer.singleShot(0, self._poll)
+        QTimer.singleShot(100, self._poll)
 
     def _setup_ui(self):
         self.widget.setMinimumWidth(512)
@@ -173,9 +173,7 @@ class PaymentDialog(MessageBoxBase):
     def _create_qr_card(self, name: str, resource_path: str) -> QWidget:
         card = QFrame(self)
         card.setObjectName("qrCard")
-        card.setStyleSheet(
-            f"QFrame#qrCard {{ background: white; border: 1px solid {BORDER}; border-radius: 12px; }}"
-        )
+        card.setStyleSheet(f"QFrame#qrCard {{ background: white; border: 1px solid {BORDER}; border-radius: 12px; }}")
         layout = QVBoxLayout(card)
         layout.setContentsMargins(12, 12, 12, 10)
         layout.setSpacing(6)

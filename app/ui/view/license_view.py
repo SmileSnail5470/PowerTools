@@ -283,7 +283,7 @@ class LicenseView(QWidget):
         drop_zone = ReferenceDropZone.promote(self.license_widget.drop_zone)
 
         zone_layout = drop_zone.layout()
-        zone_layout.setContentsMargins(SPACING_MD, SPACING_LG, SPACING_MD, SPACING_LG)
+        # zone_layout.setContentsMargins(SPACING_MD, SPACING_LG, SPACING_MD, SPACING_LG)
         zone_layout.setSpacing(SPACING_SM)
 
         btn_row = QHBoxLayout()

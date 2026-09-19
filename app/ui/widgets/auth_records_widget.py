@@ -188,7 +188,6 @@ class AuthRecordsWidget(QWidget):
         header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
         return self.table
 
-    # ------------------------------------------------------------------ 数据
     def showEvent(self, event):
         super().showEvent(event)
         self.refresh()
@@ -252,14 +251,13 @@ class AuthRecordsWidget(QWidget):
                 column = offset + 1
                 item = QTableWidgetItem(str(value))
                 item.setToolTip(str(value))
-                if column in (4, 6):
+                if column in (2, 3, 5, 4, 6):
                     item.setTextAlignment(Qt.AlignCenter)
                 if column == 5:
                     item.setForeground(QColor(STATUS_COLORS.get(order.status, TEXT_MAIN)))
                 self.table.setItem(row, column, item)
         self._filling = False
 
-    # ------------------------------------------------------------------ 交互
     def _checked_rows(self) -> List[int]:
         rows = []
         for row in range(self.table.rowCount()):
