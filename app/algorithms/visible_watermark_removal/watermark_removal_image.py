@@ -1,4 +1,3 @@
-import tempfile
 import os
 import cv2
 import numpy as np
@@ -191,13 +190,9 @@ class WatermarkInpaint():
         return result
 
     def _process_image_with_image_restoration(self, image_path):
-        image_restoration_inpaint = ImageRestorationInference(
-            model_dir=self.image_restoration_onnx_dir,
-            dilate_num=self.dilate_num
-        )
+        image_restoration_inpaint = ImageRestorationInference(model_dir=self.image_restoration_onnx_dir)
         result = image_restoration_inpaint.infer(
             input_path=image_path,
-            mask=self.mask,
             task_type="watermark_remove"
         )
         return result  # [H, W, 3] 0~255 uint8 RGB
