@@ -334,7 +334,7 @@ class Tutorial(QWidget):
                 FIF.ERASE_TOOL,
                 self.tr("水印移除"),
                 self.tr("自动检测或手动选区，选择模型后完成修复。"),
-                tags=(self.tr("水印去除"), self.tr("物体分割"), self.tr("图像编辑"), self.tr("视频修复"), self.tr("对象跟踪(视频)")),
+                tags=(self.tr("水印去除"), self.tr("物体分割"), self.tr("图像编辑"), self.tr("视频修复"), self.tr("对象跟踪(视频)"), self.tr("图像修复")),
                 parent=self,
             ),
             GuideCard(

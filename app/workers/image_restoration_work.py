@@ -72,7 +72,7 @@ class ImageRestorationWork(BaseWorker):
         if "_feature_name_" in kwargs:
             os.environ["_feature_name_"] = kwargs["_feature_name_"]
 
-        model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "image_restoration")
+        model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_restoration", "general_restoration")
         output_dir = output_path
         os.makedirs(output_dir, exist_ok=True)
         output_file = self._output_file(input_path, output_dir)

@@ -755,3 +755,67 @@ class VideoWatermarkRemover:
                 input_video_path=input_video_path,
                 output_video_path=output_video_path
             )
+
+    def process_video_without_mask(
+            self, 
+            input_video_path, 
+            output_video_path,
+            image_restoration_onnx_dir,
+            refine_type: str = "image_restoration",
+            ffmpeg_path: str = "",
+            callback_func = None,
+            **kwargs
+        ):
+        progress_cb = kwargs.pop("progress_cb", None)
+        if ffmpeg_path and os.path.isfile(ffmpeg_path):
+            ffmpeg_path = os.path.dirname(ffmpeg_path)
+        os.environ['PATH'] = ffmpeg_path + os.pathsep + os.environ['PATH']
+
+        probe = ffmpeg.probe(input_video_path)
+        video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
+        
+        if not video_stream:
+            raise ValueError(f"Can not get {input_video_path} stream information.")
+        
+        fps = float(video_stream["avg_frame_rate"].split("/")[0]) / float(video_stream["avg_frame_rate"].split("/")[1])
+        
+        has_audio = any(stream['codec_type'] == 'audio' for stream in probe['streams'])
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            frames_dir = temp_path / 'frames'
+            frames_dir.mkdir()
+            (
+                ffmpeg
+                .input(input_video_path)
+                .output(str(frames_dir / '%06d.png'), start_number=0, fps_mode="passthrough")
+                .overwrite_output()
+                .global_args("-hide_banner", "-loglevel", "error")
+                .run(capture_stdout=True, capture_stderr=True)
+            )
+            frame_files = sorted([f for f in frames_dir.iterdir() if f.suffix == '.png'])
+            processed_frames_dir = temp_path / 'processed_frames'
+            processed_frames_dir.mkdir()
+            if progress_cb is not None:
+                progress_cb("WaterRemoveStart", "")
+            for frame_file in frame_files:
+                output_frame_path = os.path.join(str(processed_frames_dir), os.path.basename(str(frame_file)))
+                ImageWatermarkRemove().run_without_mask(
+                    frame_file,
+                    output_frame_path,
+                    image_restoration_onnx_dir=image_restoration_onnx_dir,
+                    refine_type=refine_type,
+                    **kwargs
+                )
+                if callback_func:
+                    callback_func(len(os.listdir(str(processed_frames_dir))), len(frame_files))
+            if progress_cb is not None:
+                progress_cb("WaterRemoved", "")
+            self._merge_video_prepare(frame_files, processed_frames_dir)
+            self._merge_processed_frames(
+                processed_frames_dir=processed_frames_dir,
+                has_audio=has_audio, 
+                fps=fps,
+                input_video_path=input_video_path,
+                output_video_path=output_video_path
+            )

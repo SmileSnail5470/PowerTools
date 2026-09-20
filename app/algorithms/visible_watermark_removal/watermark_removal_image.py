@@ -151,13 +151,13 @@ class WatermarkSegment():
 class WatermarkInpaint():
     def __init__(
             self, 
-            mask,  
-            pt_inpaint_onnx_path, 
-            cf_onnx_path, 
-            lama_onnx_path,
-            emdf_onnx_path,
-            grig_onnx_path,
-            general_edit_onnx_dir,
+            mask=None,  
+            pt_inpaint_onnx_path="", 
+            cf_onnx_path="", 
+            lama_onnx_path="",
+            emdf_onnx_path="",
+            grig_onnx_path="",
+            general_edit_onnx_dir="",
             image_restoration_onnx_dir="",
             model_type="lama",
             dilate_num=2,
@@ -342,7 +342,6 @@ class ImageWatermarkRemove():
             yolo_detection_onnx_path,
             segment_onnx_dir,
             general_edit_onnx_dir,
-            image_restoration_onnx_dir: str = "",
             mask_path: str = "",
             refine_type: str = "patchwiper",                    # patchwiper/lama/transparent/cv2/coordfill/grig/emdf/general_edit/image_restoration
             watermark_type: str = "all",                        # text / all
@@ -401,9 +400,27 @@ class ImageWatermarkRemove():
             emdf_onnx_path=emdf_onnx_path,
             grig_onnx_path=grig_onnx_path,
             general_edit_onnx_dir=general_edit_onnx_dir,
-            image_restoration_onnx_dir=image_restoration_onnx_dir,
             model_type=refine_type,
             dilate_num=dilate_num,
+        )
+        image_inpainting.inpaint(image_path=image_path, output_path=output_path)
+        if progress_cb is not None:
+            progress_cb("WaterRemoved", "")
+
+    def run_without_mask(
+            self, 
+            image_path, 
+            output_path,
+            image_restoration_onnx_dir,
+            refine_type: str = "image_restoration",
+            **kwargs
+        ):
+        progress_cb = kwargs.pop("progress_cb", None)
+        if progress_cb is not None:
+            progress_cb("WaterRemoveStart", "")
+        image_inpainting = WatermarkInpaint(
+            image_restoration_onnx_dir=image_restoration_onnx_dir,
+            model_type=refine_type,
         )
         image_inpainting.inpaint(image_path=image_path, output_path=output_path)
         if progress_cb is not None:

@@ -467,7 +467,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
             self.on_tab_changed(index=0, checked=True)
         elif file_type == "video":
             self.tab_image.setEnabled(True)
-            self.tab_document.setEnabled(False)
+            self.tab_document.setEnabled(True)
             self.tab_video.setEnabled(True)
             self.tab_video.setChecked(True)
             self.on_tab_changed(index=2, checked=True)
@@ -564,17 +564,21 @@ class ControlPanelWidget(ScrollArea):
         main_layout.setSpacing(10)
         main_layout.setAlignment(Qt.AlignTop)
 
+        self.output_mask_cards: list[HeaderCardWidget] = []
+
         fileSelectorCard = FileSelectorCard(self)
         main_layout.addWidget(fileSelectorCard)
 
+        watermarkRemoveStyleCard = WatermarkRemoveStyleCard(self)
+        main_layout.addWidget(watermarkRemoveStyleCard)
+
         watermarkDetectionTypeCard = WatermarkDetectionTypeCard(self)
         main_layout.addWidget(watermarkDetectionTypeCard)
+        self.output_mask_cards.append(watermarkDetectionTypeCard)
 
         watermarkMaskDilate = WatermarkMaskDilate(self)
         main_layout.addWidget(watermarkMaskDilate)
-
-        watermarkRemoveStyleCard = WatermarkRemoveStyleCard(self)
-        main_layout.addWidget(watermarkRemoveStyleCard)
+        self.output_mask_cards.append(watermarkMaskDilate)
 
         outputSettingsCard = OutputSettingsCard(self)
         main_layout.addWidget(outputSettingsCard)
@@ -586,6 +590,19 @@ class ControlPanelWidget(ScrollArea):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         main_layout.addStretch(1)
+
+        watermark_remove_params.param_changed.connect(self._on_param_changed)
+        
+    def _on_param_changed(self, key, value):
+        if key != "model_name":
+            return
+        if value == "image_restoration":
+            for card in self.output_mask_cards:
+                card.hide()
+        else:
+            for card in self.output_mask_cards:
+                card.setVisible(True)
+
 
 
 class PreviewWidget(QWidget):
@@ -647,6 +664,18 @@ class PreviewWidget(QWidget):
         global_event_bus.watermarkRemove_PreviewFile.connect(self._on_preview_file)
         global_event_bus.watermarkRemove_ImageNavigationInit.connect(lambda: self.image_navigation_widget.clear_images())
 
+        watermark_remove_params.param_changed.connect(self._on_param_changed)
+                
+    def _on_param_changed(self, key, value):
+        if key != "model_name":
+            return
+        if value in ["image_restoration", "video_engine"]:
+            self.status_info_widget.model.set_pipeline_steps(names=[self.tr('准备任务'), self.tr('去除水印'), self.tr('导出文件')])
+            self.navigation.set_item_visible(index=1, visible=False)
+        else:
+            self.status_info_widget.model.set_pipeline_steps(names=[self.tr('准备任务'), self.tr('检测水印'), self.tr('去除水印'), self.tr('导出文件')])
+            self.navigation.set_item_visible(index=1, visible=True)
+
     def update_init_preview(self, file_path):
         self.image_navigation_widget.clear_images()
         self.image_viewer.init_scene()
@@ -687,6 +716,8 @@ class PreviewWidget(QWidget):
         current_file_path = self.image_navigation_widget.get_current_image()
         if current_file_path:
             self._on_preview_file(current_file_path)
+        else:
+            self.image_navigation_widget.load_images([input_path], self.media_type)
 
     def update_process(self, input_path, value, mask_path):
         if value not in self.files_preview_info:
@@ -860,6 +891,10 @@ class HeaderWidget(QWidget):
             if not self.is_batch_task:
                 watermark_remove_task_status_model.finish_step(self.tr("准备任务"))
                 watermark_remove_task_status_model.start_step(self.tr('检测水印'))
+        elif value == "WaterRemoveStart":
+            if not self.is_batch_task:
+                watermark_remove_task_status_model.finish_step(self.tr("准备任务"))
+                watermark_remove_task_status_model.start_step(self.tr('去除水印'))
         elif value == "WaterRemoved":
             if not self.is_batch_task:
                 watermark_remove_task_status_model.finish_step(self.tr("去除水印"))
@@ -897,36 +932,6 @@ class HeaderWidget(QWidget):
             error_msg = self.tr("请在设置页面配置软件 FFmpeg 的正确路径并通过验证")
             return error_msg, task_params
 
-        if "watermark_detect_type" not in params:
-            error_msg = self.tr("请选择水印检测方式")
-            return error_msg, task_params
-        else:
-            task_params["watermark_detect_type"] = params["watermark_detect_type"]
-
-        if params["watermark_detect_type"] == "ai_interactive_detect" and not cfg.get(cfg.localObjectSegmentationEnabled):
-            error_msg = self.tr("请在设置页面打开 '物体分割AI能力' 开关")
-            return error_msg, task_params
-        
-        if "mask_dilate" not in params:
-            error_msg = self.tr("请设置水印 Mask 扩张系数")
-            return error_msg, task_params
-        else:
-            task_params["mask_dilate"] = params["mask_dilate"]
-
-        if "model_name" not in params or not params["model_name"]:
-            error_msg = self.tr("请选择水印移除算法")
-            return error_msg, task_params
-        else:
-            task_params["model_name"] = params["model_name"]
-
-        if task_params["model_name"] in ["ppt"] and not cfg.get(cfg.localVideoInpaintingEnabled):
-            error_msg = self.tr("请在设置页面打开 '视频修复AI能力' 开关")
-            return error_msg, task_params
-
-        if task_params["model_name"] in ["image_restoration"] and not cfg.get(cfg.localImageEditEnabled):
-            error_msg = self.tr("请在设置页面打开 '图像编辑AI能力' 开关")
-            return error_msg, task_params
-
         if "output_path" not in params or not params["output_path"]:
             error_msg = self.tr("请设置文件保存位置")
             return error_msg, task_params
@@ -934,30 +939,65 @@ class HeaderWidget(QWidget):
             task_params["output_path"] = params["output_path"]
             task_params["output_format"] = params["output_format"]
 
-        if "image_boxes" in params and params["image_boxes"]:
-            task_params["image_boxes"] = params["image_boxes"]
-        if "watermark_tracking_data" in params and params["watermark_tracking_data"]:
-            task_params["watermark_tracking_data"] = params["watermark_tracking_data"]
+        if "model_name" not in params or not params["model_name"]:
+            error_msg = self.tr("请选择水印移除算法")
+            return error_msg, task_params
+        else:
+            task_params["model_name"] = params["model_name"]
 
-        if params["watermark_detect_type"] == "ai_auto_detect":
-            task_params["watermark_content"] = params["watermark_content"]
-            task_params["watermark_format"] = params["watermark_format"]
-        if params["watermark_detect_type"] == "ai_interactive_detect":
-            task_params["watermark_ai_interactive_type"] = params["watermark_ai_interactive_type"]
-            task_params["watermark_format"] = params["watermark_format"]
-            task_params["watermark_confidence"] = params["watermark_confidence"]
-            if task_params["watermark_ai_interactive_type"] == "semantic_detect":
-                if not params["watermark_detect_prompt"]:
-                    error_msg = self.tr("请框输入水印语义检测提示词")
-                    return error_msg, task_params
-                task_params["watermark_detect_prompt"] = params["watermark_detect_prompt"]
-            if task_params["watermark_ai_interactive_type"] == "space_detect":
-                if not params["watermark_boxes"]:
-                    error_msg = self.tr("请框选水印位置")
-                    return error_msg, task_params
-                task_params["watermark_boxes"] = params["watermark_boxes"]
-        if params["watermark_detect_type"] == "manual_detect":
-            task_params["manual_watermark_mask_path"] = params["manual_watermark_mask_path"]
+        if task_params["model_name"] in ["image_restoration"]:
+            # 不需要水印检测
+            pass
+        else:
+            # 水印检测
+            if "watermark_detect_type" not in params:
+                error_msg = self.tr("请选择水印检测方式")
+                return error_msg, task_params
+            else:
+                task_params["watermark_detect_type"] = params["watermark_detect_type"]
+
+            if params["watermark_detect_type"] == "ai_interactive_detect" and not cfg.get(cfg.localObjectSegmentationEnabled):
+                error_msg = self.tr("请在设置页面打开 '物体分割AI能力' 开关")
+                return error_msg, task_params
+            
+            if "mask_dilate" not in params:
+                error_msg = self.tr("请设置水印 Mask 扩张系数")
+                return error_msg, task_params
+            else:
+                task_params["mask_dilate"] = params["mask_dilate"]
+
+            if task_params["model_name"] in ["ppt"] and not cfg.get(cfg.localVideoInpaintingEnabled):
+                error_msg = self.tr("请在设置页面打开 '视频修复AI能力' 开关")
+                return error_msg, task_params
+
+            if task_params["model_name"] in ["general_edit"] and not cfg.get(cfg.localImageEditEnabled):
+                error_msg = self.tr("请在设置页面打开 '图像编辑AI能力' 开关")
+                return error_msg, task_params
+
+            if "image_boxes" in params and params["image_boxes"]:
+                task_params["image_boxes"] = params["image_boxes"]
+            if "watermark_tracking_data" in params and params["watermark_tracking_data"]:
+                task_params["watermark_tracking_data"] = params["watermark_tracking_data"]
+
+            if params["watermark_detect_type"] == "ai_auto_detect":
+                task_params["watermark_content"] = params["watermark_content"]
+                task_params["watermark_format"] = params["watermark_format"]
+            if params["watermark_detect_type"] == "ai_interactive_detect":
+                task_params["watermark_ai_interactive_type"] = params["watermark_ai_interactive_type"]
+                task_params["watermark_format"] = params["watermark_format"]
+                task_params["watermark_confidence"] = params["watermark_confidence"]
+                if task_params["watermark_ai_interactive_type"] == "semantic_detect":
+                    if not params["watermark_detect_prompt"]:
+                        error_msg = self.tr("请框输入水印语义检测提示词")
+                        return error_msg, task_params
+                    task_params["watermark_detect_prompt"] = params["watermark_detect_prompt"]
+                if task_params["watermark_ai_interactive_type"] == "space_detect":
+                    if not params["watermark_boxes"]:
+                        error_msg = self.tr("请框选水印位置")
+                        return error_msg, task_params
+                    task_params["watermark_boxes"] = params["watermark_boxes"]
+            if params["watermark_detect_type"] == "manual_detect":
+                task_params["manual_watermark_mask_path"] = params["manual_watermark_mask_path"]
         return error_msg, task_params
 
 
