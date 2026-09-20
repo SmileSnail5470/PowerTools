@@ -9,7 +9,7 @@ from PySide6.QtGui import QFont, QColor, QAction, QFontMetrics
 
 from app.ui.library.qfluentwidgets import (
     setFont, HeaderCardWidget, ScrollArea, PushButton, CaptionLabel, LineEdit, ComboBox,
-    SpinBox, DoubleSpinBox, SegmentedWidget, FlowLayout, FluentIcon, TeachingTip, InfoBarIcon,
+    SegmentedWidget, FlowLayout, FluentIcon, TeachingTip, InfoBarIcon,
     TeachingTipTailPosition, MessageBox
 )
 
@@ -41,14 +41,14 @@ IMAGE_TASK_TYPES = (
     ("restoration", "✨", "综合修复", "自动判断退化类型，整体重建画质", "#667eea"),
     ("dehaze", "🌫️", "去雾", "去除雾霾，恢复通透的对比度", "#38bdf8"),
     ("derain", "🌧️", "去雨", "去除雨丝、雨点，还原背景细节", "#0ea5e9"),
+    ("snow", "❄️", "去雪", "去除雪花，还原背景细节", "#c082a2"),
     ("denoise", "🧹", "去噪", "抑制噪点与颗粒，保持纹理自然", "#22c55e"),
     ("deblur", "🔎", "去模糊", "修正抖动与失焦，锐化边缘", "#f59e0b"),
+    ("shadow", "🌑", "去阴影", "去除阴影、增强对比度", "#f472b6"),
     ("super_resolution", "🔬", "超分放大", "放大分辨率并补充细节", "#a855f7"),
     ("lowlight", "💡", "低光增强", "提亮欠曝画面，恢复暗部细节", "#fbbf24"),
     ("compression", "🧩", "去压缩伪影", "消除块状噪声与振铃", "#14b8a6"),
-    ("old_photo", "🖼️", "老照片修复", "修补划痕、褪色与污损", "#f472b6"),
     ("watermark_remove", "💧", "去水印", "去除 Logo、文字水印并补全背景", "#6366f1"),
-    ("subtitle_remove", "🅰️", "去字幕", "擦除硬字幕并还原被覆盖内容", "#fb7185"),
 )
 
 TASK_TYPE_NAME_MAP = {key: name for key, _icon, name, _desc, _color in IMAGE_TASK_TYPES}

@@ -10,21 +10,6 @@ from app.algorithms.private.image_restoration.inference import ImageRestorationI
 
 
 restoration_logger = logging.getLogger('ImageRestoration')
-
-# 算法内部已内置的任务提示词：restoration / watermark_remove / subtitle_remove
-# 其余任务类型由此处提供提示词，随算法迭代可继续扩展
-TASK_TYPE_PROMPTS = {
-    "dehaze": "Remove the haze and fog, restore clear details, natural colors and contrast of the whole image.",
-    "derain": "Remove the rain streaks and raindrops, restore the clean and sharp background content.",
-    "denoise": "Remove the noise and grain, keep the textures clean, sharp and natural.",
-    "deblur": "Remove the blur and camera shake, restore sharp edges and fine details.",
-    "super_resolution": "Restore fine details and sharp textures, enhance the clarity of the whole image.",
-    "lowlight": "Brighten the underexposed image, restore natural colors and the details in dark regions.",
-    "old_photo": "Repair the old photo, remove scratches, stains and fading, restore natural colors and details.",
-    "compression": "Remove the compression artifacts and blocking, restore smooth edges and clean textures.",
-}
-
-# 可安全写出的图片后缀，其他格式统一转存为 png
 SAVE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tif", ".tiff"}
 
 
@@ -44,12 +29,6 @@ class ImageRestorationWork(BaseWorker):
         self.deps_path = cfg.get(cfg.localAIModelDeps)
 
     @staticmethod
-    def _resolve_prompt(task_type: str, prompt: str) -> str:
-        if prompt:
-            return prompt
-        return TASK_TYPE_PROMPTS.get(task_type, "")
-
-    @staticmethod
     def _output_file(input_path: str, output_dir: str) -> str:
         basename = os.path.basename(input_path)
         stem, ext = os.path.splitext(basename)
@@ -59,7 +38,6 @@ class ImageRestorationWork(BaseWorker):
 
     @staticmethod
     def _pre_upscale(input_path: str, upscale: int) -> str:
-        """超分任务：先按倍数放大，再交给修复模型补细节"""
         image = Image.open(input_path).convert("RGB")
         width, height = image.size
         image = image.resize((width * upscale, height * upscale), resample=Image.Resampling.LANCZOS)
@@ -75,7 +53,7 @@ class ImageRestorationWork(BaseWorker):
         input_path = kwargs["input_path"]
         output_path = kwargs["output_path"]
         task_type = kwargs.get("task_type", "restoration")
-        prompt = self._resolve_prompt(task_type, (kwargs.get("prompt") or "").strip())
+        prompt = kwargs.get("prompt", "").strip()
         num_inference_steps = kwargs.get("num_inference_steps")
         guidance = kwargs.get("guidance")
         seed = kwargs.get("seed", 42)
