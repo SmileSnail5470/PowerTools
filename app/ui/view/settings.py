@@ -414,6 +414,7 @@ class ModelVariantPanel(QWidget):
         saved_media = self._load_media_preference()
         for media_type in MEDIA_TYPES:
             check = CheckBox(self.tr(MEDIA_LABELS[media_type]))
+            check.setCheckedColor(QColor(99, 102, 241), QColor(99, 102, 241))
             setFont(check, 13)
             check.setChecked(bool(saved_media.get(media_type, True)))
             dirs = self.capability.get("media", {}).get(media_type, [])
@@ -1758,9 +1759,9 @@ class Settings(QWidget):
             media_types = panel.selected_media_types() if panel else None
             lost = missing_model_dirs(deps_path, variant, capability_dirs(capability["key"], media_types))
             if lost:
-                missing.append(f"{capability['title']}（{'、'.join(lost)}）")
+                missing.append(f"{capability['title']} ({'、'.join(lost)})")
         if missing:
             content = self.tr("以下已激活的AI能力尚未下载对应的 {variant} 模型：\n\n").format(variant=variant.upper())
             content += "\n".join(f"  • {name}" for name in missing)
-            content += self.tr("\n\n请在各能力的模型设置中下载对应硬件版本的模型，否则相关功能将无法正常使用。")
+            content += self.tr("\n\n请在各能力的模型设置中下载对应硬件版本的模型、否则相关功能将无法正常使用。")
             MessageBox(title=self.tr("模型缺失提醒"), content=content, parent=self.window()).exec()

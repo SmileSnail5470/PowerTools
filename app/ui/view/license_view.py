@@ -312,7 +312,7 @@ class LicenseView(QWidget):
         layout.addLayout(self._create_subscription_controls())
 
         help_label = QLabel(self.tr(
-            "支付完成后自动校验到账并下发与本机绑定的授权文件；每一笔订单均生成可追溯记录，"
+            "🛡️ 支付完成后自动下发与本机绑定的授权文件；每一笔订单均生成可追溯记录，"
             "如遇异常可凭订单号申诉。"
         ))
         setFont(help_label, 11)
