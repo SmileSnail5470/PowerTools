@@ -18,13 +18,16 @@ from huggingface_hub import snapshot_download
 
 from app.ui.library.qfluentwidgets import(
     setFont, ScrollArea, TeachingTip, InfoBarIcon, TeachingTipTailPosition, FluentIcon,
-    ComboBox, Theme, MessageBox
+    ComboBox, Theme, MessageBox, CheckBox
 )
 from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget, CustomGroupBox
 from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 from app.ui.library.qframelesswindow.titlebar import CloseButton
 from app.ui.common.config import cfg, Language
+from app.ui.common.ai_capabilities import (
+    AI_CAPABILITIES, MEDIA_TYPES, MEDIA_LABELS, capability_dirs, default_media_types, estimate_size
+)
 from app.controllers.task_manager import InternalTaskManager
 from app.ui.common.utils import global_backend_info_cache
 from app.utils.logger import get_log_manager
@@ -38,58 +41,22 @@ def detect_gpu_available() -> bool:
 
 HF_REPO_ID = "SmailSnail/PowerToolsEnc"
 HF_MIRROR_ENDPOINT = "https://hf-mirror.com"
+HF_VARIANT_DIRS = {"cpu": "CPU", "gpu": "GPU"}
 
-models_deps_urls = {
-    "visible_watermark_removal": {
-        "cpu": {"path": "CPU/visible_watermark_removal", "sha256": None},
-        "gpu": {"path": "GPU/visible_watermark_removal", "sha256": None},
-    },
-    "blind_watermark_addition": {
-        "cpu": {"path": "CPU/blind_watermark_addition", "sha256": None},
-        "gpu": {"path": "GPU/blind_watermark_addition", "sha256": None},
-    },
-    "ocr": {
-        "cpu": {"path": "CPU/ocr", "sha256": None},
-        "gpu": {"path": "GPU/ocr", "sha256": None},
-    },
-    "segment": {
-        "cpu": {"path": "CPU/segment", "sha256": None},
-        "gpu": {"path": "GPU/segment", "sha256": None},
-    },
-    "video_inpainting": {
-        "cpu": {"path": "CPU/video_inpainting", "sha256": None},
-        "gpu": {"path": "GPU/video_inpainting", "sha256": None},
-    },
-    "tracker": {
-        "cpu": {"path": "CPU/tracker", "sha256": None},
-        "gpu": {"path": "GPU/tracker", "sha256": None},
-    },
-    "image_edit": {
-        "cpu": {"path": "CPU/image_edit", "sha256": None},
-        "gpu": {"path": "GPU/image_edit", "sha256": None},
-    }
-}
 
-model_estimated_sizes = {
-    "gpu": {
-        "blind_watermark_addition": "1.08 GB",
-        "visible_watermark_removal": "2.48 GB",
-        "segment": "1.69 GB",
-        "ocr": "217 MB",
-        "video_inpainting": "183 MB",
-        "tracker": "124 MB",
-        "image_edit": "11.0 GB"
-    },
-    "cpu": {
-        "blind_watermark_addition": "1.08 GB",
-        "visible_watermark_removal": "2.58 GB",
-        "segment": "899 MB",
-        "ocr": "217 MB",
-        "video_inpainting": "261 MB",
-        "tracker": "124 MB",
-        "image_edit": "11.0 GB"
-    }
-}
+def model_dir_path(deps_path: str, variant: str, model_dir: str) -> str:
+    if not deps_path:
+        return ""
+    return os.path.join(deps_path, variant, *model_dir.split("/"))
+
+
+def is_model_dir_ready(deps_path: str, variant: str, model_dir: str) -> bool:
+    path = model_dir_path(deps_path, variant, model_dir)
+    return bool(path) and os.path.isdir(path) and bool(os.listdir(path))
+
+
+def missing_model_dirs(deps_path: str, variant: str, model_dirs: list) -> list:
+    return [item for item in model_dirs if not is_model_dir_ready(deps_path, variant, item)]
 
 
 theme_map = {
@@ -115,11 +82,21 @@ class WorkerSignals(QObject):
 
 
 class InitWorker(QRunnable):
-    def __init__(self, task_name: str, variant: str = "cpu", use_mirror: bool = False, parent: QObject = None):
+    def __init__(
+            self,
+            task_name: str,
+            variant: str = "cpu",
+            use_mirror: bool = False,
+            model_dirs: list = None,
+            title: str = "",
+            parent: QObject = None
+        ):
         super().__init__()
         self.task_name = task_name
         self.variant = variant
         self.use_mirror = use_mirror
+        self.model_dirs = list(model_dirs or [])
+        self.title = title or task_name
         self.signals = WorkerSignals(parent=parent)
         self.cancelled = False
         self.deps_path = cfg.get(cfg.localAIModelDeps)
@@ -156,70 +133,75 @@ class InitWorker(QRunnable):
             with tarfile.open(file_path, "r:gz") as tf:
                 tf.extractall(output_dir)
         return output_dir
-    
-    @log_function_call(logger=logging.getLogger("UI"), level=logging.INFO)
-    def _download_module(self):
-        logger.info(f"start download {self.task_name} ({self.variant}) module, mirror={self.use_mirror}.")
-        model_info = models_deps_urls[self.task_name][self.variant]
-        dir_path = model_info["path"]
-        if not dir_path:
-            raise Exception(f"{self.task_name} ({self.variant}) download path not exist.")
 
+    def _merge_tree(self, src: str, dst: str):
+        os.makedirs(dst, exist_ok=True)
+        for item in os.listdir(src):
+            src_path = os.path.join(src, item)
+            dst_path = os.path.join(dst, item)
+            if os.path.isdir(src_path):
+                self._merge_tree(src_path, dst_path)
+                continue
+            if os.path.exists(dst_path):
+                os.remove(dst_path)
+            shutil.move(src_path, dst_path)
+        shutil.rmtree(src, ignore_errors=True)
+
+    def _clear_download_temp(self, variant_deps_path: str):
+        for item in [".cache", *HF_VARIANT_DIRS.values()]:
+            path = os.path.join(variant_deps_path, item)
+            if os.path.exists(path):
+                shutil.rmtree(path, ignore_errors=True)
+
+    @log_function_call(logger=logging.getLogger("UI"), level=logging.INFO)
+    def _download_module(self, model_dirs: list):
+        logger.info(f"start download {self.task_name} ({self.variant}) modules {model_dirs}, mirror={self.use_mirror}.")
+        repo_variant_dir = HF_VARIANT_DIRS[self.variant]
         endpoint = HF_MIRROR_ENDPOINT if self.use_mirror else None
         variant_deps_path = os.path.join(self.deps_path, self.variant)
         os.makedirs(variant_deps_path, exist_ok=True)
 
-        self.signals.progress.emit(f"正在下载: {self.task_name} ({self.variant})...")
-        try:
-            snapshot_download(
-                repo_id=HF_REPO_ID,
-                allow_patterns=f"{dir_path}/**",
-                local_dir=variant_deps_path,
-                endpoint=endpoint,
-            )
-        except Exception:
+        for model_dir in model_dirs:
+            if self.cancelled:
+                raise RuntimeError("初始化已被用户取消")
+            repo_dir = f"{repo_variant_dir}/{model_dir}"
+            self.signals.progress.emit(f"正在下载: {self.title} · {model_dir} ({self.variant})…")
+            try:
+                snapshot_download(
+                    repo_id=HF_REPO_ID,
+                    allow_patterns=f"{repo_dir}/**",
+                    local_dir=variant_deps_path,
+                    endpoint=endpoint,
+                )
+                for variant_dir in HF_VARIANT_DIRS.values():
+                    src = os.path.join(variant_deps_path, variant_dir)
+                    if os.path.isdir(src):
+                        self._merge_tree(src, variant_deps_path)
+            except Exception:
+                self._clear_download_temp(variant_deps_path)
+                raise Exception(f"Download {repo_dir} failed")
             cache_dir = os.path.join(variant_deps_path, ".cache")
             if os.path.exists(cache_dir):
-                shutil.rmtree(cache_dir)
-            CPU_dir = os.path.join(variant_deps_path, "CPU")
-            if os.path.exists(CPU_dir):
-                shutil.rmtree(CPU_dir)
-            GPU_dir = os.path.join(variant_deps_path, "GPU")
-            if os.path.exists(GPU_dir):
-                shutil.rmtree(GPU_dir)
-            raise Exception(f"Download {dir_path} failed")
-
-        for item in os.listdir(variant_deps_path):
-            path = os.path.join(variant_deps_path, item)
-            if item not in ["CPU", "GPU"]:
-                continue
-            for tmp_item in os.listdir(path):
-                src_path = os.path.join(path, tmp_item)
-                dst_path = variant_deps_path
-                shutil.move(src_path, dst_path)
-            shutil.rmtree(path)
-        cache_dir = os.path.join(variant_deps_path, ".cache")
-        if os.path.exists(cache_dir):
-            shutil.rmtree(cache_dir)
-        logger.info(f"download {self.task_name} ({self.variant}) module success.")
+                shutil.rmtree(cache_dir, ignore_errors=True)
+            if not is_model_dir_ready(self.deps_path, self.variant, model_dir):
+                raise Exception(f"Download {repo_dir} failed for local dir is empty")
+            self.signals.progress.emit(f"下载完成: {model_dir}")
+        logger.info(f"download {self.task_name} ({self.variant}) modules success.")
 
     def _init_model(self):
-        need_download = False
-        try:
-            self._valid_model()
-        except Exception:
-            need_download = True
-
-        if not need_download:
+        model_dirs = missing_model_dirs(self.deps_path, self.variant, self.model_dirs)
+        if not model_dirs:
+            self.signals.progress.emit("本地模型已就绪，跳过下载")
             return
-        self._download_module()
+        self.signals.progress.emit("待下载模型目录: " + ", ".join(model_dirs))
+        self._download_module(model_dirs)
 
     def _valid_model(self):
-        current_task_deps_path = os.path.join(self.deps_path, self.variant, self.task_name)
-        if not os.path.exists(current_task_deps_path):
-            raise Exception(f"{self.task_name} ({self.variant}) deps valid failed for {current_task_deps_path} not exist.")
-        if not os.listdir(current_task_deps_path):
-            raise Exception(f"{self.task_name} ({self.variant}) deps valid failed for {current_task_deps_path} is empty.")
+        if not self.model_dirs:
+            raise Exception(f"{self.task_name} ({self.variant}) has no model dir configured.")
+        missing = missing_model_dirs(self.deps_path, self.variant, self.model_dirs)
+        if missing:
+            raise Exception(f"{self.task_name} ({self.variant}) deps valid failed for {missing} not ready.")
 
     @log_exception(logger=logging.getLogger("UI"), reraise=True, log_args=True)
     def _step(self, task_step: str, msg: str):
@@ -344,12 +326,16 @@ class StatusBadge(QWidget):
 
 class ModelVariantPanel(QWidget):
     variantChanged = Signal(str)
+    updateRequested = Signal()
 
-    def __init__(self, config_key: str, parent=None):
+    def __init__(self, capability: dict, parent=None):
         super().__init__(parent)
-        self.config_key = config_key
+        self.capability = capability
+        self.config_key = capability["key"]
         self._expanded = False
-        self._panel_height = 140
+        self._panel_height = 0
+        self._media_checks: dict = {}
+        self._syncing = True
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -418,7 +404,28 @@ class ModelVariantPanel(QWidget):
         mirror_row.addStretch()
         panel_layout.addLayout(mirror_row)
 
-        # Row 3: model status, estimated size, download button
+        # Row 3: 图片 / 视频模型选择（默认全部勾选）
+        media_row = QHBoxLayout()
+        media_row.setSpacing(12)
+        media_label = QLabel(self.tr("模型类型:"))
+        setFont(media_label, 13, QFont.DemiBold)
+        media_label.setStyleSheet("color: #1a1a1a; border: none;")
+        media_row.addWidget(media_label)
+        saved_media = self._load_media_preference()
+        for media_type in MEDIA_TYPES:
+            check = CheckBox(self.tr(MEDIA_LABELS[media_type]))
+            setFont(check, 13)
+            check.setChecked(bool(saved_media.get(media_type, True)))
+            dirs = self.capability.get("media", {}).get(media_type, [])
+            check.setToolTip(self.tr("模型目录: ") + ("、".join(dirs) if dirs else self.tr("暂未配置")))
+            check.setEnabled(bool(dirs))
+            check.toggled.connect(lambda flag, m=media_type: self._on_media_toggled(m, flag))
+            self._media_checks[media_type] = check
+            media_row.addWidget(check)
+        media_row.addStretch()
+        panel_layout.addLayout(media_row)
+
+        # Row 4: model status, estimated size, update button
         info_row = QHBoxLayout()
         info_row.setSpacing(8)
 
@@ -431,12 +438,17 @@ class ModelVariantPanel(QWidget):
         sep_label.setStyleSheet("color: #ccc; border: none;")
         info_row.addWidget(sep_label)
 
-        estimated_size = model_estimated_sizes.get("cpu", {}).get(config_key, "-- MB")
-        self.size_label = QLabel(self.tr("预计大小: ") + estimated_size)
+        self.size_label = QLabel(self.tr("预计大小: ") + "-- MB")
         self.size_label.setStyleSheet("color: #666; border: none;")
         setFont(self.size_label, 13)
         info_row.addWidget(self.size_label)
         info_row.addStretch()
+
+        self.update_btn = QPushButton(self.tr("更新"))
+        setFont(self.update_btn, 12, QFont.Bold)
+        self.update_btn.setCursor(Qt.PointingHandCursor)
+        self.update_btn.clicked.connect(self.updateRequested.emit)
+        info_row.addWidget(self.update_btn)
         panel_layout.addLayout(info_row)
 
         self._update_segment_styles()
@@ -449,20 +461,68 @@ class ModelVariantPanel(QWidget):
         self._anim.setEasingCurve(QEasingCurve.InOutCubic)
 
         self._load_preference()
+        self._syncing = False
+        self.refresh()
+
+    def selected_media_types(self) -> list:
+        selected = [m for m in MEDIA_TYPES if self._media_checks[m].isChecked()]
+        return selected or [m for m in MEDIA_TYPES if self._media_checks[m].isEnabled()]
+
+    def model_dirs(self) -> list:
+        return capability_dirs(self.config_key, self.selected_media_types())
+
+    def missing_dirs(self) -> list:
+        return missing_model_dirs(cfg.get(cfg.localAIModelDeps), self.get_variant(), self.model_dirs())
+
+    def refresh(self):
         self._check_model_status()
+        self._update_size_label(self.get_variant())
+        self._update_update_btn()
 
     def _check_model_status(self):
-        variant = self.get_variant()
-        deps_path = cfg.get(cfg.localAIModelDeps)
-        downloaded = False
-        if deps_path:
-            model_path = os.path.join(deps_path, variant, self.config_key)
-            if os.path.exists(model_path) and os.listdir(model_path):
-                downloaded = True
-        if downloaded:
+        dirs = self.model_dirs()
+        if not dirs:
+            self.status_label.setText(self.tr("模型状态: ") + f"<b style='color:#9ca3af;'>{self.tr('未配置')}</b>")
+            return
+        missing = self.missing_dirs()
+        if not missing:
             self.status_label.setText(self.tr("模型状态: ") + f"<b style='color:#2da44e;'>{self.tr('已就绪')}</b>")
-        else:
+        elif len(missing) == len(dirs):
             self.status_label.setText(self.tr("模型状态: ") + f"<b style='color:#e65100;'>{self.tr('未下载')}</b>")
+        else:
+            ready = len(dirs) - len(missing)
+            self.status_label.setText(
+                self.tr("模型状态: ")
+                + f"<b style='color:#e65100;'>{self.tr('部分缺失')} ({ready}/{len(dirs)})</b>"
+            )
+
+    def _update_size_label(self, variant: str):
+        self.size_label.setText(self.tr("预计大小: ") + estimate_size(self.model_dirs(), variant))
+
+    def _update_update_btn(self):
+        missing = self.missing_dirs() if self.model_dirs() else []
+        self.update_btn.setEnabled(bool(missing))
+        if missing:
+            self.update_btn.setToolTip(self.tr("待下载模型目录: ") + "、".join(missing))
+            self.update_btn.setCursor(Qt.PointingHandCursor)
+        else:
+            self.update_btn.setToolTip(self.tr("模型目录已是最新，无需更新"))
+            self.update_btn.setCursor(Qt.ArrowCursor)
+        self.update_btn.setStyleSheet(self._update_btn_style(enabled=bool(missing)))
+
+    @staticmethod
+    def _update_btn_style(enabled: bool) -> str:
+        if not enabled:
+            return """
+                QPushButton { padding: 6px 16px; background: #f3f4f6; color: #9ca3af;
+                    border: none; border-radius: 8px; }
+            """
+        return """
+            QPushButton { padding: 6px 16px; background: #4f46e5; color: white;
+                border: none; border-radius: 8px; }
+            QPushButton:hover { background: #4338ca; }
+            QPushButton:pressed { background: #4338ca; padding: 7px 16px; margin-top: 1px; }
+        """
 
     def _seg_active_style(self):
         return """
@@ -485,13 +545,8 @@ class ModelVariantPanel(QWidget):
         self._update_segment_styles()
         variant = "cpu" if id == 0 else "gpu"
         self._save_preference(variant)
-        self._update_size_label(variant)
-        self._check_model_status()
+        self.refresh()
         self.variantChanged.emit(variant)
-
-    def _update_size_label(self, variant: str):
-        size = model_estimated_sizes.get(variant, {}).get(self.config_key, "-- MB")
-        self.size_label.setText(self.tr("预计大小: ") + size)
 
     def get_variant(self) -> str:
         return "gpu" if self.gpu_btn.isChecked() else "cpu"
@@ -523,6 +578,49 @@ class ModelVariantPanel(QWidget):
         variants[self.config_key] = variant
         params["ModelVariants"] = variants
         cfg.additionalParams.value = params
+        cfg.save_config()
+
+    def _load_media_preference(self) -> dict:
+        media = default_media_types()
+        try:
+            saved = cfg.get(cfg.additionalParams).get("ModelMediaTypes", {}).get(self.config_key, {})
+        except Exception:
+            saved = {}
+        if isinstance(saved, dict):
+            for media_type in MEDIA_TYPES:
+                if media_type in saved:
+                    media[media_type] = bool(saved[media_type])
+        return media
+
+    def _save_media_preference(self):
+        params = cfg.get(cfg.additionalParams)
+        media_types = params.get("ModelMediaTypes", {})
+        media_types[self.config_key] = {m: self._media_checks[m].isChecked() for m in MEDIA_TYPES}
+        params["ModelMediaTypes"] = media_types
+        cfg.additionalParams.value = params
+        cfg.save_config()
+
+    def _on_media_toggled(self, media_type: str, flag: bool):
+        if self._syncing:
+            return
+        if not flag and not any(check.isChecked() for check in self._media_checks.values()):
+            # 至少保留一种模型类型
+            self._syncing = True
+            self._media_checks[media_type].setChecked(True)
+            self._syncing = False
+            TeachingTip.create(
+                target=self._media_checks[media_type],
+                icon=InfoBarIcon.WARNING,
+                title=self.tr("提醒"),
+                content=self.tr("请至少选择一种模型类型"),
+                isClosable=True,
+                tailPosition=TeachingTipTailPosition.BOTTOM,
+                duration=2000,
+                parent=self
+            )
+            return
+        self._save_media_preference()
+        self.refresh()
 
     def _load_mirror_preference(self) -> bool:
         try:
@@ -540,6 +638,8 @@ class ModelVariantPanel(QWidget):
 
     def toggle_expand(self):
         self._expanded = not self._expanded
+        if self._expanded:
+            self._panel_height = max(self.panel.sizeHint().height(), 180)
         self._anim.stop()
         self._anim.setStartValue(self.panel.maximumHeight())
         self._anim.setEndValue(self._panel_height if self._expanded else 0)
@@ -547,9 +647,9 @@ class ModelVariantPanel(QWidget):
 
     def is_expanded(self) -> bool:
         return self._expanded
-    
+
     def check_model_status(self):
-        self._check_model_status()
+        self.refresh()
 
 
 class InitProgressDialog(QDialog):
@@ -1372,6 +1472,7 @@ class Settings(QWidget):
 
     def _create_local_ai_settings(self):
         self.ai_toggle_switchs: list[ToggleSwitch] = []
+        self.ai_capability_panels: dict = {}
         ai_settings_cards = []
         ai_settings = CustomGroupBox(title=self.tr("🤖 本地AI设置"))
 
@@ -1395,205 +1496,53 @@ class Settings(QWidget):
         browse_btn.setStyleSheet(self._btn_style(bg="#f3f4f6", hover="#d1d5db"))
         setFont(browse_btn, 12, QFont.Bold)
         browse_btn.clicked.connect(lambda: self._select_path(localAIModelDeps_line_edit))
-        model_deps_location_card = CustomCardGroupWidget(title=self.tr("AI模型依赖路径"), content=self.tr("设置本地AI模型依赖文件保存位置"), parent=self)
+        model_deps_location_card = CustomCardGroupWidget(title=self.tr("AI模型路径"), content=self.tr("设置本地AI模型保存位置"), parent=self)
         model_deps_location_card.addWidget(localAIModelDeps_line_edit, stretch=1)
         model_deps_location_card.addWidget(browse_btn, stretch=0)
         model_deps_location_card.setSeparatorVisible(True)
         ai_settings_cards.append(model_deps_location_card)
-        
-        blind_watermark_switch = ToggleSwitch()
-        self.ai_toggle_switchs.append(blind_watermark_switch)
-        blind_watermark_switch.setActive(cfg.get(cfg.localBlindWatermarkEnabled))
-        blind_watermark_switch.toggled.connect(lambda flag: cfg.set(cfg.localBlindWatermarkEnabled, flag))
-        blind_watermark_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="blind_watermark_addition")
-        try:
-            text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{blind_watermark_status.name}_status_info"]["text"]
-            color = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{blind_watermark_status.name}_status_info"]["color"]
-            blind_watermark_status.setLabel(text=text, color=color)
-        except Exception:
-            pass
-        blind_watermark_panel = ModelVariantPanel(config_key="blind_watermark_addition", parent=self)
-        self._bind_ai_toggle(
-            switch=blind_watermark_switch,
-            badge=blind_watermark_status,
-            local_ai_type="blind_watermark_addition",
-            panel=blind_watermark_panel
-        )
-        blind_watermark_chevron = self._create_chevron_btn(blind_watermark_panel)
-        blind_watermark_card = CustomCardGroupWidget(title=self.tr("盲水印AI能力"), content=self.tr("为图像添加不可见的数字水印，保护版权"), parent=self)
-        blind_watermark_card.addWidget(blind_watermark_status, stretch=0)
-        blind_watermark_card.addWidget(blind_watermark_switch, stretch=0)
-        blind_watermark_card.addWidget(blind_watermark_chevron, stretch=0)
-        blind_watermark_card.vBoxLayout.addWidget(blind_watermark_panel)
-        blind_watermark_card.setSeparatorVisible(True)
-        ai_settings_cards.append(blind_watermark_card)
 
-        watermark_removal_switch = ToggleSwitch()
-        self.ai_toggle_switchs.append(watermark_removal_switch)
-        watermark_removal_switch.setActive(cfg.get(cfg.localWatermarkRemovalEnabled))
-        watermark_removal_switch.toggled.connect(lambda flag: cfg.set(cfg.localWatermarkRemovalEnabled, flag))
-        watermark_removal_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="watermark_removal")
-        try:
-            text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{watermark_removal_status.name}_status_info"]["text"]
-            color = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{watermark_removal_status.name}_status_info"]["color"]
-            watermark_removal_status.setLabel(text=text, color=color)
-        except Exception:
-            pass
-        watermark_removal_panel = ModelVariantPanel(config_key="visible_watermark_removal", parent=self)
-        self._bind_ai_toggle(
-            switch=watermark_removal_switch,
-            badge=watermark_removal_status,
-            local_ai_type="visible_watermark_removal",
-            panel=watermark_removal_panel
-        )
-        watermark_removal_chevron = self._create_chevron_btn(watermark_removal_panel)
-        watermark_removal_card = CustomCardGroupWidget(title=self.tr("水印去除AI能力"), content=self.tr("智能去除图像中的水印和标志"), parent=self)
-        watermark_removal_card.addWidget(watermark_removal_status, stretch=0)
-        watermark_removal_card.addWidget(watermark_removal_switch, stretch=0)
-        watermark_removal_card.addWidget(watermark_removal_chevron, stretch=0)
-        watermark_removal_card.vBoxLayout.addWidget(watermark_removal_panel)
-        watermark_removal_card.setSeparatorVisible(True)
-        ai_settings_cards.append(watermark_removal_card)
-
-        object_segmentation_switch = ToggleSwitch()
-        self.ai_toggle_switchs.append(object_segmentation_switch)
-        object_segmentation_switch.setActive(cfg.get(cfg.localObjectSegmentationEnabled))
-        object_segmentation_switch.toggled.connect(lambda flag: cfg.set(cfg.localObjectSegmentationEnabled, flag))
-        object_segmentation_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="object_segmentation")
-        try:
-            text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{object_segmentation_status.name}_status_info"]["text"]
-            color = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{object_segmentation_status.name}_status_info"]["color"]
-            object_segmentation_status.setLabel(text=text, color=color)
-        except Exception:
-            pass
-        object_segmentation_panel = ModelVariantPanel(config_key="segment", parent=self)
-        self._bind_ai_toggle(
-            switch=object_segmentation_switch,
-            badge=object_segmentation_status,
-            local_ai_type="segment",
-            panel=object_segmentation_panel
-        )
-        object_segmentation_chevron = self._create_chevron_btn(object_segmentation_panel)
-        object_segmentation_card = CustomCardGroupWidget(title=self.tr("物体分割AI能力"), content=self.tr("智能分割图像中的物体"), parent=self)
-        object_segmentation_card.addWidget(object_segmentation_status, stretch=0)
-        object_segmentation_card.addWidget(object_segmentation_switch, stretch=0)
-        object_segmentation_card.addWidget(object_segmentation_chevron, stretch=0)
-        object_segmentation_card.vBoxLayout.addWidget(object_segmentation_panel)
-        object_segmentation_card.setSeparatorVisible(True)
-        ai_settings_cards.append(object_segmentation_card)
-
-        ocr_switch = ToggleSwitch()
-        self.ai_toggle_switchs.append(ocr_switch)
-        ocr_switch.setActive(cfg.get(cfg.localOCREnabled))
-        ocr_switch.toggled.connect(lambda flag: cfg.set(cfg.localOCREnabled, flag))
-        ocr_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="ocr")
-        try:
-            text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{ocr_status.name}_status_info"]["text"]
-            color = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{ocr_status.name}_status_info"]["color"]
-            ocr_status.setLabel(text=text, color=color)
-        except Exception:
-            pass
-        ocr_panel = ModelVariantPanel(config_key="ocr", parent=self)
-        self._bind_ai_toggle(
-            switch=ocr_switch,
-            badge=ocr_status,
-            local_ai_type="ocr",
-            panel=ocr_panel
-        )
-        ocr_chevron = self._create_chevron_btn(ocr_panel)
-        ocr_card = CustomCardGroupWidget(title=self.tr("OCR 能力"), content=self.tr("智能识别提取图片中的文字"), parent=self)
-        ocr_card.addWidget(ocr_status, stretch=0)
-        ocr_card.addWidget(ocr_switch, stretch=0)
-        ocr_card.addWidget(ocr_chevron, stretch=0)
-        ocr_card.vBoxLayout.addWidget(ocr_panel)
-        ocr_card.setSeparatorVisible(True)
-        ai_settings_cards.append(ocr_card)
-
-        video_inpainting_switch = ToggleSwitch()
-        self.ai_toggle_switchs.append(video_inpainting_switch)
-        video_inpainting_switch.setActive(cfg.get(cfg.localVideoInpaintingEnabled))
-        video_inpainting_switch.toggled.connect(lambda flag: cfg.set(cfg.localVideoInpaintingEnabled, flag))
-        video_inpainting_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="video_inpainting")
-        try:
-            text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{video_inpainting_status.name}_status_info"]["text"]
-            color = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{video_inpainting_status.name}_status_info"]["color"]
-            video_inpainting_status.setLabel(text=text, color=color)
-        except Exception:
-            pass
-        video_inpainting_panel = ModelVariantPanel(config_key="video_inpainting", parent=self)
-        self._bind_ai_toggle(
-            switch=video_inpainting_switch,
-            badge=video_inpainting_status,
-            local_ai_type="video_inpainting",
-            panel=video_inpainting_panel
-        )
-        video_inpainting_chevron = self._create_chevron_btn(video_inpainting_panel)
-        video_inpainting_card = CustomCardGroupWidget(title=self.tr("视频修复AI能力"), content=self.tr("视频物体移除、水印去除等"), parent=self)
-        video_inpainting_card.addWidget(video_inpainting_status, stretch=0)
-        video_inpainting_card.addWidget(video_inpainting_switch, stretch=0)
-        video_inpainting_card.addWidget(video_inpainting_chevron, stretch=0)
-        video_inpainting_card.vBoxLayout.addWidget(video_inpainting_panel)
-        video_inpainting_card.setSeparatorVisible(True)
-        ai_settings_cards.append(video_inpainting_card)
-
-        object_tracking_switch = ToggleSwitch()
-        self.ai_toggle_switchs.append(object_tracking_switch)
-        object_tracking_switch.setActive(cfg.get(cfg.localObjectTrackingEnabled))
-        object_tracking_switch.toggled.connect(lambda flag: cfg.set(cfg.localObjectTrackingEnabled, flag))
-        object_tracking_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="object_tracking")
-        try:
-            text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{object_tracking_status.name}_status_info"]["text"]
-            color = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{object_tracking_status.name}_status_info"]["color"]
-            object_tracking_status.setLabel(text=text, color=color)
-        except Exception:
-            pass
-        object_tracking_panel = ModelVariantPanel(config_key="tracker", parent=self)
-        self._bind_ai_toggle(
-            switch=object_tracking_switch,
-            badge=object_tracking_status,
-            local_ai_type="tracker",
-            panel=object_tracking_panel
-        )
-        object_tracking_chevron = self._create_chevron_btn(object_tracking_panel)
-        object_tracking_card = CustomCardGroupWidget(title=self.tr("对象跟踪AI能力"), content=self.tr("智能跟踪视频中的目标对象"), parent=self)
-        object_tracking_card.addWidget(object_tracking_status, stretch=0)
-        object_tracking_card.addWidget(object_tracking_switch, stretch=0)
-        object_tracking_card.addWidget(object_tracking_chevron, stretch=0)
-        object_tracking_card.vBoxLayout.addWidget(object_tracking_panel)
-        object_tracking_card.setSeparatorVisible(True)
-        ai_settings_cards.append(object_tracking_card)
-
-        image_edit_switch = ToggleSwitch()
-        self.ai_toggle_switchs.append(image_edit_switch)
-        image_edit_switch.setActive(cfg.get(cfg.localImageEditEnabled))
-        image_edit_switch.toggled.connect(lambda flag: cfg.set(cfg.localImageEditEnabled, flag))
-        image_edit_status = StatusBadge(text=self.tr("未启用"), color="#eab308", name="image_edit")
-        try:
-            text = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{image_edit_status.name}_status_info"]["text"]
-            color = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{image_edit_status.name}_status_info"]["color"]
-            image_edit_status.setLabel(text=text, color=color)
-        except Exception:
-            pass
-        image_edit_panel = ModelVariantPanel(config_key="image_edit", parent=self)
-        self._bind_ai_toggle(
-            switch=image_edit_switch,
-            badge=image_edit_status,
-            local_ai_type="image_edit",
-            panel=image_edit_panel
-        )
-        image_edit_chevron = self._create_chevron_btn(image_edit_panel)
-        image_edit_card = CustomCardGroupWidget(title=self.tr("图像编辑AI能力"), content=self.tr("智能修复、增强与编辑图像内容"), parent=self)
-        image_edit_card.addWidget(image_edit_status, stretch=0)
-        image_edit_card.addWidget(image_edit_switch, stretch=0)
-        image_edit_card.addWidget(image_edit_chevron, stretch=0)
-        image_edit_card.vBoxLayout.addWidget(image_edit_panel)
-        image_edit_card.setSeparatorVisible(True)
-        ai_settings_cards.append(image_edit_card)
+        for capability in AI_CAPABILITIES:
+            ai_settings_cards.append(self._create_ai_capability_card(capability))
 
         for card in ai_settings_cards:
             ai_settings.addCard(card=card)
 
         return ai_settings
+
+    def _create_ai_capability_card(self, capability: dict) -> CustomCardGroupWidget:
+        key = capability["key"]
+        cfg_item = getattr(cfg, capability["cfg_attr"])
+
+        switch = ToggleSwitch()
+        self.ai_toggle_switchs.append(switch)
+        switch.setActive(cfg.get(cfg_item))
+        switch.toggled.connect(lambda flag, item=cfg_item: cfg.set(item, flag))
+        badge = StatusBadge(text=self.tr("未启用"), color="#eab308", name=key)
+        try:
+            status_info = cfg.get(cfg.additionalParams)["LocalAISettings"][f"{key}_status_info"]
+            badge.setLabel(text=status_info["text"], color=status_info["color"])
+        except Exception:
+            pass
+        panel = ModelVariantPanel(capability=capability, parent=self)
+        self.ai_capability_panels[key] = panel
+        self._bind_ai_toggle(switch=switch, badge=badge, capability=capability, panel=panel)
+        panel.updateRequested.connect(
+            lambda switch=switch, badge=badge, capability=capability, panel=panel:
+            self._on_update_requested(switch=switch, badge=badge, capability=capability, panel=panel)
+        )
+        chevron = self._create_chevron_btn(panel)
+        card = CustomCardGroupWidget(
+            title=f"{self.tr(capability['title'])}",
+            content=self.tr(capability["description"]),
+            parent=self
+        )
+        card.addWidget(badge, stretch=0)
+        card.addWidget(switch, stretch=0)
+        card.addWidget(chevron, stretch=0)
+        card.vBoxLayout.addWidget(panel)
+        card.setSeparatorVisible(True)
+        return card
     
     def _create_performance_settings(self):
         performance_settings_cards = []
@@ -1678,35 +1627,92 @@ class Settings(QWidget):
             switch.setActive(False)
             if old_active is False:
                 switch.toggled.emit(False)
-    
-    def _bind_ai_toggle(self, switch: ToggleSwitch, badge: StatusBadge, local_ai_type: str, panel: ModelVariantPanel):
+        for panel in self.ai_capability_panels.values():
+            panel.refresh()
+
+    def _bind_ai_toggle(self, switch: ToggleSwitch, badge: StatusBadge, capability: dict, panel: ModelVariantPanel):
         switch.toggled.connect(
-            lambda flag, switch=switch, badge=badge, local_ai_type=local_ai_type, panel=panel: 
-            self._ai_switch_on_toggle(flag=flag, switch=switch, badge=badge, local_ai_type=local_ai_type, panel=panel)
+            lambda flag, switch=switch, badge=badge, capability=capability, panel=panel:
+            self._ai_switch_on_toggle(flag=flag, switch=switch, badge=badge, capability=capability, panel=panel)
         )
 
-    def _ai_switch_on_toggle(self, flag: bool, switch: ToggleSwitch, badge: StatusBadge, local_ai_type: str, panel: ModelVariantPanel):
+    def _ai_switch_on_toggle(self, flag: bool, switch: ToggleSwitch, badge: StatusBadge, capability: dict, panel: ModelVariantPanel):
         if flag:
-            variant = panel.get_variant()
-            badge.setLabel(text=self.tr("环境初始化中…"), color="#60a5fa")
-
-            progress_dialog = InitProgressDialog(title=self.tr("正在初始化环境..."), variant=variant, parent=self)
-            progress_dialog.disableCloseBtn()
-            progress_dialog.show()
-
-            worker = InitWorker(task_name=local_ai_type, variant=variant, use_mirror=panel.use_mirror(), parent=progress_dialog)
-            worker.signals.progress.connect(progress_dialog.append_log)
-            worker.signals.finished.connect(
-                lambda ok, msg, switch=switch, badge=badge, progress_dialog=progress_dialog: 
-                self._on_init_finished(ok, msg, switch, badge, progress_dialog, panel)
+            self._start_model_init(
+                switch=switch,
+                badge=badge,
+                capability=capability,
+                panel=panel,
+                busy_text=self.tr("环境初始化中…"),
+                dialog_title=self.tr("正在初始化环境..."),
+                disable_on_failure=True
             )
-            InternalTaskManager.get_pool().start(worker)
         else:
-            badge.setLabel(text=self.tr("未启用"), color="#eab308")
-            tmp = cfg.get(cfg.additionalParams).get("LocalAISettings", {})
-            tmp.update({f"{badge.name}_status_info": {"text": self.tr("未启用"), "color": "#eab308"}})
-            cfg.additionalParams.value.update({"LocalAISettings": tmp})
-            panel.check_model_status()
+            self._save_badge_status(badge=badge, text=self.tr("未启用"), color="#eab308")
+            panel.refresh()
+
+    def _on_update_requested(self, switch: ToggleSwitch, badge: StatusBadge, capability: dict, panel: ModelVariantPanel):
+        if not panel.missing_dirs():
+            panel.refresh()
+            return
+        self._start_model_init(
+            switch=switch,
+            badge=badge,
+            capability=capability,
+            panel=panel,
+            busy_text=self.tr("模型更新中…"),
+            dialog_title=self.tr("正在更新模型..."),
+            disable_on_failure=False
+        )
+
+    def _start_model_init(
+            self,
+            switch: ToggleSwitch,
+            badge: StatusBadge,
+            capability: dict,
+            panel: ModelVariantPanel,
+            busy_text: str,
+            dialog_title: str,
+            disable_on_failure: bool
+        ):
+        model_dirs = panel.model_dirs()
+        if not model_dirs:
+            switch.setActive(False)
+            self._save_badge_status(badge=badge, text=self.tr("未配置模型"), color="#ef4444")
+            MessageBox(
+                title=self.tr("提醒"),
+                content=self.tr("该能力尚未配置可下载的模型目录，请升级软件版本"),
+                parent=self.window()
+            ).exec()
+            return
+        variant = panel.get_variant()
+        self._save_badge_status(badge=badge, text=busy_text, color="#60a5fa")
+
+        progress_dialog = InitProgressDialog(title=dialog_title, variant=variant, parent=self)
+        progress_dialog.disableCloseBtn()
+        progress_dialog.show()
+
+        worker = InitWorker(
+            task_name=capability["key"],
+            variant=variant,
+            use_mirror=panel.use_mirror(),
+            model_dirs=model_dirs,
+            title=capability["title"],
+            parent=progress_dialog
+        )
+        worker.signals.progress.connect(progress_dialog.append_log)
+        worker.signals.finished.connect(
+            lambda ok, msg, switch=switch, badge=badge, progress_dialog=progress_dialog, panel=panel:
+            self._on_init_finished(ok, msg, switch, badge, progress_dialog, panel, disable_on_failure)
+        )
+        InternalTaskManager.get_pool().start(worker)
+
+    def _save_badge_status(self, badge: StatusBadge, text: str, color: str):
+        badge.setLabel(text=text, color=color)
+        tmp = cfg.get(cfg.additionalParams).get("LocalAISettings", {})
+        tmp.update({f"{badge.name}_status_info": {"text": text, "color": color}})
+        cfg.additionalParams.value.update({"LocalAISettings": tmp})
+        cfg.save_config()
 
     def _on_init_finished(
             self, ok: bool,
@@ -1714,21 +1720,23 @@ class Settings(QWidget):
             switch: ToggleSwitch, 
             badge: StatusBadge, 
             progress_dialog: InitProgressDialog,
-            panel: ModelVariantPanel
+            panel: ModelVariantPanel,
+            disable_on_failure: bool = True
         ):
         if ok:
-            panel.check_model_status()
-            badge.setLabel(text=self.tr("已启用"), color="#22c55e")
-            tmp = cfg.get(cfg.additionalParams).get("LocalAISettings", {})
-            tmp.update({f"{badge.name}_status_info": {"text": self.tr("已启用"), "color": "#22c55e"}})
-            cfg.additionalParams.value.update({"LocalAISettings": tmp})
+            panel.refresh()
+            if switch.isActive():
+                self._save_badge_status(badge=badge, text=self.tr("已启用"), color="#22c55e")
+            else:
+                self._save_badge_status(badge=badge, text=self.tr("未启用"), color="#eab308")
             progress_dialog.accept()
         else:
-            switch.setActive(False)
-            badge.setLabel(text=self.tr("启用失败"), color="#ef4444")
-            tmp = cfg.get(cfg.additionalParams).get("LocalAISettings", {})
-            tmp.update({f"{badge.name}_status_info": {"text": self.tr("启用失败"), "color": "#ef4444"}})
-            cfg.additionalParams.value.update({"LocalAISettings": tmp})
+            if disable_on_failure:
+                switch.setActive(False)
+                self._save_badge_status(badge=badge, text=self.tr("启用失败"), color="#ef4444")
+            else:
+                self._save_badge_status(badge=badge, text=self.tr("更新失败"), color="#ef4444")
+            panel.refresh()
             progress_dialog.enableCloseBtn()
             progress_dialog.append_log(f"\n❌ 错误信息：{error}")
             progress_dialog.progress.setRange(0, 1)
@@ -1740,28 +1748,19 @@ class Settings(QWidget):
         elif value == "GPU":
             variant = "gpu"
         else:
-            status, _ = global_backend_info_cache.get()
-            variant = "gpu" if "GPU" in status else "cpu"
-        enabled_map = {
-            "blind_watermark_addition": ("盲水印AI能力", cfg.get(cfg.localBlindWatermarkEnabled)),
-            "visible_watermark_removal": ("水印去除AI能力", cfg.get(cfg.localWatermarkRemovalEnabled)),
-            "segment": ("物体分割AI能力", cfg.get(cfg.localObjectSegmentationEnabled)),
-            "ocr": ("OCR 能力", cfg.get(cfg.localOCREnabled)),
-            "video_inpainting": ("视频修复AI能力", cfg.get(cfg.localVideoInpaintingEnabled)),
-            "tracker": ("对象跟踪AI能力", cfg.get(cfg.localObjectTrackingEnabled)),
-            "image_edit": ("图像编辑AI能力", cfg.get(cfg.localImageEditEnabled)),
-        }
+            variant = "gpu" if detect_gpu_available() else "cpu"
         deps_path = cfg.get(cfg.localAIModelDeps)
         missing = []
-        for key, (name, enabled) in enabled_map.items():
-            if not enabled:
+        for capability in AI_CAPABILITIES:
+            if not cfg.get(getattr(cfg, capability["cfg_attr"])):
                 continue
-            model_path = os.path.join(deps_path, variant, key) if deps_path else ""
-            if not model_path or not os.path.exists(model_path) or not os.listdir(model_path):
-                missing.append(name)
+            panel = self.ai_capability_panels.get(capability["key"])
+            media_types = panel.selected_media_types() if panel else None
+            lost = missing_model_dirs(deps_path, variant, capability_dirs(capability["key"], media_types))
+            if lost:
+                missing.append(f"{capability['title']}（{'、'.join(lost)}）")
         if missing:
             content = self.tr("以下已激活的AI能力尚未下载对应的 {variant} 模型：\n\n").format(variant=variant.upper())
             content += "\n".join(f"  • {name}" for name in missing)
-            content += self.tr("\n\n请在各模型设置中下载对应硬件版本的模型，否则相关功能将无法正常使用。")
+            content += self.tr("\n\n请在各能力的模型设置中下载对应硬件版本的模型，否则相关功能将无法正常使用。")
             MessageBox(title=self.tr("模型缺失提醒"), content=content, parent=self.window()).exec()
-

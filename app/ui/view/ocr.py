@@ -509,8 +509,8 @@ class HeaderWidget(QWidget):
         if not params:
             error_msg = self.tr("请设置OCR识别参数")
             return error_msg, task_params
-        if not cfg.get(cfg.localOCREnabled):
-            error_msg = self.tr("请在设置页面打开 'OCR 能力' 开关")
+        if not cfg.get(cfg.localTextExtractEnabled):
+            error_msg = self.tr("请在设置页面打开 '文字提取' 能力开关")
             return error_msg, task_params
         
         if "input_path" not in params or not params["input_path"]:

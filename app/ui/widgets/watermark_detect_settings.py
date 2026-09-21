@@ -601,10 +601,10 @@ class WatermarkDetectSettings(QWidget):
     def _open_tracking_dialog(self):
         if not self.file_path:
             return
-        if not cfg.get(cfg.localObjectTrackingEnabled):
+        if not cfg.get(cfg.localWatermarkRemoveEnabled):
             MessageBox(
                 title=self.tr("提醒"),
-                content=self.tr("请先在设置页面打开 '对象跟踪AI能力' 开关并下载对应模型"),
+                content=self.tr("请先在设置页面打开 '水印移除' 能力开关并下载视频模型"),
                 parent=self.window()
             ).exec()
             return

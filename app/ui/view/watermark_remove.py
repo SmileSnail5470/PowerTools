@@ -918,8 +918,8 @@ class HeaderWidget(QWidget):
         if not params:
             error_msg = self.tr("请设置水印移除参数")
             return error_msg, task_params
-        if not cfg.get(cfg.localWatermarkRemovalEnabled):
-            error_msg = self.tr("请在设置页面打开 '水印去除AI能力' 开关")
+        if not cfg.get(cfg.localWatermarkRemoveEnabled):
+            error_msg = self.tr("请在设置页面打开 '水印移除' 能力开关")
             return error_msg, task_params
         
         if "input_path" not in params or not params["input_path"]:
@@ -956,23 +956,11 @@ class HeaderWidget(QWidget):
             else:
                 task_params["watermark_detect_type"] = params["watermark_detect_type"]
 
-            if params["watermark_detect_type"] == "ai_interactive_detect" and not cfg.get(cfg.localObjectSegmentationEnabled):
-                error_msg = self.tr("请在设置页面打开 '物体分割AI能力' 开关")
-                return error_msg, task_params
-            
             if "mask_dilate" not in params:
                 error_msg = self.tr("请设置水印 Mask 扩张系数")
                 return error_msg, task_params
             else:
                 task_params["mask_dilate"] = params["mask_dilate"]
-
-            if task_params["model_name"] in ["ppt"] and not cfg.get(cfg.localVideoInpaintingEnabled):
-                error_msg = self.tr("请在设置页面打开 '视频修复AI能力' 开关")
-                return error_msg, task_params
-
-            if task_params["model_name"] in ["general_edit"] and not cfg.get(cfg.localImageEditEnabled):
-                error_msg = self.tr("请在设置页面打开 '图像编辑AI能力' 开关")
-                return error_msg, task_params
 
             if "image_boxes" in params and params["image_boxes"]:
                 task_params["image_boxes"] = params["image_boxes"]

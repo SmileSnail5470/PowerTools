@@ -796,8 +796,8 @@ class HeaderWidget(QWidget):
         if not params:
             error_msg = self.tr("请设置图像修复参数")
             return error_msg, task_params
-        if not cfg.get(cfg.localImageEditEnabled):
-            error_msg = self.tr("请在设置页面打开 '图像编辑AI能力' 开关")
+        if not cfg.get(cfg.localImageRestorationEnabled):
+            error_msg = self.tr("请在设置页面打开 '图像修复' 能力开关")
             return error_msg, task_params
         if "input_path" not in params or not params["input_path"]:
             error_msg = self.tr("请选择要处理的文件或目录")

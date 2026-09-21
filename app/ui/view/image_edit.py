@@ -633,7 +633,7 @@ class HeaderWidget(QWidget):
             error_msg = self.tr("请设置图像编辑参数")
             return error_msg, task_params
         if not cfg.get(cfg.localImageEditEnabled):
-            error_msg = self.tr("请在设置页面打开 '图像编辑AI能力' 开关")
+            error_msg = self.tr("请在设置页面打开 '图像编辑' 能力开关")
             return error_msg, task_params
         if "prompt" not in params or not params.get("prompt", "").strip():
             error_msg = self.tr("请输入编辑提示词")

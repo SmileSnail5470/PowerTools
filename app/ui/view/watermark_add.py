@@ -917,8 +917,8 @@ class HeaderWidget(QWidget):
         if not params:
             error_msg = self.tr("请设置水印参数")
             return error_msg, task_params
-        if not cfg.get(cfg.localBlindWatermarkEnabled):
-            error_msg = self.tr("请在设置页面打开 '盲水印AI能力' 开关")
+        if not cfg.get(cfg.localWatermarkAddEnabled):
+            error_msg = self.tr("请在设置页面打开 '水印添加' 能力开关")
             return error_msg, task_params
         
         if "input_path" not in params or not params["input_path"]:
