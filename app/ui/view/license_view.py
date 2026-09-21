@@ -336,11 +336,8 @@ class LicenseView(QWidget):
         row.addStretch()
 
         badge = QLabel("AUTOMATED")
-        setFont(badge, 10, QFont.Bold)
-        badge.setStyleSheet(
-            f"QLabel {{ background: {PRIMARY}; color: white;"
-            " border-radius: 4px; padding: 2px 8px; }"
-        )
+        setFont(badge, 11, QFont.Bold)
+        badge.setStyleSheet(f"QLabel {{ background: {PRIMARY}; color: white; border-radius: 6px; padding: 2px 8px; }}")
         row.addWidget(badge)
         return row
 
