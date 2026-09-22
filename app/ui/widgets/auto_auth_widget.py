@@ -1,5 +1,5 @@
 from decimal import Decimal
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, Q_ARG, QMetaObject
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QFrame, QApplication, QSizePolicy,
@@ -101,6 +101,7 @@ class TierCard(QFrame):
 
 class PaymentDialog(MessageBoxBase):
     user_paid = Signal(object)
+    notify_failed = Signal(str)
 
     def __init__(self, service: AutoAuthService, order: AuthOrder, parent=None):
         super().__init__(parent)
@@ -185,8 +186,20 @@ class PaymentDialog(MessageBoxBase):
     def validate(self) -> bool:
         self._service.mark_user_claimed_paid(self._order, note="user clicked paid button")
         QApplication.clipboard().setText(self._service.support_summary(self._order))
+        self._service.send_order(self._order, on_failure=self._on_notify_failed)
         self.user_paid.emit(self._order)
         return True
+
+    def _on_notify_failed(self, error: str):
+        QMetaObject.invokeMethod(
+            self,
+            "_emit_notify_failed",
+            Qt.QueuedConnection,
+            Q_ARG(str, error),
+        )
+
+    def _emit_notify_failed(self, error: str):
+        self.notify_failed.emit(error)
 
     def reject(self):
         self._service.cancel(self._order)
@@ -194,6 +207,7 @@ class PaymentDialog(MessageBoxBase):
 
 class AutoAuthWidget(QWidget):
     order_claimed = Signal(object)
+    notify_failed = Signal(str)
     UNIT_DAY = 0
     UNIT_YEAR = 1
 
@@ -376,4 +390,5 @@ class AutoAuthWidget(QWidget):
 
         dialog = PaymentDialog(self._service, order, self.window())
         dialog.user_paid.connect(self.order_claimed.emit)
+        dialog.notify_failed.connect(self.notify_failed.emit)
         dialog.exec()

@@ -95,6 +95,8 @@ class FetchLicenseWidget(QWidget):
         self._panel_stack.addWidget(self._build_auto_panel())
         self._panel_stack.addWidget(self._build_manual_panel())
         card_layout.addWidget(self._panel_stack)
+        self._notify_warning = self._build_notify_warning()
+        card_layout.addWidget(self._notify_warning)
         self._toast = self._build_toast()
         card_layout.addWidget(self._toast)
         card_layout.addLayout(self._build_footer())
@@ -493,6 +495,73 @@ class FetchLicenseWidget(QWidget):
         )
         toast.hide()
         return toast
+
+    def _build_notify_warning(self) -> QFrame:
+        banner = QFrame(self)
+        banner.setObjectName("notifyWarning")
+        banner.setStyleSheet(
+            "QFrame#notifyWarning { background: #fff1f2;"
+            " border: 1px solid #fecaca; border-radius: 8px; }"
+        )
+        layout = QHBoxLayout(banner)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(8)
+
+        icon = QLabel("❗")
+        setFont(icon, 13)
+        icon.setAlignment(Qt.AlignTop)
+        layout.addWidget(icon, 0, Qt.AlignTop)
+
+        text_col = QVBoxLayout()
+        text_col.setContentsMargins(0, 0, 0, 0)
+        text_col.setSpacing(3)
+
+        self._notify_warning_title = QLabel(self.tr("⚠️ 通知发送失败，作者可能未收到付款信息"))
+        setFont(self._notify_warning_title, 11, QFont.Bold)
+        self._notify_warning_title.setStyleSheet("color: #b91c1c;")
+        self._notify_warning_title.setWordWrap(True)
+        text_col.addWidget(self._notify_warning_title)
+
+        self._notify_warning_detail = QLabel()
+        setFont(self._notify_warning_detail, 10)
+        self._notify_warning_detail.setStyleSheet("color: #dc2626;")
+        self._notify_warning_detail.setWordWrap(True)
+        text_col.addWidget(self._notify_warning_detail)
+
+        hint = QLabel(self.tr("请联系作者并发送订单号（已复制到剪贴板） QQ群: 1080076113。"))
+        setFont(hint, 10)
+        hint.setStyleSheet("color: #7f1d1d;")
+        hint.setWordWrap(True)
+        text_col.addWidget(hint)
+
+        layout.addLayout(text_col, 1)
+
+        dismiss_btn = QPushButton(self.tr("知道了"))
+        setFont(dismiss_btn, 10)
+        dismiss_btn.setFixedHeight(26)
+        dismiss_btn.setCursor(Qt.PointingHandCursor)
+        dismiss_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: #fee2e2; color: #b91c1c;
+                border: 1px solid #fca5a5; border-radius: 5px;
+                padding: 0 10px;
+            }}
+            QPushButton:hover {{ background: #fecaca; }}
+            QPushButton:pressed {{ background: #fca5a5; }}
+        """)
+        dismiss_btn.clicked.connect(banner.hide)
+        layout.addWidget(dismiss_btn, 0, Qt.AlignTop)
+
+        banner.hide()
+        return banner
+
+    def show_notify_warning(self, error: str = ""):
+        if error:
+            self._notify_warning_detail.setText(self.tr(f"失败原因：{error}"))
+            self._notify_warning_detail.show()
+        else:
+            self._notify_warning_detail.hide()
+        self._notify_warning.show()
 
     def _build_footer(self) -> QHBoxLayout:
         row = QHBoxLayout()

@@ -332,11 +332,16 @@ class LicenseView(QWidget):
         self.auto_auth_widget.price_updated.connect(self._refresh_better_deal)
         self._refresh_better_deal()
         self.auto_auth_widget.order_claimed.connect(self._on_order_claimed)
+        self.auto_auth_widget.notify_failed.connect(self._on_notify_failed)
         return section
 
     def _on_order_claimed(self, order):
         if hasattr(self, "fetch_license_widget"):
             self.fetch_license_widget.start_polling(order)
+
+    def _on_notify_failed(self, error: str):
+        if hasattr(self, "fetch_license_widget"):
+            self.fetch_license_widget.show_notify_warning(error)
 
     def _create_auto_auth_header(self) -> QHBoxLayout:
         row = QHBoxLayout()

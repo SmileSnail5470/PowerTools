@@ -2,6 +2,7 @@ import json
 import hashlib
 import logging
 import os
+import requests 
 import pathlib
 import secrets
 import threading
@@ -12,6 +13,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 import app.library._machine_id as machine_id
+from huggingface_hub import hf_hub_download, HfApi
 
 logger = logging.getLogger("License")
 
@@ -341,14 +343,121 @@ class LicenseIssuer(ABC):
 
 
 class DefaultPaymentVerifier(PaymentVerifier):
-    """查询授权文件是否已经存在，如果存在认为支付成功"""
+    """支付校验默认实现：无自动验证通道，返回 UNAVAILABLE, 让 poll() 直接尝试授权文件下发。"""
+    REASON = "支付校验通道未接入，请联系作者手动核对"
+
     def query(self, order: AuthOrder) -> PaymentResult:
         return PaymentResult(status=PaymentStatus.UNAVAILABLE, message=self.REASON)
 
 
 class DefaultLicenseIssuer(LicenseIssuer):
+    HF_REPO_ID = "SmailSnail/PowerToolsLicense"
+    HF_REPO_TYPE = "model"
+    HF_TIMEOUT = 30
+    REASON = "授权文件下发通道未接入，请联系作者手动签发"
+
     def fetch(self, order: AuthOrder) -> IssueResult:
-        return IssueResult(available=False, message=self.REASON)
+        path_in_repo = f"{order.machine_id}/{order.order_id}.lic"
+        try:
+            api = HfApi()
+            try:
+                info = api.repo_info(repo_id=self.HF_REPO_ID, repo_type=self.HF_REPO_TYPE)
+                existing_paths = {sibling.rfilename for sibling in (info.siblings or [])}
+            except Exception as e:
+                logger.warning(f"[HF] Failed to list repo files: {e}")
+                return IssueResult(available=False, message=f"无法访问授权仓库：{e}")
+            if path_in_repo not in existing_paths:
+                return IssueResult(available=False, message="授权文件尚未生成，请稍候（作者核对后将上传）…")
+            local_path = hf_hub_download(
+                repo_id=self.HF_REPO_ID,
+                filename=path_in_repo,
+                repo_type=self.HF_REPO_TYPE,
+            )
+            with open(local_path, "r", encoding="utf-8") as f:
+                license_text = f.read()
+            if not license_text.strip():
+                return IssueResult(available=False, message="授权文件内容为空，请联系作者")
+            logger.info(f"[HF] License fetched successfully for {order.order_id}")
+            return IssueResult(
+                available=True,
+                license_text=license_text,
+                license_id=order.order_id,
+                message="授权文件获取成功",
+            )
+        except Exception as e:
+            logger.warning(f"[HF] Unexpected error fetching license for {order.order_id}: {e}")
+            return IssueResult(available=False, message=f"获取授权文件时发生错误：{e}")
+
+
+class WeChatWorkNotifier:
+    WECHAT_WEBHOOK_URL = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=cf0d6142-5388-4cee-8b82-a72698775518"
+    WECHAT_TIMEOUT = 10
+
+    def __init__(self, webhook_url: str = WECHAT_WEBHOOK_URL):
+        self._webhook_url = webhook_url
+
+    def notify_order(self, order, extra: str = "", on_result: "Optional[callable]" = None) -> None:
+        message = self._build_message(order, extra)
+        thread = threading.Thread(
+            target=self._send,
+            args=(message, on_result),
+            daemon=True,
+            name=f"wechat-notify-{order.order_id}",
+        )
+        thread.start()
+
+    def _build_message(self, order, extra: str) -> str:
+        status_map = {
+            "user_claimed": "💰 用户声明已付款，等待核对",
+            "waiting_payment": "⏳ 等待到账",
+            "paid": "✅ 已确认到账",
+            "issued": "📄 授权文件已签发",
+            "activated": "🎉 已在本机激活",
+            "cancelled": "❌ 已取消",
+        }
+        status_text = status_map.get(order.status, order.status)
+        lines = [
+            "## 🔔 PowerTools 授权订单通知",
+            "",
+            f"> **订单号**: `{order.order_id}`",
+            f"> **设备标识码**: `{order.machine_id}`",
+            f"> **授权天数**: {order.days} 天",
+            f"> **支付金额**: ¥{order.amount_text}",
+            f"> **下单时间**: {order.created_at}",
+            f"> **当前状态**: {status_text}",
+        ]
+        if extra:
+            lines.append(f"> **备注**: {extra}")
+        return "\n".join(lines)
+
+    def _send(self, content: str, on_result: "Optional[callable]") -> None:
+        success = False
+        error = ""
+        try:
+            payload = {
+                "msgtype": "markdown",
+                "markdown": {"content": content},
+            }
+            resp = requests.post(self._webhook_url, json=payload, timeout=self.WECHAT_TIMEOUT)
+            if resp.status_code == 200:
+                result = resp.json()
+                if result.get("errcode") == 0:
+                    logger.info("[WeChat] Notification sent successfully")
+                    success = True
+                else:
+                    error = f"API 返回错误: errcode={result.get('errcode')} errmsg={result.get('errmsg')}"
+                    logger.warning(f"[WeChat] {error}")
+            else:
+                error = f"HTTP {resp.status_code}"
+                logger.warning(f"[WeChat] {error}: {resp.text}")
+        except Exception as e:
+            error = str(e)
+            logger.warning(f"[WeChat] Failed to send notification: {e}")
+        if on_result is not None:
+            try:
+                on_result(success, error)
+            except Exception as e:
+                logger.warning(f"[WeChat] on_result callback raised: {e}")
 
 
 class AuthStage(str, Enum):
@@ -369,7 +478,7 @@ class AuthProgress:
 
 
 class AutoAuthService:
-    ORDER_TTL_SECONDS = 30 * 60
+    ORDER_TTL_SECONDS = 10 * 60
 
     def __init__(
         self,
@@ -378,12 +487,13 @@ class AutoAuthService:
         verifier: Optional[PaymentVerifier] = None,
         issuer: Optional[LicenseIssuer] = None,
         policy=PricingPolicy,
-        app_version: str = "",
+        app_version: str = os.environ["POWERTOOLS_VERSION"],
     ):
         self._license_manager = license_manager
         self._store = store or AuthOrderStore()
         self._verifier = verifier or DefaultPaymentVerifier()
         self._issuer = issuer or DefaultLicenseIssuer()
+        self._notifier = WeChatWorkNotifier()
         self._policy = policy
         self._app_version = app_version
 
@@ -427,6 +537,24 @@ class AutoAuthService:
         logger.info(f"Auth order created: {order.order_id} days={order.days} amount={order.amount_text}")
         return order
 
+    def send_order(self, order: AuthOrder, on_failure=None):
+        def _on_result(success: bool, error: str):
+            if not success:
+                logger.warning(f"Order notification failed for {order.order_id}: {error}")
+                if on_failure is not None:
+                    on_failure(error)
+        try:
+            self._notifier.notify_order(
+                order,
+                extra="用户声明已完成支付，请核对到账情况并签发授权文件",
+                on_result=_on_result,
+            )
+            logger.info(f"Order notification dispatched: {order.order_id}")
+        except Exception as e:
+            logger.warning(f"Failed to dispatch order notification: {e}")
+            if on_failure is not None:
+                on_failure(str(e))
+
     def mark_waiting_payment(self, order: AuthOrder) -> AuthOrder:
         order.status = OrderStatus.WAITING_PAYMENT.value
         return self._store.save(order, event="payment_qr_shown", channel=order.channel)
@@ -462,7 +590,14 @@ class AutoAuthService:
         if order.status not in (OrderStatus.PAID.value, OrderStatus.ISSUING.value, OrderStatus.ISSUED.value):
             result = self._query_payment(order)
             if result.status == PaymentStatus.UNAVAILABLE:
-                return AuthProgress(AuthStage.UNAVAILABLE, result.message, order=order)
+                # 支付校验通道不可用（人工核对场景）：
+                # 跳过支付验证，直接尝试拉取授权文件。
+                # 若 LicenseIssuer 查到文件说明作者已核对并签发，视为付款确认。
+                order.status = OrderStatus.PAID.value
+                order.paid_at = _now_iso()
+                order.transaction_id = result.transaction_id
+                self._store.save(order, event="payment_confirmed", transaction_id=result.transaction_id)
+                return self._issue_and_activate(order)
             if result.status == PaymentStatus.PENDING:
                 return AuthProgress(AuthStage.WAITING, result.message or "等待自动下发文件...", order=order)
             if result.status in (PaymentStatus.FAILED, PaymentStatus.EXPIRED):
@@ -498,14 +633,12 @@ class AutoAuthService:
         except Exception as e:
             logger.warning(f"License fetch failed for {order.order_id}: {e}")
             return AuthProgress(AuthStage.UNAVAILABLE, f"许可证下发暂时不可用：{e}", order=order)
-
         if not issue.available or not issue.license_text:
             return AuthProgress(
                 AuthStage.PAID,
                 issue.message or "支付已确认，许可证正在签发，请稍候...",
                 order=order,
             )
-
         try:
             path = self.deliver_license(order, issue.license_text, license_id=issue.license_id)
         except Exception as e:
