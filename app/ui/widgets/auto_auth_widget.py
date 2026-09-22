@@ -1,16 +1,16 @@
 from decimal import Decimal
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QFrame, QApplication, QSizePolicy,
     QPushButton
 )
 from app.ui.library.qfluentwidgets import (
-    setFont, SpinBox, ComboBox, MessageBoxBase, IndeterminateProgressRing,
+    setFont, SpinBox, ComboBox, MessageBoxBase,
     TeachingTip, InfoBarIcon, TeachingTipTailPosition
 )
 from app.ui.resources import resource
-from app.license.auto_auth import AutoAuthService, AuthOrder, AuthStage, PricingTier, money_text
+from app.license.auto_auth import AutoAuthService, AuthOrder, PricingTier, money_text
 
 
 PRIMARY = "#6366f1"
@@ -100,22 +100,13 @@ class TierCard(QFrame):
 
 
 class PaymentDialog(MessageBoxBase):
-    POLL_INTERVAL_MS = 3000
-    license_activated = Signal(str)
+    user_paid = Signal(object)
 
     def __init__(self, service: AutoAuthService, order: AuthOrder, parent=None):
         super().__init__(parent)
         self._service = service
         self._order = order
-        self._finished = False
-
         self._setup_ui()
-
-        self._timer = QTimer(self)
-        self._timer.setInterval(self.POLL_INTERVAL_MS)
-        self._timer.timeout.connect(self._poll)
-        self._timer.start()
-        QTimer.singleShot(100, self._poll)
 
     def _setup_ui(self):
         self.widget.setMinimumWidth(512)
@@ -154,20 +145,12 @@ class PaymentDialog(MessageBoxBase):
         tip.setStyleSheet(f"color: {TEXT_SUB};")
         self.viewLayout.addWidget(tip)
 
-        status_row = QHBoxLayout()
-        status_row.setSpacing(8)
-        status_row.addStretch()
-        self.spinner = IndeterminateProgressRing(self)
-        self.spinner.setFixedSize(16, 16)
-        self.spinner.setStrokeWidth(3)
-        status_row.addWidget(self.spinner)
-        self.status_label = QLabel(self.tr("等待扫码支付，完成后自动下发文件..."))
-        setFont(self.status_label, 12)
-        # self.status_label.setWordWrap(True)
-        self.status_label.setStyleSheet(f"color: {TEXT_SUB};")
-        status_row.addWidget(self.status_label)
-        status_row.addStretch()
-        self.viewLayout.addLayout(status_row)
+        hint = QLabel(self.tr("💡 付款完成后，点击「我已完成支付」关闭此窗口，右侧「获取授权文件」组件将自动查询并下发授权文件。"))
+        setFont(hint, 11)
+        hint.setWordWrap(True)
+        hint.setAlignment(Qt.AlignCenter)
+        hint.setStyleSheet(f"color: {WARNING}; font-weight: 600;")
+        self.viewLayout.addWidget(hint)
 
         self.yesButton.setText(self.tr("我已完成支付"))
         self.cancelButton.setText(self.tr("取消并返回"))
@@ -199,63 +182,18 @@ class PaymentDialog(MessageBoxBase):
         layout.addWidget(caption)
         return card
 
-    def _poll(self):
-        if self._finished:
-            return
-        progress = self._service.poll(self._order)
-        if progress.order is not None:
-            self._order = progress.order
-
-        if progress.stage == AuthStage.ISSUED:
-            self._set_status(progress.message or self.tr("支付成功！授权文件已生成"), SUCCESS, spinning=False)
-            self._finished = True
-            self._timer.stop()
-            self.license_activated.emit(progress.license_path)
-            QTimer.singleShot(1200, self.accept)
-        elif progress.stage == AuthStage.PAID:
-            self._set_status(progress.message, PRIMARY)
-        elif progress.stage == AuthStage.WAITING:
-            self._set_status(progress.message, TEXT_SUB)
-        elif progress.stage == AuthStage.UNAVAILABLE:
-            self._timer.stop()
-            self._set_status(
-                self.tr("付款后请点击「我已完成支付」，订单号与设备码会自动复制并发送给作者，等待作者签发。"),
-                WARNING,
-                spinning=False,
-            )
-        elif progress.stage == AuthStage.TIMEOUT:
-            self._timer.stop()
-            self._set_status(progress.message or self.tr("订单已超时关闭，请重新下单"), DANGER, spinning=False)
-        else:
-            self._timer.stop()
-            self._set_status(progress.message or self.tr("支付未完成"), DANGER, spinning=False)
-
-    def _set_status(self, text: str, color: str, spinning: bool = True):
-        self.status_label.setText(text)
-        self.status_label.setStyleSheet(f"color: {color}; font-weight: 600;" if color != TEXT_SUB else f"color: {TEXT_SUB};")
-        self.spinner.setVisible(spinning)
-
     def validate(self) -> bool:
-        if self._finished:
-            return True
         self._service.mark_user_claimed_paid(self._order, note="user clicked paid button")
         QApplication.clipboard().setText(self._service.support_summary(self._order))
-        self._set_status(
-            self.tr("已记录支付声明，对账信息已复制到剪贴板。核对通过后将自动下发授权文件。"),
-            PRIMARY,
-            spinning=self._timer.isActive(),
-        )
-        return False
+        self.user_paid.emit(self._order)
+        return True
 
     def reject(self):
-        self._timer.stop()
-        if not self._finished:
-            self._service.cancel(self._order)
+        self._service.cancel(self._order)
         super().reject()
 
-
 class AutoAuthWidget(QWidget):
-    license_activated = Signal(str)
+    order_claimed = Signal(object)
     UNIT_DAY = 0
     UNIT_YEAR = 1
 
@@ -437,5 +375,5 @@ class AutoAuthWidget(QWidget):
             return
 
         dialog = PaymentDialog(self._service, order, self.window())
-        dialog.license_activated.connect(self.license_activated.emit)
+        dialog.user_paid.connect(self.order_claimed.emit)
         dialog.exec()

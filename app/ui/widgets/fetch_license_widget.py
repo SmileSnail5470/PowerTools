@@ -1,10 +1,9 @@
 from datetime import datetime
-
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QPushButton, QStackedWidget, QLineEdit
 from app.ui.library.qfluentwidgets import setFont, IndeterminateProgressRing
-from app.license.auto_auth import AutoAuthService, AuthOrder, AuthStage
+from app.license.auto_auth import AutoAuthService, AuthOrder, AuthStage, OrderStatus
 import app.library._machine_id as machine_id
 
 
@@ -55,6 +54,7 @@ class FetchLicenseWidget(QWidget):
     _AUTO_QUERYING = 0
     _AUTO_STOPPED = 1
     _AUTO_FOUND = 2
+    _AUTO_IDLE = 3
 
     def __init__(self, service: AutoAuthService, parent: QWidget | None = None):
         super().__init__(parent)
@@ -66,6 +66,7 @@ class FetchLicenseWidget(QWidget):
         self._poll_timer.timeout.connect(self._do_poll)
 
         self._setup_ui()
+        self._init_state()
 
     def start_polling(self, order: AuthOrder | None = None):
         if order is not None:
@@ -171,6 +172,7 @@ class FetchLicenseWidget(QWidget):
         self._auto_stack.addWidget(self._build_querying_state())
         self._auto_stack.addWidget(self._build_stopped_state())
         self._auto_stack.addWidget(self._build_found_state())
+        self._auto_stack.addWidget(self._build_idle_state())
         layout.addWidget(self._auto_stack)
 
         self._btn_download = QPushButton("⬇️  " + self.tr("激活授权文件 (.lic)"))
@@ -267,15 +269,17 @@ class FetchLicenseWidget(QWidget):
         layout = QHBoxLayout(w)
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(12)
+        layout.setAlignment(Qt.AlignVCenter)
 
         icon = QLabel("⏸️")
         setFont(icon, 20)
         icon.setFixedSize(36, 36)
         icon.setAlignment(Qt.AlignCenter)
         icon.setStyleSheet("QLabel { background: #fef3c7; border-radius: 8px; }")
-        layout.addWidget(icon)
+        layout.addWidget(icon, 0, Qt.AlignVCenter)
 
         text_col = QVBoxLayout()
+        text_col.setContentsMargins(0, 0, 0, 0)
         text_col.setSpacing(2)
         title = QLabel(self.tr("已停止自动查询"))
         setFont(title, 12, QFont.Bold)
@@ -285,7 +289,10 @@ class FetchLicenseWidget(QWidget):
         setFont(sub, 10)
         sub.setStyleSheet(f"color: {TEXT_SECONDARY};")
         text_col.addWidget(sub)
-        layout.addLayout(text_col, 1)
+
+        text_wrapper = QWidget()
+        text_wrapper.setLayout(text_col)
+        layout.addWidget(text_wrapper, 1, Qt.AlignVCenter)
 
         restart_btn = QPushButton(self.tr("重新开启"))
         setFont(restart_btn, 11)
@@ -302,6 +309,37 @@ class FetchLicenseWidget(QWidget):
         """)
         restart_btn.clicked.connect(self._restart_auto_query)
         layout.addWidget(restart_btn, 0, Qt.AlignVCenter)
+        return w
+
+    def _build_idle_state(self) -> QWidget:
+        w = QFrame(self)
+        w.setObjectName("stateIdle")
+        w.setStyleSheet(
+            f"QFrame#stateIdle {{ background: {SUBTLE_BG}; border: 1px solid {BORDER};"
+            f" border-radius: 10px; }}"
+        )
+        layout = QVBoxLayout(w)
+        layout.setContentsMargins(16, 20, 16, 20)
+        layout.setSpacing(10)
+        layout.setAlignment(Qt.AlignCenter)
+
+        icon = QLabel("🕐")
+        setFont(icon, 28)
+        icon.setAlignment(Qt.AlignCenter)
+        layout.addWidget(icon)
+
+        title = QLabel(self.tr("等待授权申请完成"))
+        setFont(title, 12, QFont.Bold)
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet(f"color: {TEXT_PRIMARY};")
+        layout.addWidget(title)
+
+        sub = QLabel(self.tr("请先在左侧「自动授权服务」中发起订单并完成支付，\n授权文件将自动出现在这里。"))
+        setFont(sub, 10)
+        sub.setWordWrap(True)
+        sub.setAlignment(Qt.AlignCenter)
+        sub.setStyleSheet(f"color: {TEXT_SECONDARY};")
+        layout.addWidget(sub)
         return w
 
     def _build_found_state(self) -> QWidget:
@@ -435,7 +473,7 @@ class FetchLicenseWidget(QWidget):
 
         self._manual_result_text = QLabel(self.tr("输入订单号并点击「查询」即可直接绑定获取文件"))
         setFont(self._manual_result_text, 11)
-        self._manual_result_text.setWordWrap(True)
+        self._manual_result_text.setWordWrap(False)
         self._manual_result_text.setAlignment(Qt.AlignCenter)
         self._manual_result_text.setStyleSheet(f"color: {TEXT_SECONDARY};")
         result_layout.addWidget(self._manual_result_text)
@@ -468,6 +506,43 @@ class FetchLicenseWidget(QWidget):
         row.addStretch()
         return row
 
+    def _init_state(self):
+        last_issued = self._find_last_issued_order()
+        if last_issued is not None:
+            self._current_order = last_issued
+            self._fill_found_labels(last_issued)
+            self._state = self._STATE_FOUND
+            self._auto_stack.setCurrentIndex(self._AUTO_FOUND)
+            self._set_badge_ready()
+            self._set_download_enabled()
+        else:
+            self._state = self._STATE_STOPPED
+            self._auto_stack.setCurrentIndex(self._AUTO_IDLE)
+            self._set_badge_paused()
+            self._set_download_disabled()
+
+    def _find_last_issued_order(self) -> "AuthOrder | None":
+        for order in self._service.store.list_orders():
+            if order.status in (OrderStatus.ISSUED.value, OrderStatus.ACTIVATED.value):
+                return order
+        return None
+
+    def _fill_found_labels(self, order: "AuthOrder"):
+        self._found_order_id_label.setText(order.order_id)
+        tier_name = order.tier_key
+        for tier in self._service.tiers:
+            if tier.key == order.tier_key:
+                tier_name = tier.name
+                break
+        self._found_spec_label.setText(f"{order.days} 天  ·  {tier_name}")
+        ts_raw = order.issued_at or order.activated_at or order.created_at
+        try:
+            ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+            ts_str = ts.strftime("%Y-%m-%d %H:%M")
+        except Exception:
+            ts_str = ts_raw
+        self._found_time_label.setText(ts_str)
+
     def _restart_auto_query(self):
         self._state = self._STATE_QUERYING
         self._poll_timer.start()
@@ -489,10 +564,7 @@ class FetchLicenseWidget(QWidget):
         self._current_order = order
         self._poll_timer.stop()
 
-        self._found_order_id_label.setText(order.order_id)
-        spec = f"{order.days} 天  {order.tier_key}"
-        self._found_spec_label.setText(spec)
-        self._found_time_label.setText(datetime.now().strftime("%Y-%m-%d %H:%M"))
+        self._fill_found_labels(order)
 
         self._auto_stack.setCurrentIndex(self._AUTO_FOUND)
         self._set_badge_ready()

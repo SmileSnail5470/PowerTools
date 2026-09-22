@@ -309,7 +309,6 @@ class LicenseView(QWidget):
 
     def _create_auto_auth_section(self) -> QWidget:
         self.auto_auth_widget = MultiUnitAutoAuthWidget(self._auto_auth_service, self)
-        self.auto_auth_widget.license_activated.connect(self._on_license_activated)
         self.auto_auth_widget.hide()
 
         section = QWidget()
@@ -332,14 +331,12 @@ class LicenseView(QWidget):
 
         self.auto_auth_widget.price_updated.connect(self._refresh_better_deal)
         self._refresh_better_deal()
-        self.auto_auth_widget.checkout_btn.clicked.connect(self._start_fetch_polling)
+        self.auto_auth_widget.order_claimed.connect(self._on_order_claimed)
         return section
 
-    def _start_fetch_polling(self):
-        if not hasattr(self, "fetch_license_widget"):
-            return
-        order = self._auto_auth_service.store.find_open_order()
-        self.fetch_license_widget.start_polling(order)
+    def _on_order_claimed(self, order):
+        if hasattr(self, "fetch_license_widget"):
+            self.fetch_license_widget.start_polling(order)
 
     def _create_auto_auth_header(self) -> QHBoxLayout:
         row = QHBoxLayout()
