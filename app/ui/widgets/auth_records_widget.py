@@ -100,7 +100,7 @@ class AuthRecordsWidget(QWidget):
 
     records_changed = Signal()
 
-    COLUMNS = ("", "订单号", "下单时间", "授权时间", "时长", "订单状态", "金额")
+    COLUMNS = ("", "订单号", "下单时间", "激活时间", "时长", "订单状态", "金额")
     CHECK_COLUMN = 0
 
     def __init__(self, service: AutoAuthService, parent=None):
@@ -238,7 +238,7 @@ class AuthRecordsWidget(QWidget):
             check_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, self.CHECK_COLUMN, check_item)
 
-            authorized_at = order.activated_at or order.issued_at or order.paid_at
+            authorized_at = order.activated_at
             values = (
                 order.order_id,
                 local_time_text(order.created_at),

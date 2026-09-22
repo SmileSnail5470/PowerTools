@@ -2,6 +2,7 @@ import json
 import hashlib
 import logging
 import os
+import shutil
 import requests 
 import pathlib
 import secrets
@@ -355,38 +356,73 @@ class DefaultLicenseIssuer(LicenseIssuer):
     HF_REPO_TYPE = "model"
     HF_TIMEOUT = 30
     REASON = "授权文件下发通道未接入，请联系作者手动签发"
+    HF_ENDPOINTS = (
+        "https://hf-mirror.com",
+        "https://huggingface.co",
+    )
 
-    def fetch(self, order: AuthOrder) -> IssueResult:
-        path_in_repo = f"{order.machine_id}/{order.order_id}.lic"
-        try:
-            api = HfApi()
-            try:
-                info = api.repo_info(repo_id=self.HF_REPO_ID, repo_type=self.HF_REPO_TYPE)
-                existing_paths = {sibling.rfilename for sibling in (info.siblings or [])}
-            except Exception as e:
-                logger.warning(f"[HF] Failed to list repo files: {e}")
-                return IssueResult(available=False, message=f"无法访问授权仓库：{e}")
-            if path_in_repo not in existing_paths:
+    def fetch(self, order: AuthOrder, on_result: "Optional[callable]" = None) -> IssueResult:
+        thread = threading.Thread(
+            target=self._fetch,
+            args=(order, on_result),
+            daemon=True,
+            name=f"license-issuer-{order.order_id}",
+        )
+        thread.start()
+
+    def _fetch(self, order: AuthOrder, on_result: "Optional[callable]" = None) -> IssueResult:
+        filename = f"{order.machine_id}/{order.order_id}.lic"
+        per_try_timeout = self.HF_TIMEOUT / 2
+        last_err = None
+        res = None
+        for _, endpoint in enumerate(self.HF_ENDPOINTS, 1):
+            ok, err, local_path = self._download_via_endpoint(
+                endpoint=endpoint,
+                filename=filename,
+                timeout=per_try_timeout,
+            )
+            if ok:
+                with open(local_path, "r", encoding="utf-8") as f:
+                    license_text = f.read()
+                    license_json_data = json.load(f)
+                os.remove(local_path)
+                if not license_text.strip():
+                    return IssueResult(available=False, message="授权文件内容为空，请联系作者")
+                logger.info(f"[HF] License fetched successfully for {order.order_id}")
+                return IssueResult(
+                    available=True,
+                    license_text=license_text,
+                    license_id=license_json_data.get("license_id", ""),
+                    message="授权文件获取成功",
+                )
+            if err == "not_found":
                 return IssueResult(available=False, message="授权文件尚未生成，请稍候（作者核对后将上传）…")
+            last_err = err
+            logger.warning(f"[HF] 通过 {endpoint} 下载失败: {err}")
+        return IssueResult(available=False, message=f"获取授权文件时发生错误：{last_err}")
+
+    @classmethod
+    def _download_via_endpoint(cls, endpoint: str, filename: str, timeout: float):
+        box: dict = {}
+        try:
+            api = HfApi(endpoint=endpoint)
+            info = api.repo_info(repo_id=cls.HF_REPO_ID, repo_type=cls.HF_REPO_TYPE, timeout=timeout)
+            existing_paths = {s.rfilename for s in (info.siblings or [])}
+            if filename not in existing_paths:
+                box["err"] = "not_found"
+                return
             local_path = hf_hub_download(
-                repo_id=self.HF_REPO_ID,
-                filename=path_in_repo,
-                repo_type=self.HF_REPO_TYPE,
+                repo_id=cls.HF_REPO_ID,
+                filename=filename,
+                repo_type=cls.HF_REPO_TYPE,
+                endpoint=endpoint,
             )
-            with open(local_path, "r", encoding="utf-8") as f:
-                license_text = f.read()
-            if not license_text.strip():
-                return IssueResult(available=False, message="授权文件内容为空，请联系作者")
-            logger.info(f"[HF] License fetched successfully for {order.order_id}")
-            return IssueResult(
-                available=True,
-                license_text=license_text,
-                license_id=order.order_id,
-                message="授权文件获取成功",
-            )
+            box["path"] = local_path
         except Exception as e:
-            logger.warning(f"[HF] Unexpected error fetching license for {order.order_id}: {e}")
-            return IssueResult(available=False, message=f"获取授权文件时发生错误：{e}")
+            box["err"] = str(e)
+        if "path" in box:
+            return True, None, box["path"]
+        return False, box.get("err", "unknown error"), None
 
 
 class WeChatWorkNotifier:
@@ -419,15 +455,15 @@ class WeChatWorkNotifier:
         lines = [
             "## 🔔 PowerTools 授权订单通知",
             "",
-            f"> **订单号**: `{order.order_id}`",
-            f"> **设备标识码**: `{order.machine_id}`",
-            f"> **授权天数**: {order.days} 天",
-            f"> **支付金额**: ¥{order.amount_text}",
-            f"> **下单时间**: {order.created_at}",
-            f"> **当前状态**: {status_text}",
+            f"> **订单号**: <font color=\"info\">{order.order_id}</font>",
+            f"> **设备标识码**: <font color=\"info\">{order.machine_id}</font>",
+            f"> **授权天数**: <font color=\"info\">{order.days} 天</font>",
+            f"> **支付金额**: <font color=\"info\">¥{order.amount_text}</font>",
+            f"> **下单时间**: <font color=\"info\">{order.created_at}</font>",
+            f"> **当前状态**: <font color=\"warning\">{status_text}</font>",
         ]
         if extra:
-            lines.append(f"> **备注**: {extra}")
+            lines.append(f"> **备注**: <font color=\"comment\">{extra}</font>")
         return "\n".join(lines)
 
     def _send(self, content: str, on_result: "Optional[callable]") -> None:
@@ -634,11 +670,7 @@ class AutoAuthService:
             logger.warning(f"License fetch failed for {order.order_id}: {e}")
             return AuthProgress(AuthStage.UNAVAILABLE, f"许可证下发暂时不可用：{e}", order=order)
         if not issue.available or not issue.license_text:
-            return AuthProgress(
-                AuthStage.PAID,
-                issue.message or "支付已确认，许可证正在签发，请稍候...",
-                order=order,
-            )
+            return AuthProgress(AuthStage.PAID,  issue.message or "支付已确认，许可证正在签发，请稍候...", order=order)
         try:
             path = self.deliver_license(order, issue.license_text, license_id=issue.license_id)
         except Exception as e:
@@ -650,6 +682,8 @@ class AutoAuthService:
 
     def license_inbox_dir(self) -> str:
         path = os.path.join(self._store.base_dir, "issued")
+        if os.path.exists(path):
+            shutil.rmtree(path)
         os.makedirs(path, exist_ok=True)
         return path
 
@@ -667,16 +701,16 @@ class AutoAuthService:
             license_id=license_id,
             sha256=hashlib.sha256(license_text.encode("utf-8")).hexdigest(),
         )
+        return path
 
+    def update_license_activated(self, order: AuthOrder):
+        order.status = OrderStatus.ACTIVATED.value
+        order.activated_at = _now_iso()
         if self._license_manager is not None:
-            self._license_manager.activate(path)
-            order.status = OrderStatus.ACTIVATED.value
-            order.activated_at = _now_iso()
             data = getattr(self._license_manager, "license_data", None)
             if data is not None and getattr(data, "license_id", ""):
                 order.license_id = data.license_id
-            self._store.save(order, event="license_activated", license_id=order.license_id)
-        return path
+        self._store.save(order, event="license_activated", license_id=order.license_id)
 
     def support_summary(self, order: AuthOrder) -> str:
         return (

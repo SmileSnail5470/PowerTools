@@ -709,6 +709,7 @@ class FetchLicenseWidget(QWidget):
         license_path = getattr(order, "license_path", "")
         if license_path:
             self.license_activated.emit(license_path)
+            self._service.update_license_activated(order=order)
             self._show_toast(self.tr("许可证已激活！"))
         else:
             self._show_toast(self.tr("未找到授权文件路径，请联系开发者。"))
