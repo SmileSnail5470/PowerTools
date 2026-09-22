@@ -9,6 +9,7 @@ from app.ui.library.qfluentwidgets import (
 from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.license_widget import LicenseWidget, LicenseDropZone
 from app.ui.widgets.auto_auth_widget import AutoAuthWidget
+from app.ui.widgets.fetch_license_widget import FetchLicenseWidget
 from app.ui.widgets.auth_records_widget import AuthRecordsWidget
 from app.ui.widgets.custom_card_group_widget import CustomGroupBox
 from app.license.license_manager import LicenseManager
@@ -167,9 +168,19 @@ class LicenseView(QWidget):
         license_group.addCard(card=self._create_license_section())
         content_layout.addWidget(license_group)
 
+        auth_row = QHBoxLayout()
+        auth_row.setContentsMargins(0, 0, 0, 0)
+        auth_row.setSpacing(SPACING_MD)
+
         auto_auth_group = CustomGroupBox(title=self.tr("⚡ 自动授权服务"))
         auto_auth_group.addCard(card=self._create_auto_auth_section())
-        content_layout.addWidget(auto_auth_group)
+        auth_row.addWidget(auto_auth_group, 5)
+
+        fetch_license_group = CustomGroupBox(title=self.tr("📥 获取授权文件"))
+        fetch_license_group.addCard(card=self._create_fetch_license_section())
+        auth_row.addWidget(fetch_license_group, 3)
+
+        content_layout.addLayout(auth_row)
 
         records_group = CustomGroupBox(title=self.tr("🧾 授权记录"))
         records_group.addCard(card=self._create_records_section())
@@ -310,11 +321,10 @@ class LicenseView(QWidget):
         layout.addLayout(self._create_pricing_grid())
         layout.addWidget(self._create_separator())
         layout.addLayout(self._create_subscription_controls())
+        layout.addStretch()
+        layout.addWidget(self._create_separator())
 
-        help_label = QLabel(self.tr(
-            "🛡️ 支付完成后自动下发与本机绑定的授权文件；每一笔订单均生成可追溯记录，"
-            "如遇异常可凭订单号申诉。"
-        ))
+        help_label = QLabel(self.tr("🛡️ 支付完成后自动下发与本机绑定的授权文件；每一笔订单均生成可追溯记录，如遇异常可凭订单号申诉。"))
         setFont(help_label, 11)
         help_label.setWordWrap(True)
         help_label.setStyleSheet(f"color: {TEXT_SECONDARY};")
@@ -322,7 +332,14 @@ class LicenseView(QWidget):
 
         self.auto_auth_widget.price_updated.connect(self._refresh_better_deal)
         self._refresh_better_deal()
+        self.auto_auth_widget.checkout_btn.clicked.connect(self._start_fetch_polling)
         return section
+
+    def _start_fetch_polling(self):
+        if not hasattr(self, "fetch_license_widget"):
+            return
+        order = self._auto_auth_service.store.find_open_order()
+        self.fetch_license_widget.start_polling(order)
 
     def _create_auto_auth_header(self) -> QHBoxLayout:
         row = QHBoxLayout()
@@ -502,6 +519,11 @@ class LicenseView(QWidget):
             self.license_widget.refresh()
             global_event_bus.License_update.emit()
         self.auth_records_widget.refresh()
+
+    def _create_fetch_license_section(self) -> QWidget:
+        self.fetch_license_widget = FetchLicenseWidget(self._auto_auth_service, self)
+        self.fetch_license_widget.license_activated.connect(self._on_license_activated)
+        return self.fetch_license_widget
 
     def _create_records_section(self) -> QWidget:
         self.auth_records_widget = AuthRecordsWidget(self._auto_auth_service, self)

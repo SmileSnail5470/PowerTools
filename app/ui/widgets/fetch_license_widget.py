@@ -1,0 +1,630 @@
+from datetime import datetime
+
+from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QPushButton, QStackedWidget, QLineEdit
+from app.ui.library.qfluentwidgets import setFont, IndeterminateProgressRing
+from app.license.auto_auth import AutoAuthService, AuthOrder, AuthStage
+import app.library._machine_id as machine_id
+
+
+PRIMARY = "#6366f1"
+PRIMARY_HOVER = "#4f46e5"
+PRIMARY_PRESSED = "#4338ca"
+SUCCESS = "#10b981"
+WARNING = "#f59e0b"
+DANGER = "#ef4444"
+CARD_BG = "#ffffff"
+SUBTLE_BG = "#f8fafc"
+HOVER_BG = "#f1f5f9"
+TEXT_PRIMARY = "#1e293b"
+TEXT_SECONDARY = "#64748b"
+BORDER = "#e2e8f0"
+RADIUS = 12
+POLL_INTERVAL_MS = 5_000
+_BADGE_POLLING = (
+    "QLabel { background: #fef3c7; color: #b45309;"
+    " border-radius: 4px; padding: 2px 7px; }"
+)
+_BADGE_PAUSED = (
+    "QLabel { background: #f1f5f9; color: #64748b;"
+    " border-radius: 4px; padding: 2px 7px; }"
+)
+_BADGE_READY = (
+    "QLabel { background: #d1fae5; color: #065f46;"
+    " border-radius: 4px; padding: 2px 7px; }"
+)
+_TAB_ACTIVE = (
+    f"QPushButton {{ background: {CARD_BG}; color: {PRIMARY};"
+    f" border: none; border-radius: 8px; padding: 6px 10px; font-weight: 600; }}"
+)
+_TAB_INACTIVE = (
+    f"QPushButton {{ background: transparent; color: {TEXT_SECONDARY};"
+    f" border: none; border-radius: 8px; padding: 6px 10px; }}"
+    f"QPushButton:hover {{ color: {TEXT_PRIMARY}; }}"
+)
+
+
+class FetchLicenseWidget(QWidget):
+    license_activated = Signal(str)
+    _STATE_QUERYING = "QUERYING"
+    _STATE_STOPPED = "STOPPED"
+    _STATE_FOUND = "FOUND"
+    _PANEL_AUTO = 0
+    _PANEL_MANUAL = 1
+    _AUTO_QUERYING = 0
+    _AUTO_STOPPED = 1
+    _AUTO_FOUND = 2
+
+    def __init__(self, service: AutoAuthService, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._service = service
+        self._state = self._STATE_STOPPED
+        self._current_order: AuthOrder | None = None
+        self._poll_timer = QTimer(self)
+        self._poll_timer.setInterval(POLL_INTERVAL_MS)
+        self._poll_timer.timeout.connect(self._do_poll)
+
+        self._setup_ui()
+
+    def start_polling(self, order: AuthOrder | None = None):
+        if order is not None:
+            self._current_order = order
+        self._switch_to_auto_panel()
+        self._restart_auto_query()
+
+    def _setup_ui(self):
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        card = QFrame(self)
+        card.setObjectName("fetchLicenseCard")
+        card.setStyleSheet(
+            f"QFrame#fetchLicenseCard {{ background: {CARD_BG};"
+            f" border: 1px solid {BORDER}; border-radius: {RADIUS}px; }}"
+        )
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(24, 22, 24, 18)
+        card_layout.setSpacing(14)
+
+        card_layout.addLayout(self._build_header())
+        card_layout.addWidget(self._build_tab_bar())
+        self._panel_stack = QStackedWidget(card)
+        self._panel_stack.addWidget(self._build_auto_panel())
+        self._panel_stack.addWidget(self._build_manual_panel())
+        card_layout.addWidget(self._panel_stack)
+        self._toast = self._build_toast()
+        card_layout.addWidget(self._toast)
+        card_layout.addLayout(self._build_footer())
+        root.addWidget(card)
+
+    def _build_header(self) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+
+        icon_label = QLabel("📄")
+        setFont(icon_label, 18)
+        icon_label.setFixedSize(32, 32)
+        icon_label.setAlignment(Qt.AlignCenter)
+        icon_label.setStyleSheet(f"QLabel {{ background: #eef2ff; border-radius: 8px; }}")
+        row.addWidget(icon_label)
+
+        title_col = QVBoxLayout()
+        title_col.setContentsMargins(0, 0, 0, 0)
+        title_col.setSpacing(2)
+
+        title = QLabel(self.tr("获取授权文件"))
+        setFont(title, 14, QFont.Bold)
+        title.setStyleSheet(f"color: {TEXT_PRIMARY};")
+        title_col.addWidget(title)
+
+        sub = QLabel(self.tr("查询并下载关联本机的 .lic 授权凭证"))
+        setFont(sub, 10)
+        sub.setStyleSheet(f"color: {TEXT_SECONDARY};")
+        title_col.addWidget(sub)
+
+        row.addLayout(title_col)
+        row.addStretch()
+
+        self._badge = QLabel("POLLING")
+        setFont(self._badge, 10, QFont.Bold)
+        self._badge.setStyleSheet(_BADGE_PAUSED)
+        row.addWidget(self._badge)
+        self._set_badge_paused()
+        return row
+
+    def _build_tab_bar(self) -> QFrame:
+        bar = QFrame(self)
+        bar.setObjectName("fetchTabBar")
+        bar.setStyleSheet(
+            f"QFrame#fetchTabBar {{ background: {SUBTLE_BG};"
+            f" border: 1px solid {BORDER}; border-radius: 10px; }}"
+        )
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(2)
+
+        self._tab_auto = QPushButton("🔄 " + self.tr("自动查询模式"))
+        setFont(self._tab_auto, 11)
+        self._tab_auto.setCursor(Qt.PointingHandCursor)
+        self._tab_auto.clicked.connect(self._switch_to_auto_panel)
+        layout.addWidget(self._tab_auto)
+
+        self._tab_manual = QPushButton("🔍 " + self.tr("手动凭证查询"))
+        setFont(self._tab_manual, 11)
+        self._tab_manual.setCursor(Qt.PointingHandCursor)
+        self._tab_manual.clicked.connect(self._switch_to_manual_panel)
+        layout.addWidget(self._tab_manual)
+
+        self._set_tab_auto_active()
+        return bar
+
+    def _build_auto_panel(self) -> QWidget:
+        panel = QWidget(self)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+
+        self._auto_stack = QStackedWidget(panel)
+        self._auto_stack.addWidget(self._build_querying_state())
+        self._auto_stack.addWidget(self._build_stopped_state())
+        self._auto_stack.addWidget(self._build_found_state())
+        layout.addWidget(self._auto_stack)
+
+        self._btn_download = QPushButton("⬇️  " + self.tr("激活授权文件 (.lic)"))
+        setFont(self._btn_download, 12, QFont.Bold)
+        self._btn_download.setCursor(Qt.PointingHandCursor)
+        self._btn_download.setMinimumHeight(42)
+        self._btn_download.clicked.connect(self._activate_license)
+        layout.addWidget(self._btn_download)
+        self._set_download_disabled()
+
+        note = QFrame(panel)
+        note.setObjectName("fetchNote")
+        note.setStyleSheet(
+            "QFrame#fetchNote { background: #fffbeb; border: 1px solid #fde68a;"
+            " border-radius: 8px; }"
+        )
+        note_layout = QHBoxLayout(note)
+        note_layout.setContentsMargins(10, 8, 10, 8)
+        note_layout.setSpacing(6)
+
+        note_icon = QLabel("⚠️")
+        setFont(note_icon, 12)
+        note_layout.addWidget(note_icon, 0, Qt.AlignTop)
+
+        note_text = QLabel(self.tr("提示：若超过 10 分钟仍未生成授权文件，可联系作者处理 (QQ群: 1080076113)，工作时间 9:00-23:30。"))
+        setFont(note_text, 10)
+        note_text.setWordWrap(True)
+        note_text.setStyleSheet("color: #b45309;")
+        note_layout.addWidget(note_text, 1)
+        layout.addWidget(note)
+
+        return panel
+
+    def _build_querying_state(self) -> QWidget:
+        w = QFrame(self)
+        w.setObjectName("stateQuerying")
+        w.setStyleSheet(
+            "QFrame#stateQuerying { background: #eef2ff; border: 1px solid #c7d2fe;"
+            " border-radius: 10px; }"
+        )
+        layout = QVBoxLayout(w)
+        layout.setContentsMargins(16, 20, 16, 20)
+        layout.setSpacing(10)
+        layout.setAlignment(Qt.AlignCenter)
+
+        spinner_row = QHBoxLayout()
+        spinner_row.setAlignment(Qt.AlignCenter)
+        self._spinner = IndeterminateProgressRing(w)
+        self._spinner.setFixedSize(32, 32)
+        self._spinner.setStrokeWidth(3)
+        spinner_row.addWidget(self._spinner)
+        layout.addLayout(spinner_row)
+
+        title = QLabel(self.tr("正在自动循环查询授权文件..."))
+        setFont(title, 12, QFont.Bold)
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet(f"color: {PRIMARY_PRESSED};")
+        layout.addWidget(title)
+
+        sub = QLabel(self.tr("轮询服务端状态中 (每5秒尝试匹配)"))
+        setFont(sub, 10)
+        sub.setAlignment(Qt.AlignCenter)
+        sub.setStyleSheet(f"color: {PRIMARY};")
+        layout.addWidget(sub)
+
+        stop_btn = QPushButton("⏹  " + self.tr("停止自动查询"))
+        setFont(stop_btn, 11)
+        stop_btn.setCursor(Qt.PointingHandCursor)
+        stop_btn.setFixedHeight(30)
+        stop_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {CARD_BG}; color: {DANGER};
+                border: 1px solid {BORDER}; border-radius: 6px;
+                padding: 0 14px;
+            }}
+            QPushButton:hover {{ background: #fff1f2; border-color: {DANGER}; }}
+            QPushButton:pressed {{ background: #fee2e2; }}
+        """)
+        stop_btn.clicked.connect(self._stop_auto_query)
+
+        btn_row = QHBoxLayout()
+        btn_row.setAlignment(Qt.AlignCenter)
+        btn_row.addWidget(stop_btn)
+        layout.addLayout(btn_row)
+        return w
+
+    def _build_stopped_state(self) -> QWidget:
+        w = QFrame(self)
+        w.setObjectName("stateStopped")
+        w.setStyleSheet(
+            f"QFrame#stateStopped {{ background: {SUBTLE_BG}; border: 1px solid {BORDER};"
+            f" border-radius: 10px; }}"
+        )
+        layout = QHBoxLayout(w)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(12)
+
+        icon = QLabel("⏸️")
+        setFont(icon, 20)
+        icon.setFixedSize(36, 36)
+        icon.setAlignment(Qt.AlignCenter)
+        icon.setStyleSheet("QLabel { background: #fef3c7; border-radius: 8px; }")
+        layout.addWidget(icon)
+
+        text_col = QVBoxLayout()
+        text_col.setSpacing(2)
+        title = QLabel(self.tr("已停止自动查询"))
+        setFont(title, 12, QFont.Bold)
+        title.setStyleSheet(f"color: {TEXT_PRIMARY};")
+        text_col.addWidget(title)
+        sub = QLabel(self.tr("可切换到「手动凭证查询」进行手动检索"))
+        setFont(sub, 10)
+        sub.setStyleSheet(f"color: {TEXT_SECONDARY};")
+        text_col.addWidget(sub)
+        layout.addLayout(text_col, 1)
+
+        restart_btn = QPushButton(self.tr("重新开启"))
+        setFont(restart_btn, 11)
+        restart_btn.setCursor(Qt.PointingHandCursor)
+        restart_btn.setFixedHeight(28)
+        restart_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: #eef2ff; color: {PRIMARY};
+                border: 1px solid #c7d2fe; border-radius: 6px;
+                padding: 0 12px;
+            }}
+            QPushButton:hover {{ background: #e0e7ff; }}
+            QPushButton:pressed {{ background: #c7d2fe; }}
+        """)
+        restart_btn.clicked.connect(self._restart_auto_query)
+        layout.addWidget(restart_btn, 0, Qt.AlignVCenter)
+        return w
+
+    def _build_found_state(self) -> QWidget:
+        w = QFrame(self)
+        w.setObjectName("stateFound")
+        w.setStyleSheet(
+            "QFrame#stateFound { background: #f0fdf4; border: 1px solid #bbf7d0;"
+            " border-radius: 10px; }"
+        )
+        layout = QVBoxLayout(w)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
+
+        header_row = QHBoxLayout()
+        header_row.setSpacing(6)
+        check_icon = QLabel("✅")
+        setFont(check_icon, 12)
+        header_row.addWidget(check_icon)
+        header_title = QLabel(self.tr("已匹配待绑定订单信息"))
+        setFont(header_title, 12, QFont.Bold)
+        header_title.setStyleSheet("color: #14532d;")
+        header_row.addWidget(header_title)
+        header_row.addStretch()
+        ready_badge = QLabel(self.tr("已就绪"))
+        setFont(ready_badge, 10, QFont.Bold)
+        ready_badge.setStyleSheet(
+            "QLabel { background: #bbf7d0; color: #14532d;"
+            " border-radius: 4px; padding: 1px 6px; }"
+        )
+        header_row.addWidget(ready_badge)
+        layout.addLayout(header_row)
+
+        sep = QFrame(w)
+        sep.setFixedHeight(1)
+        sep.setStyleSheet("background: #bbf7d0; border: none;")
+        layout.addWidget(sep)
+
+        self._found_order_id_label = self._make_detail_row(layout, self.tr("订单单号："), "—")
+        self._found_hwid_label = self._make_detail_row(
+            layout,
+            self.tr("绑定设备号："),
+            machine_id.get_machine_id_display()[:20] + "…"
+            if len(machine_id.get_machine_id_display()) > 20
+            else machine_id.get_machine_id_display(),
+        )
+        self._found_spec_label = self._make_detail_row(layout, self.tr("授权规格："), "—")
+        self._found_time_label = self._make_detail_row(layout, self.tr("生成时间："), self.tr("—"))
+        return w
+
+    @staticmethod
+    def _make_detail_row(parent_layout: QVBoxLayout, key: str, value: str) -> QLabel:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(4)
+        key_label = QLabel(key)
+        setFont(key_label, 10)
+        key_label.setStyleSheet("color: #64748b;")
+        row.addWidget(key_label)
+        row.addStretch()
+        val_label = QLabel(value)
+        setFont(val_label, 10, QFont.Bold)
+        val_label.setStyleSheet("color: #1e293b; font-family: monospace;")
+        val_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        row.addWidget(val_label)
+        parent_layout.addLayout(row)
+        return val_label
+
+    def _build_manual_panel(self) -> QWidget:
+        panel = QWidget(self)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+
+        label = QLabel(self.tr("手动输入订单号 / 交易单号"))
+        setFont(label, 11, QFont.Bold)
+        label.setStyleSheet(f"color: {TEXT_PRIMARY};")
+        layout.addWidget(label)
+
+        input_row = QHBoxLayout()
+        input_row.setContentsMargins(0, 0, 0, 0)
+        input_row.setSpacing(6)
+
+        self._manual_input = QLineEdit(panel)
+        self._manual_input.setPlaceholderText(self.tr("例如: PT260921-XXXX-YYYY"))
+        self._manual_input.setFixedHeight(36)
+        self._manual_input.setStyleSheet(f"""
+            QLineEdit {{
+                background: {SUBTLE_BG}; color: {TEXT_PRIMARY};
+                border: 1px solid {BORDER}; border-radius: 8px;
+                padding: 0 10px; font-size: 12px;
+            }}
+            QLineEdit:focus {{
+                border-color: {PRIMARY};
+                background: {CARD_BG};
+            }}
+        """)
+        self._manual_input.returnPressed.connect(self._execute_manual_search)
+        input_row.addWidget(self._manual_input, 1)
+
+        search_btn = QPushButton(self.tr("查询"))
+        setFont(search_btn, 11, QFont.Bold)
+        search_btn.setFixedHeight(36)
+        search_btn.setCursor(Qt.PointingHandCursor)
+        search_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {PRIMARY}; color: white;
+                border: none; border-radius: 8px;
+                padding: 0 18px;
+            }}
+            QPushButton:hover {{ background: {PRIMARY_HOVER}; }}
+            QPushButton:pressed {{ background: {PRIMARY_PRESSED}; }}
+        """)
+        search_btn.clicked.connect(self._execute_manual_search)
+        input_row.addWidget(search_btn)
+        layout.addLayout(input_row)
+
+        self._manual_result = QFrame(panel)
+        self._manual_result.setObjectName("manualResult")
+        self._manual_result.setStyleSheet(
+            f"QFrame#manualResult {{ background: {SUBTLE_BG};"
+            f" border: 1px dashed {BORDER}; border-radius: 10px; }}"
+        )
+        result_layout = QVBoxLayout(self._manual_result)
+        result_layout.setContentsMargins(14, 18, 14, 18)
+        result_layout.setAlignment(Qt.AlignCenter)
+
+        self._manual_result_icon = QLabel("🔍")
+        setFont(self._manual_result_icon, 20)
+        self._manual_result_icon.setAlignment(Qt.AlignCenter)
+        result_layout.addWidget(self._manual_result_icon)
+
+        self._manual_result_text = QLabel(self.tr("输入订单号并点击「查询」即可直接绑定获取文件"))
+        setFont(self._manual_result_text, 11)
+        self._manual_result_text.setWordWrap(True)
+        self._manual_result_text.setAlignment(Qt.AlignCenter)
+        self._manual_result_text.setStyleSheet(f"color: {TEXT_SECONDARY};")
+        result_layout.addWidget(self._manual_result_text)
+
+        layout.addWidget(self._manual_result)
+        layout.addStretch()
+        return panel
+
+    def _build_toast(self) -> QLabel:
+        toast = QLabel("")
+        setFont(toast, 11)
+        toast.setAlignment(Qt.AlignCenter)
+        toast.setWordWrap(True)
+        toast.setStyleSheet(
+            "QLabel { background: #1e293b; color: white;"
+            " border-radius: 8px; padding: 8px 12px; }"
+        )
+        toast.hide()
+        return toast
+
+    def _build_footer(self) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+
+        lock_label = QLabel("🔒 " + self.tr("绑定本机硬件 ID"))
+        setFont(lock_label, 10)
+        lock_label.setStyleSheet(f"color: {TEXT_SECONDARY};")
+        row.addWidget(lock_label)
+        row.addStretch()
+        return row
+
+    def _restart_auto_query(self):
+        self._state = self._STATE_QUERYING
+        self._poll_timer.start()
+        self._auto_stack.setCurrentIndex(self._AUTO_QUERYING)
+        self._set_badge_polling()
+        self._set_download_disabled()
+        QTimer.singleShot(200, self._do_poll)  # 立即触发一次
+
+    def _stop_auto_query(self):
+        self._state = self._STATE_STOPPED
+        self._poll_timer.stop()
+        self._auto_stack.setCurrentIndex(self._AUTO_STOPPED)
+        self._set_badge_paused()
+        self._set_download_disabled()
+        self._show_toast(self.tr("已停止自动查询。可切换到「手动凭证查询」进行检索。"))
+
+    def _mark_found(self, order: AuthOrder):
+        self._state = self._STATE_FOUND
+        self._current_order = order
+        self._poll_timer.stop()
+
+        self._found_order_id_label.setText(order.order_id)
+        spec = f"{order.days} 天  {order.tier_key}"
+        self._found_spec_label.setText(spec)
+        self._found_time_label.setText(datetime.now().strftime("%Y-%m-%d %H:%M"))
+
+        self._auto_stack.setCurrentIndex(self._AUTO_FOUND)
+        self._set_badge_ready()
+        self._set_download_enabled()
+        self._show_toast(self.tr("✨ 成功获取授权文件！可以点击按钮进行激活。"))
+
+    def _do_poll(self):
+        if self._state != self._STATE_QUERYING:
+            return
+        order = self._current_order
+        if order is None:
+            order = self._service.store.find_open_order()
+        if order is None:
+            return
+
+        progress = self._service.poll(order)
+        if progress.order is not None:
+            self._current_order = progress.order
+            order = progress.order
+
+        if progress.stage == AuthStage.ISSUED:
+            self._mark_found(order)
+        elif progress.stage in (AuthStage.TIMEOUT, AuthStage.FAILED):
+            self._poll_timer.stop()
+            self._state = self._STATE_STOPPED
+            self._auto_stack.setCurrentIndex(self._AUTO_STOPPED)
+            self._set_badge_paused()
+            self._show_toast(progress.message or self.tr("订单已关闭"))
+
+    def _execute_manual_search(self):
+        order_id = self._manual_input.text().strip()
+        if not order_id:
+            self._show_toast(self.tr("请先输入有效的订单号！"))
+            return
+
+        order = self._service.store.get(order_id)
+        if order is None:
+            self._show_manual_result_error(self.tr(f"未找到订单 {order_id}，请检查订单号是否正确。"))
+            return
+
+        self._show_manual_result_ok(order)
+        self._switch_to_auto_panel()
+        self._mark_found(order)
+
+    def _show_manual_result_ok(self, order: AuthOrder):
+        self._manual_result.setStyleSheet(
+            "QFrame#manualResult { background: #f0fdf4;"
+            " border: 1px solid #bbf7d0; border-radius: 10px; }"
+        )
+        self._manual_result_icon.setText("✅")
+        self._manual_result_text.setText(
+            f"<b>{self.tr('已找到对应订单授权文件')}</b><br>"
+            f"{self.tr('订单编号：')}<code>{order.order_id}</code><br>"
+            f"{self.tr('授权天数：')}{order.days} {self.tr('天')}"
+        )
+        self._manual_result_text.setStyleSheet("color: #14532d;")
+
+    def _show_manual_result_error(self, msg: str):
+        self._manual_result.setStyleSheet(
+            "QFrame#manualResult { background: #fff1f2;"
+            " border: 1px solid #fecaca; border-radius: 10px; }"
+        )
+        self._manual_result_icon.setText("❌")
+        self._manual_result_text.setText(msg)
+        self._manual_result_text.setStyleSheet(f"color: {DANGER};")
+
+    def _activate_license(self):
+        if self._state != self._STATE_FOUND:
+            return
+        order = self._current_order
+        if order is None:
+            return
+        license_path = getattr(order, "license_path", "")
+        if license_path:
+            self.license_activated.emit(license_path)
+            self._show_toast(self.tr("许可证已激活！"))
+        else:
+            self._show_toast(self.tr("未找到授权文件路径，请联系开发者。"))
+
+    def _set_download_enabled(self):
+        self._btn_download.setEnabled(True)
+        self._btn_download.setText("⬇️  " + self.tr("激活授权文件 (.lic)"))
+        self._btn_download.setStyleSheet(f"""
+            QPushButton {{
+                background: {PRIMARY}; color: white;
+                border: none; border-radius: 10px;
+            }}
+            QPushButton:hover {{ background: {PRIMARY_HOVER}; }}
+            QPushButton:pressed {{ background: {PRIMARY_PRESSED}; }}
+        """)
+
+    def _set_download_disabled(self):
+        self._btn_download.setEnabled(False)
+        self._btn_download.setText("⬇️  " + self.tr("激活授权文件 (尚未就绪)"))
+        self._btn_download.setStyleSheet(f"""
+            QPushButton {{
+                background: #cbd5e1; color: #94a3b8;
+                border: none; border-radius: 10px;
+            }}
+        """)
+
+    def _set_badge_polling(self):
+        self._badge.setText("POLLING")
+        self._badge.setStyleSheet(_BADGE_POLLING)
+
+    def _set_badge_paused(self):
+        self._badge.setText("PAUSED")
+        self._badge.setStyleSheet(_BADGE_PAUSED)
+
+    def _set_badge_ready(self):
+        self._badge.setText("READY")
+        self._badge.setStyleSheet(_BADGE_READY)
+
+    def _set_tab_auto_active(self):
+        self._tab_auto.setStyleSheet(_TAB_ACTIVE)
+        self._tab_manual.setStyleSheet(_TAB_INACTIVE)
+
+    def _set_tab_manual_active(self):
+        self._tab_manual.setStyleSheet(_TAB_ACTIVE)
+        self._tab_auto.setStyleSheet(_TAB_INACTIVE)
+
+    def _switch_to_auto_panel(self):
+        self._panel_stack.setCurrentIndex(self._PANEL_AUTO)
+        self._set_tab_auto_active()
+
+    def _switch_to_manual_panel(self):
+        if self._state == self._STATE_QUERYING:
+            self._stop_auto_query()
+        self._panel_stack.setCurrentIndex(self._PANEL_MANUAL)
+        self._set_tab_manual_active()
+
+    def _show_toast(self, msg: str, duration_ms: int = 3500):
+        self._toast.setText(msg)
+        self._toast.show()
+        QTimer.singleShot(duration_ms, self._toast.hide)
