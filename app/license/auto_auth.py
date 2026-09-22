@@ -410,7 +410,7 @@ class DefaultLicenseIssuer(LicenseIssuer):
             existing_paths = {s.rfilename for s in (info.siblings or [])}
             if filename not in existing_paths:
                 box["err"] = "not_found"
-                return
+                return False, box.get("err", "unknown error"), None
             local_path = hf_hub_download(
                 repo_id=cls.HF_REPO_ID,
                 filename=filename,
