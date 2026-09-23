@@ -55,7 +55,7 @@ AI_CAPABILITIES = (
             MEDIA_IMAGE: ["visible_watermark_removal", "segment", "image_edit/general_edit", "image_restoration/general_restoration"],
             MEDIA_VIDEO: [
                 "visible_watermark_removal", "segment", "image_edit/general_edit", "image_restoration/general_restoration", 
-                "video_inpainting/ppt", "tracker"
+                "video_inpainting/ppt", "tracker", "video_engine"
             ],
         },
     },
@@ -76,7 +76,7 @@ AI_CAPABILITIES = (
         "cfg_attr": "localBlindWatermarkRemoveEnabled",
         "media": {
             MEDIA_IMAGE: ["image_edit/reverse_edit", "image_edit/sr_edit"],
-            MEDIA_VIDEO: ["image_edit/reverse_edit", "image_edit/sr_edit"],
+            MEDIA_VIDEO: ["image_edit/reverse_edit", "image_edit/sr_edit", "video_engine"],
         },
     },
     {
@@ -96,7 +96,7 @@ AI_CAPABILITIES = (
         "cfg_attr": "localImageRestorationEnabled",
         "media": {
             MEDIA_IMAGE: ["image_restoration/general_restoration", "image_edit/sr_edit"],
-            MEDIA_VIDEO: ["image_restoration/general_restoration", "image_edit/sr_edit"],
+            MEDIA_VIDEO: ["image_restoration/general_restoration", "image_edit/sr_edit", "video_engine"],
         },
     },
 )
