@@ -361,20 +361,10 @@ class DefaultLicenseIssuer(LicenseIssuer):
         "https://huggingface.co",
     )
 
-    def fetch(self, order: AuthOrder, on_result: "Optional[callable]" = None) -> IssueResult:
-        thread = threading.Thread(
-            target=self._fetch,
-            args=(order, on_result),
-            daemon=True,
-            name=f"license-issuer-{order.order_id}",
-        )
-        thread.start()
-
-    def _fetch(self, order: AuthOrder, on_result: "Optional[callable]" = None) -> IssueResult:
+    def fetch(self, order: AuthOrder) -> IssueResult:
         filename = f"{order.machine_id}/{order.order_id}.lic"
         per_try_timeout = self.HF_TIMEOUT / 2
         last_err = None
-        res = None
         for _, endpoint in enumerate(self.HF_ENDPOINTS, 1):
             ok, err, local_path = self._download_via_endpoint(
                 endpoint=endpoint,

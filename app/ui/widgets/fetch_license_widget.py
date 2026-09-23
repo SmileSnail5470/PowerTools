@@ -1,9 +1,9 @@
 from datetime import datetime
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer, QThread, QObject
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QPushButton, QStackedWidget, QLineEdit
 from app.ui.library.qfluentwidgets import setFont, IndeterminateProgressRing
-from app.license.auto_auth import AutoAuthService, AuthOrder, AuthStage, OrderStatus
+from app.license.auto_auth import AutoAuthService, AuthOrder, AuthStage, AuthProgress, OrderStatus
 import app.library._machine_id as machine_id
 
 
@@ -44,6 +44,19 @@ _TAB_INACTIVE = (
 )
 
 
+class _PollWorker(QObject):
+    finished = Signal(object)
+
+    def __init__(self, service: AutoAuthService, order: AuthOrder):
+        super().__init__()
+        self._service = service
+        self._order = order
+
+    def run(self):
+        progress = self._service.poll(self._order)
+        self.finished.emit(progress)
+
+
 class FetchLicenseWidget(QWidget):
     license_activated = Signal(str)
     _STATE_QUERYING = "QUERYING"
@@ -64,6 +77,7 @@ class FetchLicenseWidget(QWidget):
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(POLL_INTERVAL_MS)
         self._poll_timer.timeout.connect(self._do_poll)
+        self._poll_thread: QThread | None = None  # 当前正在跑的轮询线程
 
         self._setup_ui()
         self._init_state()
@@ -643,13 +657,36 @@ class FetchLicenseWidget(QWidget):
     def _do_poll(self):
         if self._state != self._STATE_QUERYING:
             return
+        if self._poll_thread is not None and self._poll_thread.isRunning():
+            return
+
         order = self._current_order
         if order is None:
             order = self._service.store.find_open_order()
         if order is None:
             return
 
-        progress = self._service.poll(order)
+        worker = _PollWorker(self._service, order)
+        thread = QThread(self)
+        worker.moveToThread(thread)
+
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_poll_done)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._clear_poll_thread)
+
+        self._poll_thread = thread
+        thread.start()
+
+    def _clear_poll_thread(self):
+        self._poll_thread = None
+
+    def _on_poll_done(self, progress: AuthProgress):
+        if self._state != self._STATE_QUERYING:
+            return
+        order = self._current_order
         if progress.order is not None:
             self._current_order = progress.order
             order = progress.order
