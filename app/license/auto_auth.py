@@ -17,6 +17,7 @@ import app.library._machine_id as machine_id
 from huggingface_hub import hf_hub_download, HfApi
 
 logger = logging.getLogger("License")
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 CENT = Decimal("0.01")
 

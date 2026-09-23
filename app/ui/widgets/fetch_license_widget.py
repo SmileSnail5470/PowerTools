@@ -20,7 +20,7 @@ TEXT_PRIMARY = "#1e293b"
 TEXT_SECONDARY = "#64748b"
 BORDER = "#e2e8f0"
 RADIUS = 12
-POLL_INTERVAL_MS = 5_000
+POLL_INTERVAL_MS = 20_000
 _BADGE_POLLING = (
     "QLabel { background: #fef3c7; color: #b45309;"
     " border-radius: 4px; padding: 2px 7px; }"
@@ -77,8 +77,10 @@ class FetchLicenseWidget(QWidget):
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(POLL_INTERVAL_MS)
         self._poll_timer.timeout.connect(self._do_poll)
-        self._poll_thread: QThread | None = None  # 当前正在跑的轮询线程
+        self._poll_thread: QThread | None = None   # 当前正在跑的轮询线程
+        self._poll_worker = None                    # 持有 worker 引用，防止被 GC
         self._manual_thread: QThread | None = None  # 手动查询子线程
+        self._manual_worker = None                  # 持有 worker 引用，防止被 GC
 
         self._setup_ui()
         self._init_state()
@@ -249,7 +251,7 @@ class FetchLicenseWidget(QWidget):
         title.setStyleSheet(f"color: {PRIMARY_PRESSED};")
         layout.addWidget(title)
 
-        sub = QLabel(self.tr("轮询服务端状态中 (每5秒尝试匹配)"))
+        sub = QLabel(self.tr("轮询服务端状态中..."))
         setFont(sub, 10)
         sub.setAlignment(Qt.AlignCenter)
         sub.setStyleSheet(f"color: {PRIMARY};")
@@ -620,16 +622,10 @@ class FetchLicenseWidget(QWidget):
 
         self._manual_not_found_detail = QLabel("")
         setFont(self._manual_not_found_detail, 10)
-        self._manual_not_found_detail.setWordWrap(True)
+        self._manual_not_found_detail.setWordWrap(False)
         self._manual_not_found_detail.setAlignment(Qt.AlignCenter)
         self._manual_not_found_detail.setStyleSheet("color: #b45309;")
         lay.addWidget(self._manual_not_found_detail)
-
-        hint = QLabel(self.tr("订单尚在处理中，请稍候重试"))
-        setFont(hint, 10)
-        hint.setAlignment(Qt.AlignCenter)
-        hint.setStyleSheet("color: #d97706;")
-        lay.addWidget(hint)
         return w
 
     def _build_toast(self) -> QLabel:
@@ -777,6 +773,8 @@ class FetchLicenseWidget(QWidget):
         self._show_toast(self.tr("已停止自动查询。可切换到「手动凭证查询」进行检索。"))
 
     def _mark_found(self, order: AuthOrder):
+        if self._state == self._STATE_FOUND:
+            return
         self._state = self._STATE_FOUND
         self._current_order = order
         self._poll_timer.stop()
@@ -811,10 +809,12 @@ class FetchLicenseWidget(QWidget):
         thread.finished.connect(thread.deleteLater)
         thread.finished.connect(self._clear_poll_thread)
 
+        self._poll_worker = worker   # 持有引用，防止子线程启动前被 GC
         self._poll_thread = thread
         thread.start()
 
     def _clear_poll_thread(self):
+        self._poll_worker = None
         self._poll_thread = None
 
     def _on_poll_done(self, progress: AuthProgress):
@@ -861,10 +861,12 @@ class FetchLicenseWidget(QWidget):
         thread.finished.connect(thread.deleteLater)
         thread.finished.connect(self._clear_manual_thread)
 
+        self._manual_worker = worker  # 持有引用，防止子线程启动前被 GC
         self._manual_thread = thread
         thread.start()
 
     def _clear_manual_thread(self):
+        self._manual_worker = None
         self._manual_thread = None
 
     def _set_manual_searching(self, searching: bool):
@@ -892,20 +894,28 @@ class FetchLicenseWidget(QWidget):
             """)
 
     def _on_manual_poll_done(self, progress: AuthProgress):
-        self._set_manual_searching(False)
+        in_manual_panel = self._panel_stack.currentIndex() == self._PANEL_MANUAL
+        if in_manual_panel:
+            self._set_manual_searching(False)
         order = progress.order or self._current_order
         if progress.stage == AuthStage.ISSUED:
-            if order:
-                self._fill_manual_found_labels(order)
-            self._manual_result_stack.setCurrentIndex(2)
-            self._set_manual_download_enabled()
-            self._mark_found(order)
+            if in_manual_panel:
+                if order:
+                    self._fill_manual_found_labels(order)
+                self._manual_result_stack.setCurrentIndex(2)
+                self._set_manual_download_enabled()
+                if self._state != self._STATE_QUERYING:
+                    self._mark_found(order)
+            else:
+                if order:
+                    self._current_order = order
         else:
-            self._manual_result_stack.setCurrentIndex(3)
-            self._set_manual_download_disabled()
-            self._manual_not_found_title.setText(self.tr("暂未查询到授权文件"))
-            detail = progress.message or self.tr("服务端尚未生成授权文件")
-            self._manual_not_found_detail.setText(detail)
+            if in_manual_panel:
+                self._manual_result_stack.setCurrentIndex(3)
+                self._set_manual_download_disabled()
+                self._manual_not_found_title.setText(self.tr("暂未查询到授权文件"))
+                detail = progress.message or self.tr("服务端尚未生成授权文件")
+                self._manual_not_found_detail.setText(detail)
 
     def _fill_manual_found_labels(self, order: AuthOrder):
         self._mfound_order_id.setText(order.order_id)
