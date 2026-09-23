@@ -505,8 +505,6 @@ class AuthProgress:
 
 
 class AutoAuthService:
-    ORDER_TTL_SECONDS = 10 * 60
-
     def __init__(
         self,
         license_manager=None,
@@ -597,23 +595,9 @@ class AutoAuthService:
         order.message = reason
         return self._store.save(order, event="order_cancelled", reason=reason)
 
-    def is_expired(self, order: AuthOrder) -> bool:
-        try:
-            created = datetime.fromisoformat(order.created_at.replace("Z", "+00:00"))
-        except (ValueError, AttributeError):
-            return False
-        elapsed = (datetime.now(timezone.utc) - created).total_seconds()
-        return elapsed > self.ORDER_TTL_SECONDS
-
     def poll(self, order: AuthOrder) -> AuthProgress:
         if order.status == OrderStatus.ACTIVATED.value:
             return AuthProgress(AuthStage.ISSUED, "许可证已激活", order.license_path, order)
-
-        if self.is_expired(order):
-            order.status = OrderStatus.TIMEOUT.value
-            self._store.save(order, event="order_timeout")
-            return AuthProgress(AuthStage.TIMEOUT, "订单已超时关闭，请重新下单", order=order)
-
         if order.status not in (OrderStatus.PAID.value, OrderStatus.ISSUING.value, OrderStatus.ISSUED.value):
             result = self._query_payment(order)
             if result.status == PaymentStatus.UNAVAILABLE:

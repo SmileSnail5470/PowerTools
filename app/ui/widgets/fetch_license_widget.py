@@ -21,6 +21,7 @@ TEXT_SECONDARY = "#64748b"
 BORDER = "#e2e8f0"
 RADIUS = 12
 POLL_INTERVAL_MS = 20_000
+AUTO_QUERY_TIMEOUT_MS = 10 * 60 * 1000  # 10 分钟后自动停止轮询
 _BADGE_POLLING = (
     "QLabel { background: #fef3c7; color: #b45309;"
     " border-radius: 4px; padding: 2px 7px; }"
@@ -77,6 +78,10 @@ class FetchLicenseWidget(QWidget):
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(POLL_INTERVAL_MS)
         self._poll_timer.timeout.connect(self._do_poll)
+        self._auto_timeout_timer = QTimer(self)
+        self._auto_timeout_timer.setSingleShot(True)
+        self._auto_timeout_timer.setInterval(AUTO_QUERY_TIMEOUT_MS)
+        self._auto_timeout_timer.timeout.connect(self._on_auto_query_timeout)
         self._poll_thread: QThread | None = None   # 当前正在跑的轮询线程
         self._poll_worker = None                    # 持有 worker 引用，防止被 GC
         self._manual_thread: QThread | None = None  # 手动查询子线程
@@ -759,6 +764,7 @@ class FetchLicenseWidget(QWidget):
     def _restart_auto_query(self):
         self._state = self._STATE_QUERYING
         self._poll_timer.start()
+        self._auto_timeout_timer.start()
         self._auto_stack.setCurrentIndex(self._AUTO_QUERYING)
         self._set_badge_polling()
         self._set_download_disabled()
@@ -767,10 +773,21 @@ class FetchLicenseWidget(QWidget):
     def _stop_auto_query(self):
         self._state = self._STATE_STOPPED
         self._poll_timer.stop()
+        self._auto_timeout_timer.stop()
         self._auto_stack.setCurrentIndex(self._AUTO_STOPPED)
         self._set_badge_paused()
         self._set_download_disabled()
         self._show_toast(self.tr("已停止自动查询。可切换到「手动凭证查询」进行检索。"))
+
+    def _on_auto_query_timeout(self):
+        if self._state != self._STATE_QUERYING:
+            return
+        self._state = self._STATE_STOPPED
+        self._poll_timer.stop()
+        self._auto_stack.setCurrentIndex(self._AUTO_STOPPED)
+        self._set_badge_paused()
+        self._set_download_disabled()
+        self._show_toast(self.tr("自动查询已超时，请切换到「手动凭证查询」进行检索。"), duration_ms=6000)
 
     def _mark_found(self, order: AuthOrder):
         if self._state == self._STATE_FOUND:
@@ -778,6 +795,7 @@ class FetchLicenseWidget(QWidget):
         self._state = self._STATE_FOUND
         self._current_order = order
         self._poll_timer.stop()
+        self._auto_timeout_timer.stop()
 
         self._fill_found_labels(order)
 
@@ -832,7 +850,7 @@ class FetchLicenseWidget(QWidget):
             self._state = self._STATE_STOPPED
             self._auto_stack.setCurrentIndex(self._AUTO_STOPPED)
             self._set_badge_paused()
-            self._show_toast(progress.message or self.tr("订单已关闭"))
+            self._show_toast(progress.message or self.tr("查询失败，请联系作者处理 (QQ群: 1080076113))"))
 
     def _execute_manual_search(self):
         order_id = self._manual_input.text().strip()
