@@ -405,9 +405,7 @@ class FetchLicenseWidget(QWidget):
         self._found_hwid_label = self._make_detail_row(
             layout,
             self.tr("绑定设备号："),
-            machine_id.get_machine_id_display()[:20] + "…"
-            if len(machine_id.get_machine_id_display()) > 20
-            else machine_id.get_machine_id_display(),
+            machine_id.get_machine_id_display()
         )
         self._found_spec_label = self._make_detail_row(layout, self.tr("授权规格："), "—")
         self._found_time_label = self._make_detail_row(layout, self.tr("生成时间："), self.tr("—"))
@@ -594,9 +592,7 @@ class FetchLicenseWidget(QWidget):
         self._mfound_hwid = self._make_detail_row(
             lay,
             self.tr("绑定设备号："),
-            machine_id.get_machine_id_display()[:20] + "…"
-            if len(machine_id.get_machine_id_display()) > 20
-            else machine_id.get_machine_id_display(),
+            machine_id.get_machine_id_display()
         )
         self._mfound_spec = self._make_detail_row(lay, self.tr("授权规格："), "—")
         self._mfound_time = self._make_detail_row(lay, self.tr("生成时间："), "—")
@@ -756,7 +752,7 @@ class FetchLicenseWidget(QWidget):
         ts_raw = order.issued_at or order.activated_at or order.created_at
         try:
             ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
-            ts_str = ts.strftime("%Y-%m-%d %H:%M")
+            ts_str = ts.strftime("%Y-%m-%d %H:%M UTC")
         except Exception:
             ts_str = ts_raw
         self._found_time_label.setText(ts_str)
@@ -946,7 +942,7 @@ class FetchLicenseWidget(QWidget):
         ts_raw = order.issued_at or order.activated_at or order.created_at
         try:
             ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
-            ts_str = ts.strftime("%Y-%m-%d %H:%M")
+            ts_str = ts.strftime("%Y-%m-%d %H:%M UTC")
         except Exception:
             ts_str = ts_raw
         self._mfound_time.setText(ts_str)

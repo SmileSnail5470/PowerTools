@@ -375,8 +375,8 @@ class DefaultLicenseIssuer(LicenseIssuer):
             if ok:
                 with open(local_path, "r", encoding="utf-8") as f:
                     license_text = f.read()
-                    license_json_data = json.load(f)
-                os.remove(local_path)
+                    license_json_data = json.loads(license_text)
+                shutil.rmtree(os.path.dirname(local_path))
                 if not license_text.strip():
                     return IssueResult(available=False, message="授权文件内容为空，请联系作者")
                 logger.info(f"[HF] License fetched successfully for {order.order_id}")
@@ -395,6 +395,8 @@ class DefaultLicenseIssuer(LicenseIssuer):
     @classmethod
     def _download_via_endpoint(cls, endpoint: str, filename: str, timeout: float):
         box: dict = {}
+        local_dir = os.path.join(os.getcwd(), "temp")
+        os.makedirs(local_dir, exist_ok=True)
         try:
             api = HfApi(endpoint=endpoint)
             info = api.repo_info(repo_id=cls.HF_REPO_ID, repo_type=cls.HF_REPO_TYPE, timeout=timeout)
@@ -407,6 +409,7 @@ class DefaultLicenseIssuer(LicenseIssuer):
                 filename=filename,
                 repo_type=cls.HF_REPO_TYPE,
                 endpoint=endpoint,
+                local_dir=local_dir
             )
             box["path"] = local_path
         except Exception as e:
