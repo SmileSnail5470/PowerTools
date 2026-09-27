@@ -98,7 +98,6 @@ class TaskTypeCardItem(QFrame):
             }}
         """)
         layout.addWidget(icon_label, 0, Qt.AlignVCenter)
-
         text_layout = QVBoxLayout()
         text_layout.setContentsMargins(0, 0, 0, 0)
         text_layout.setSpacing(0)
@@ -724,23 +723,23 @@ class HeaderWidget(QWidget):
             image_restoration_task_status_model.start_step(name=self.tr("准备任务"))
 
         image_restoration_active_futures.clear()
-        for func, args, kwargs in total_tasks:
-            one_input_path = kwargs["input_path"]
+
+        def submit_task(func, args, kwargs, input_path):
+            retry_callback = lambda f=func, a=args, k=kwargs, p=input_path: submit_task(f, a, k, p)
             future = global_task_manager.submit(func, *args, **kwargs)
             image_restoration_active_futures.append(future)
-
-            future.finished.connect(
-                lambda result, path=one_input_path: self._task_finished(path, result)
-            )
+            future.finished.connect(lambda result, path=input_path: self._task_finished(path, result))
             future.failed.connect(
-                lambda e, path=one_input_path: image_restoration_task_status_model.report_failure(path, e)
+                lambda error, path=input_path, retry=retry_callback: image_restoration_task_status_model.report_failure(path, error, retry)
             )
             future.cancelled.connect(
-                lambda path=one_input_path: image_restoration_task_status_model.report_failure(path, "任务被取消")
+                lambda path=input_path, retry=retry_callback: image_restoration_task_status_model.report_failure(path, "任务被取消", retry)
             )
-            future.progress.connect(
-                lambda value, msg, path=one_input_path: self._task_progress(path, value, msg)
-            )
+            future.progress.connect(lambda value, msg, path=input_path: self._task_progress(path, value, msg))
+
+        for func, args, kwargs in total_tasks:
+            one_input_path = kwargs["input_path"]
+            submit_task(func, args, kwargs, one_input_path)
 
         TeachingTip.create(
             target=self.process_btn,

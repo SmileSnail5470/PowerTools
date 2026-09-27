@@ -593,6 +593,8 @@ class StatCard(QFrame):
 
 
 class FailurePopupWidget(QWidget):
+    retry_requested = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("FailurePopupWidget")
@@ -659,6 +661,16 @@ class FailurePopupWidget(QWidget):
         setFont(self.failure_list, 10, QFont.Normal)
         content_layout.addWidget(self.failure_list)
 
+        self.retry_button = QPushButton(self.tr("重跑失败任务"))
+        self.retry_button.setCursor(Qt.PointingHandCursor)
+        self.retry_button.clicked.connect(self._on_retry_clicked)
+        self.retry_button.setStyleSheet("""
+            QPushButton { background: #dc2626; color: white; border: none; border-radius: 4px; padding: 7px 12px; }
+            QPushButton:hover { background: #b91c1c; }
+            QPushButton:disabled { background: #d1d5db; color: #6b7280; }
+        """)
+        content_layout.addWidget(self.retry_button)
+
         main_layout.addWidget(self.content_widget)
 
         self.setStyleSheet("""
@@ -707,6 +719,10 @@ class FailurePopupWidget(QWidget):
     def add_failure(self, filename, reason):
         item = QListWidgetItem(f"⚠️ {filename}")
         self.failure_list.addItem(item)
+
+    def _on_retry_clicked(self):
+        self.hide()
+        self.retry_requested.emit()
 
     def clear_failures(self):
         self.failure_list.clear()
@@ -868,6 +884,7 @@ class StatusInfoWidget(QFrame):
         status_layout.addWidget(self.cancel_btn, 0, Qt.AlignHCenter)
 
         self.failure_popup = FailurePopupWidget()
+        self.failure_popup.retry_requested.connect(self.model.retry_failures)
 
         main_layout.addWidget(self.info_bar)
         main_layout.addWidget(v_separator)
@@ -895,6 +912,10 @@ class StatusInfoWidget(QFrame):
         if self.failure_popup.isVisible():
             self.failure_popup.hide()
         else:
+            self.failure_popup.retry_button.setEnabled(
+                bool(self.model.status.batch.retry_callbacks)
+                and self.model.status.state != TaskState.RUNNING
+            )
             self.failure_popup.show_at(self.failed_card)
 
     def set_backend_info(self, backend_type, elapsed):
@@ -913,6 +934,10 @@ class StatusInfoWidget(QFrame):
         self.failure_popup.clear_failures()
         for filename, reason in data['failures']:
             self.failure_popup.add_failure(filename, reason)
+        self.failure_popup.retry_button.setEnabled(
+            bool(self.model.status.batch.retry_callbacks)
+            and self.model.status.state != TaskState.RUNNING
+        )
 
     def update_display(self, status: TaskStatus):
         batch = status.batch
