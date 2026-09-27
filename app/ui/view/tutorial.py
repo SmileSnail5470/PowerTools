@@ -126,11 +126,11 @@ class GuideCard(SimpleCardWidget):
 class Tutorial(QWidget):
     settingsRequested = Signal()
 
-    RELEASES_URL = "https://pan.quark.cn/list#/list/all/0036d165fa7d4b288c1efd4f35d98082-PowerTools%20%E8%BD%AF%E4%BB%B6"
-    FFMPEG_URL = "https://pan.quark.cn/list#/list/all/0036d165fa7d4b288c1efd4f35d98082-PowerTools%20%E8%BD%AF%E4%BB%B6/8a2962595bfe4906be261f67260c622c-%E8%A7%86%E9%A2%91%E5%A4%84%E7%90%86%E8%BD%AF%E4%BB%B6*101windows"
-    CUDA_URL = "https://pan.quark.cn/list#/list/all/0036d165fa7d4b288c1efd4f35d98082-PowerTools%20%E8%BD%AF%E4%BB%B6/f9b0116b503f47e8a9d2d469a0ea3dde-%E6%98%BE%E5%8D%A1%E4%BE%9D%E8%B5%96%E9%A9%B1%E5%8A%A8"
-    CUDNN_URL = "https://pan.quark.cn/list#/list/all/0036d165fa7d4b288c1efd4f35d98082-PowerTools%20%E8%BD%AF%E4%BB%B6/f9b0116b503f47e8a9d2d469a0ea3dde-%E6%98%BE%E5%8D%A1%E4%BE%9D%E8%B5%96%E9%A9%B1%E5%8A%A8"
-    MODEL_URL = "https://pan.quark.cn/list#/list/all/410981f94d9843e680b09e971778d7f7-PowerTools%20%E6%A8%A1%E5%9E%8B"
+    RELEASES_URL = "https://pan.quark.cn/s/82baadea041e"
+    FFMPEG_URL = "https://pan.quark.cn/s/82baadea041e"
+    CUDA_URL = "https://pan.quark.cn/s/82baadea041e"
+    CUDNN_URL = "https://pan.quark.cn/s/82baadea041e"
+    MODEL_URL = "https://pan.quark.cn/s/9882c326a44d"
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)

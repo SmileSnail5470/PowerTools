@@ -75,8 +75,8 @@ AI_CAPABILITIES = (
         "description": "去除图片、视频中不可见的暗水印（盲水印）痕迹",
         "cfg_attr": "localBlindWatermarkRemoveEnabled",
         "media": {
-            MEDIA_IMAGE: ["image_edit/reverse_edit", "image_edit/sr_edit"],
-            MEDIA_VIDEO: ["image_edit/reverse_edit", "image_edit/sr_edit", "video_engine"],
+            MEDIA_IMAGE: ["image_edit/reverse_edit", "image_edit/sr_edit", "blind_watermark_addition"],
+            MEDIA_VIDEO: ["image_edit/reverse_edit", "image_edit/sr_edit", "video_engine", "blind_watermark_addition"],
         },
     },
     {

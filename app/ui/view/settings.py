@@ -15,6 +15,7 @@ from PySide6.QtWidgets import(
 )
 from PySide6.QtGui import QFont, QPainter, QPen, QColor
 from huggingface_hub import snapshot_download
+from tqdm.auto import tqdm
 
 from app.ui.library.qfluentwidgets import(
     setFont, ScrollArea, TeachingTip, InfoBarIcon, TeachingTipTailPosition, FluentIcon,
@@ -75,6 +76,7 @@ logger = logging.getLogger("UI")
 
 class WorkerSignals(QObject):
     progress = Signal(str)
+    download_progress = Signal(str, object, object, str)
     finished = Signal(bool, str)
 
     def __init__(self, parent=None):
@@ -166,12 +168,28 @@ class InitWorker(QRunnable):
                 raise RuntimeError("初始化已被用户取消")
             repo_dir = f"{repo_variant_dir}/{model_dir}"
             self.signals.progress.emit(f"正在下载: {self.title} · {model_dir} ({self.variant})…")
+            signals = self.signals
+
+            class DownloadProgress(tqdm):
+                def __init__(self, *args, **kwargs):
+                    super().__init__(*args, **kwargs)
+                    self._report_progress()
+
+                def update(self, n=1):
+                    updated = super().update(n)
+                    self._report_progress()
+                    return updated
+
+                def _report_progress(self):
+                    signals.download_progress.emit(repo_dir, self.n, self.total or 0, self.unit)
+
             try:
                 snapshot_download(
                     repo_id=HF_REPO_ID,
                     allow_patterns=f"{repo_dir}/**",
                     local_dir=variant_deps_path,
                     endpoint=endpoint,
+                    tqdm_class=DownloadProgress,
                 )
                 for variant_dir in HF_VARIANT_DIRS.values():
                     src = os.path.join(variant_deps_path, variant_dir)
@@ -708,6 +726,11 @@ class InitProgressDialog(QDialog):
         """)
         bg_layout.addWidget(self.progress)
 
+        self.download_progress_label = QLabel("")
+        setFont(self.download_progress_label, 11)
+        self.download_progress_label.setStyleSheet("color: #4b5563;")
+        bg_layout.addWidget(self.download_progress_label)
+
         self.log_box = QTextEdit()
         self.log_box.setReadOnly(True)
         setFont(self.log_box, 12)
@@ -726,6 +749,23 @@ class InitProgressDialog(QDialog):
     def append_log(self, text: str):
         self.log_box.append(text)
         self.log_box.verticalScrollBar().setValue(self.log_box.verticalScrollBar().maximum())
+
+    def set_download_progress(self, model_dir: str, completed: int, total: int, unit: str):
+        if total > 0 and unit == "B":
+            total = round(total / 1024 / 1024, 1)
+            completed = round(completed / 1024 / 1024, 1)
+            self.progress.setRange(0, total)
+            self.progress.setValue(completed)
+            self.download_progress_label.setText(
+                self.tr("{model_dir}：已下载 {completed}MB/{total}MB").format(
+                    model_dir=model_dir,
+                    completed=completed,
+                    total=total,
+                )
+            )
+        else:
+            self.progress.setRange(0, 0)
+            self.download_progress_label.setText(model_dir)
 
     def enableCloseBtn(self):
         self.close_btn.show()
@@ -1702,6 +1742,7 @@ class Settings(QWidget):
             parent=progress_dialog
         )
         worker.signals.progress.connect(progress_dialog.append_log)
+        worker.signals.download_progress.connect(progress_dialog.set_download_progress)
         worker.signals.finished.connect(
             lambda ok, msg, switch=switch, badge=badge, progress_dialog=progress_dialog, panel=panel:
             self._on_init_finished(ok, msg, switch, badge, progress_dialog, panel, disable_on_failure)
