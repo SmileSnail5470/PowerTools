@@ -88,7 +88,7 @@ class ImageRestorationWork(BaseWorker):
             result_np = inference.infer(prompt=prompt, input_path=input_path, task_type=task_type)
             result_img = Image.fromarray(np.asarray(result_np).astype(np.uint8))
         else:
-            sr_model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "general_edit", "sr_edit")
+            sr_model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "sr_edit")
             sr_edit_instance = self._get_sr_instance(sr_model_dir, low_memory=low_memory)
             image = Image.open(input_path)
             arr = np.array(image.convert("RGB"))
