@@ -62,7 +62,7 @@ class Config(QConfig):
     # 软件设置
     ffmpeg_path = ConfigItem("SoftwareSettings", "FFmpegPath", softwareInvalidPath, FolderValidator())
     # 显卡环境配置
-    gpuMemoryLimit = OptionsConfigItem("SoftwareSettings", "GPUMemoryLimit", "16", OptionsValidator(["6", "8", "12", "16", "24"]))
+    gpuMemoryLimit = OptionsConfigItem("SoftwareSettings", "GPUMemoryLimit", "16", OptionsValidator(["8", "12", "16", "24"]))
     cudaPath = ConfigItem("SoftwareSettings", "CUDAPath", softwareInvalidPath, FolderValidator())
     cudnnPath = ConfigItem("SoftwareSettings", "CUDNNPath", softwareInvalidPath, FolderValidator())
 

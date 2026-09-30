@@ -667,7 +667,7 @@ def general_session(
     inter_op_num_threads: int = 1,
     graph_optimization_level: str = "all",
     enable_cpu_mem_arena: bool = True,
-    enable_mem_pattern: bool = True,
+    enable_mem_pattern: bool = False,
     optimized_model_path: str | None = None,
     log_severity_level: int = 2,
     free_dim_overrides: dict[str, int] | None = None,

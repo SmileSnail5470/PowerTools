@@ -52,9 +52,9 @@ class ImageEditInference:
             if gpu_memory_limit >= 16:
                 area, max_side = 768 * 768, 1152
             elif gpu_memory_limit >= 12:
-                area, max_side = 608 * 608, 912
+                area, max_side = 640 * 640, 960
             else:
-                area, max_side = 448 * 448, 672
+                area, max_side = 480 * 480, 720
             return min(area, int(self.pipe.max_condition_area)), max_side
         else:
             system_memory = psutil.virtual_memory().total / (1024 ** 3)
@@ -282,7 +282,11 @@ class ImageEditInference:
             if prompt is None:
                 raise ValueError("Mask is not provided but no promot are available")
             width, height, ori_width, ori_height = self._resolve_infer_size(image_list)
-            image = self._infer(prompt=prompt, input_images=image_list, width=width, height=height)
+            if (width, height) == (ori_width, ori_height):
+                condition = image_list[0]
+            else:
+                condition = image_list[0].resize((width, height), resample=Image.Resampling.LANCZOS)
+            image = self._infer(prompt=prompt, input_images=[condition], width=width, height=height)
             if ori_height and ori_width and image.size != (ori_width, ori_height):
                 image = image.resize((ori_width, ori_height), resample=Image.Resampling.LANCZOS)
             return np.array(image)
