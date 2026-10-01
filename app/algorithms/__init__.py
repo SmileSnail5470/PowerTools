@@ -85,8 +85,9 @@ class _BindingState(threading.local):
 
 
 class IOBindingSession:
-    def __init__(self, session):
+    def __init__(self, session, max_output_buf_entries=_MAX_OUTPUT_BUF_ENTRIES):
         self._session = session
+        self._max_output_buf_entries = max(1, int(max_output_buf_entries))
         self._use_cuda = _is_cuda_session(session)
         self._device_type = "cuda" if self._use_cuda else "cpu"
         self._device_id = 0
@@ -350,7 +351,7 @@ class IOBindingSession:
             return state.output_current
         if state.output_mode is not None:
             binding.clear_binding_outputs()
-        max_entries = _MAX_OUTPUT_BUF_ENTRIES * max(1, len(self._output_names))
+        max_entries = self._max_output_buf_entries * max(1, len(self._output_names))
         while len(state.output_bufs) >= max_entries:
             state.output_bufs.pop(next(iter(state.output_bufs)))
         buffers = {}
@@ -556,10 +557,15 @@ class ORTEnvironment:
             if "CUDAExecutionProvider" in available and is_gpu_device():
                 try:
                     cuda_info = ort.OrtMemoryInfo("Cuda", ort.OrtAllocatorType.ORT_ARENA_ALLOCATOR, 0, ort.OrtMemType.DEFAULT)
-                    arena_cfg = ort.OrtArenaCfg(0, 0, 256 * 1024 * 1024, -1)
+                    arena_cfg = ort.OrtArenaCfg(
+                        0,  # 显存上限
+                        1,  # kSameAsRequested avoids next-power-of-two over-reservation.
+                        0,  # Initial chunk size is unused by kSameAsRequested.
+                        -1,
+                    )
                     ort.create_and_register_allocator_v2("CUDAExecutionProvider", cuda_info, {}, arena_cfg)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    algorithms_logger.warning(f"Unable to register bounded CUDA arena: {exc}")
             try:
                 info = ort.OrtMemoryInfo("Cpu", ort.OrtAllocatorType.ORT_ARENA_ALLOCATOR, 0, ort.OrtMemType.DEFAULT)
                 ort.create_and_register_allocator(info, None)
@@ -653,6 +659,9 @@ def general_provider(enable_cuda_graph: bool = False, use_cpu: bool = False):
             "cudnn_conv_algo_search": "HEURISTIC",
             "do_copy_in_default_stream": "1",
         }
+        if os.getenv("POWERTOOLS_REDUCE_WORKSPACE") == "1":
+            cuda_opts["cudnn_conv_use_max_workspace"] = "0"
+            cuda_opts["cudnn_conv_algo_search"] = "DEFAULT"
         if enable_cuda_graph:
             cuda_opts["enable_cuda_graph"] = "1"
         provider_options = [cuda_opts, {}]

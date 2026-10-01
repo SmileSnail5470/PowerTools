@@ -16,21 +16,38 @@ SAVE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tif", ".tiff"}
 
 class ImageRestorationWork(BaseWorker):
     _instance = None
-    _instance_model_dir = None
+    _instance_key = None
+
+    @classmethod
+    def _replace_instance(cls, key, factory):
+        if cls._instance is not None and cls._instance_key != key:
+            release = getattr(cls._instance, "release", None)
+            if callable(release):
+                release()
+            cls._instance = None
+        if cls._instance is None:
+            cls._instance = factory()
+            cls._instance_key = key
+        return cls._instance
 
     @classmethod
     def _get_restoration_instance(cls, model_dir, **kwargs):
-        if cls._instance is None or cls._instance_model_dir != model_dir:
-            cls._instance = ImageRestorationInference(model_dir=model_dir, **kwargs)
-            cls._instance_model_dir = model_dir
-        return cls._instance
+        key = (
+            "restoration",
+            os.fspath(model_dir),
+            bool(kwargs.get("low_memory", True)),
+            kwargs.get("seed", 42),
+        )
+        return cls._replace_instance(key, lambda: ImageRestorationInference(model_dir=model_dir, **kwargs))
 
     @classmethod
     def _get_sr_instance(cls, model_dir, **kwargs):
-        if cls._instance is None or cls._instance_model_dir != model_dir:
-            cls._instance = ImageSRInference(model_dir=model_dir, **kwargs)
-            cls._instance_model_dir = model_dir
-        return cls._instance
+        key = (
+            "super_resolution",
+            os.fspath(model_dir),
+            bool(kwargs.get("low_memory", True)),
+        )
+        return cls._replace_instance(key, lambda: ImageSRInference(model_dir=model_dir, **kwargs))
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -1392,12 +1392,12 @@ class Settings(QWidget):
             fields=[
                 {
                     "key":       "vram",
-                    "label":     "显存上限",
+                    "label":     "显存预算",
                     "type":      "combo",
                     "cfg_item":  cfg.gpuMemoryLimit,
-                    "options":   ["6 GB", "8 GB", "12 GB", "16 GB", "24 GB"],
-                    "value_map": {"6": "6 GB", "8": "8 GB", "12": "12 GB", "16": "16 GB", "24": "24 GB"},
-                    "save_map": {"6 GB": "6", "8 GB": "8", "12 GB": "12", "16 GB": "16", "24 GB": "24"},
+                    "options":   ["8 GB", "12 GB", "16 GB", "24 GB"],
+                    "value_map": {"8": "8 GB", "12": "12 GB", "16": "16 GB", "24": "24 GB"},
+                    "save_map": {"8 GB": "8", "12 GB": "12", "16 GB": "16", "24 GB": "24"},
                     "hint": "最大显存用于指导算法成功运行"
                 },
                 {

@@ -381,20 +381,22 @@ class Pipeline:
             model_input[:, num_latent_tokens:] = xp.asarray(image_latents.astype(hidden_dtype))
         sample = xp.asarray(latents)
         timestep = xp.empty((1,), dtype=transformer.input_dtypes["timestep"])
+        step_buf = xp.empty(sample.shape, dtype=np.float32)
         out_shapes = {"noise_pred": (1, total_tokens, self.in_channels)}
         for index in range(num_inference_steps):
             model_input[:, :num_latent_tokens] = sample.astype(hidden_dtype)
             timestep[0] = step_sigmas[index]
             outputs = transformer.run({"hidden_states": model_input, "timestep": timestep}, output_shapes=out_shapes)
             noise_pred = outputs["noise_pred"][:, :num_latent_tokens]
-            dt = float(step_sigmas[index + 1]) - float(step_sigmas[index])
-            sample = sample + dt * noise_pred.astype(np.float32)
+            dt = np.float32(float(step_sigmas[index + 1]) - float(step_sigmas[index]))
+            xp.multiply(noise_pred, dt, out=step_buf, casting="unsafe")
+            xp.add(sample, step_buf, out=sample)
             if callback_on_step_end is not None:
                 callback_on_step_end(self, index, float(self.scheduler.timesteps[index]), sample)
         latents = asnumpy(sample).astype(np.float32)
         timings["transformer"] = time.perf_counter() - mark
         transformer.clear_static_inputs()
-        model_input = timestep = sample = outputs = noise_pred = None
+        model_input = timestep = step_buf = sample = outputs = noise_pred = None
         if self.low_memory:
             self.unload("transformer")
 
