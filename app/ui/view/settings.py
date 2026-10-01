@@ -900,7 +900,7 @@ class MultiConfigSoftwareCard(QFrame):
         combo.addItems(field.get("options", []))
         current_stored = str(cfg.get(cfg_item))
         display_text = value_map.get(current_stored, current_stored)
-        combo.setText(display_text)
+        combo.setCurrentIndex(combo.findText(display_text))
 
         def _on_changed(text: str, item=cfg_item, smap=save_map):
             cfg.set(item, smap.get(text, text))
