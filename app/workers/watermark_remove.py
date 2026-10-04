@@ -86,6 +86,8 @@ class WatermarkRemoveWork(BaseWorker):
                     "output_path": output_file,
                     "image_restoration_onnx_dir": image_restoration_dir,
                     "refine_type": kwargs["model_name"],
+                    "restoration_prompt": kwargs.get("restoration_prompt", ""),
+                    "restoration_watermark_type": kwargs.get("restoration_watermark_type", "general"),
                     "progress_cb": progress_cb,
                 }
                 self._get_image_instance().run_without_mask(**params)
@@ -131,6 +133,8 @@ class WatermarkRemoveWork(BaseWorker):
                     "output_video_path": output_file,
                     "image_restoration_onnx_dir": image_restoration_dir,
                     "refine_type": kwargs["model_name"],
+                    "restoration_prompt": kwargs.get("restoration_prompt", ""),
+                    "restoration_watermark_type": kwargs.get("restoration_watermark_type", "general"),
                     "ffmpeg_path": os.getenv("POWERTOOLS_FFMPEG_BIN"),
                     "progress_cb": progress_cb,
                 }

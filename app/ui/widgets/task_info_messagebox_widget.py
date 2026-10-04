@@ -19,6 +19,8 @@ param_name_map = {
     "image_boxes": "人工选中水印区域 Box",
     "watermark_tracking_data": "视频水印跟踪参数",
     "watermark_confidence": "水印置信度",
+    "restoration_watermark_type": "文档水印类型",
+    "restoration_prompt": "自定义水印类型",
     "mask_dilate": "水印 Mask 扩张系数",
     "model_name": "模型类型",
     "watermark_text": "水印文本",
@@ -187,6 +189,13 @@ class TaskInfoMessageBox(MessageBoxBase):
                 "lama": "自然保守",
                 "coordfill": "快速填充"
             }
+            value_map.update({
+                "general": "通用水印",
+                "horizontal": "半透明水平",
+                "vertical": "半透明垂直",
+                "diagonal": "半透明斜向",
+                "logo": "图片/Logo",
+            })
             input_section = self.create_section(self.tr("📁 输入文件路径"))
             input_path = self.create_path_label(self.task_params["input_path"])
             input_section.layout().addWidget(input_path)

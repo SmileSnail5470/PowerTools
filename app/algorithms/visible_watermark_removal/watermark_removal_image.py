@@ -159,6 +159,8 @@ class WatermarkInpaint():
             grig_onnx_path="",
             general_edit_onnx_dir="",
             image_restoration_onnx_dir="",
+            restoration_prompt="",
+            restoration_watermark_type="general",
             model_type="lama",
             dilate_num=2,
         ):
@@ -172,6 +174,8 @@ class WatermarkInpaint():
         self.grig_onnx_path = grig_onnx_path
         self.general_edit_onnx_dir = general_edit_onnx_dir
         self.image_restoration_onnx_dir = image_restoration_onnx_dir
+        self.restoration_prompt = restoration_prompt
+        self.restoration_watermark_type = restoration_watermark_type
 
     def _save_watermark_removed_image(self, image, output_path):
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
@@ -192,8 +196,10 @@ class WatermarkInpaint():
     def _process_image_with_image_restoration(self, image_path):
         image_restoration_inpaint = ImageRestorationInference(model_dir=self.image_restoration_onnx_dir)
         result = image_restoration_inpaint.infer(
+            prompt=self.restoration_prompt,
             input_path=image_path,
-            task_type="watermark_remove"
+            task_type="watermark_remove",
+            watermark_type=self.restoration_watermark_type,
         )
         return result  # [H, W, 3] 0~255 uint8 RGB
 
@@ -420,6 +426,8 @@ class ImageWatermarkRemove():
             progress_cb("WaterRemoveStart", "")
         image_inpainting = WatermarkInpaint(
             image_restoration_onnx_dir=image_restoration_onnx_dir,
+            restoration_prompt=kwargs.get("restoration_prompt", ""),
+            restoration_watermark_type=kwargs.get("restoration_watermark_type", "general"),
             model_type=refine_type,
         )
         image_inpainting.inpaint(image_path=image_path, output_path=output_path)

@@ -3,13 +3,13 @@ import sys
 from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
 from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QLabel, QHBoxLayout, QStackedWidget, QLineEdit, QFileDialog, QStackedLayout, 
-    QSlider, QButtonGroup, QPushButton
+    QSlider, QButtonGroup, QPushButton, QFrame, QTextEdit
 )
 from PySide6.QtGui import QFont, QColor, QAction
 
 from app.ui.library.qfluentwidgets import( 
     setFont, HeaderCardWidget, SegmentedWidget, ScrollArea, PushButton, CaptionLabel,
-    LineEdit, FluentIcon, ComboBox, TeachingTip, InfoBarIcon, TeachingTipTailPosition,
+    LineEdit, FluentIcon, ComboBox, FlowLayout, TeachingTip, InfoBarIcon, TeachingTipTailPosition,
     MessageBox
 )
 
@@ -193,6 +193,113 @@ class WatermarkMaskDilate(HeaderCardWidget):
 
     def on_value_changed(self, value):
         self.label.setText(str(value))
+
+
+class WatermarkTypeCardItem(QFrame):
+    clicked = Signal(str)
+
+    def __init__(self, key, icon, name, description, color, parent=None):
+        super().__init__(parent)
+        self.key = key
+        self.is_selected = False
+        self.setFixedSize(105, 45)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(description)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(6)
+
+        icon_label = QLabel(icon, self)
+        icon_label.setFixedSize(20, 20)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_label.setStyleSheet(
+            f"QLabel {{ background-color: {color}; border-radius: 8px; font-size: 14px; }}"
+        )
+        layout.addWidget(icon_label)
+        name_label = QLabel(name, self)
+        setFont(name_label, 12)
+        name_label.setStyleSheet("color: #1f2937; background: transparent;")
+        layout.addWidget(name_label)
+        self.set_selected(False)
+
+    def set_selected(self, selected):
+        self.is_selected = bool(selected)
+        if self.is_selected:
+            self.setStyleSheet(
+                "WatermarkTypeCardItem { background: #eef2ff; border: 2px solid #667eea; border-radius: 8px; }"
+            )
+        else:
+            self.setStyleSheet("""
+                WatermarkTypeCardItem { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; } 
+                WatermarkTypeCardItem:hover { background: #f8fafc; border-color: #c7d2fe; }
+            """)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self.key)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+
+class RestorationWatermarkPromptCard(HeaderCardWidget):
+    PRESETS = (
+        ("general", "💧", "通用水印", "文档中的文字或图形水印", "#38bdf8"),
+        ("horizontal", "↔️", "半透明水平", "半透明水平文字水印", "#22c55e"),
+        ("vertical", "↕️", "半透明垂直", "半透明垂直文字水印", "#f59e0b"),
+        ("diagonal", "📐", "半透明斜向", "半透明斜向文字水印", "#f472b6"),
+        ("logo", "©️", "图片/Logo", "半透明图片或 Logo 水印", "#0ea5e9"),
+    )
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setTitle(self.tr("📝 文档水印参数"))
+        self.setBorderRadius(8)
+        self.viewLayout.setContentsMargins(10, 10, 10, 10)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        self.viewLayout.addLayout(layout)
+
+        type_label = CaptionLabel(text=self.tr("水印类型"))
+        setFont(type_label, fontSize=14, weight=QFont.DemiBold)
+        layout.addWidget(type_label)
+        flow_layout = FlowLayout(needAni=True)
+        flow_layout.setContentsMargins(0, 0, 0, 0)
+        flow_layout.setHorizontalSpacing(8)
+        flow_layout.setVerticalSpacing(8)
+        self.type_cards = []
+        for key, icon, name, description, color in self.PRESETS:
+            card = WatermarkTypeCardItem(key, icon, name, description, color, self)
+            card.clicked.connect(self._on_type_selected)
+            flow_layout.addWidget(card)
+            self.type_cards.append(card)
+        layout.addLayout(flow_layout)
+
+        layout.addSpacing(8)
+        prompt_label = CaptionLabel(text=self.tr("自定义水印类型（可选）"))
+        setFont(prompt_label, fontSize=14, weight=QFont.DemiBold)
+        layout.addWidget(prompt_label)
+        self.prompt_edit = QTextEdit(self)
+        self.prompt_edit.setMaximumHeight(72)
+        self.prompt_edit.setPlaceholderText(self.tr("描述什么类型水印；留空则使用上方预设（建议使用英文）"))
+        self.prompt_edit.setStyleSheet("""
+            QTextEdit { border: 1px solid #e0e0e0; border-radius: 8px; padding: 6px; background-color: #fafafa; color: #1a1a1a; }
+            QTextEdit:focus { border: 1px solid #667eea; background-color: #ffffff; }
+        """)
+        setFont(self.prompt_edit, fontSize=13)
+        self.prompt_edit.textChanged.connect(
+            lambda: watermark_remove_params.set_param("restoration_prompt", self.prompt_edit.toPlainText())
+        )
+        layout.addWidget(self.prompt_edit)
+
+        self._on_type_selected(self.PRESETS[0][0])
+
+    def _on_type_selected(self, selected_key):
+        for card in self.type_cards:
+            card.set_selected(card.key == selected_key)
+        watermark_remove_params.set_param("restoration_watermark_type", selected_key)
 
 
 class WatermarkRemoveStyleCard(HeaderCardWidget):
@@ -572,6 +679,9 @@ class ControlPanelWidget(ScrollArea):
         watermarkRemoveStyleCard = WatermarkRemoveStyleCard(self)
         main_layout.addWidget(watermarkRemoveStyleCard)
 
+        self.restoration_prompt_card = RestorationWatermarkPromptCard(self)
+        main_layout.addWidget(self.restoration_prompt_card)
+
         watermarkDetectionTypeCard = WatermarkDetectionTypeCard(self)
         main_layout.addWidget(watermarkDetectionTypeCard)
         self.output_mask_cards.append(watermarkDetectionTypeCard)
@@ -592,10 +702,12 @@ class ControlPanelWidget(ScrollArea):
         main_layout.addStretch(1)
 
         watermark_remove_params.param_changed.connect(self._on_param_changed)
+        self._on_param_changed("model_name", watermark_remove_params.get_param("model_name"))
         
     def _on_param_changed(self, key, value):
         if key != "model_name":
             return
+        self.restoration_prompt_card.setVisible(value == "image_restoration")
         if value == "image_restoration":
             for card in self.output_mask_cards:
                 card.hide()
@@ -946,8 +1058,8 @@ class HeaderWidget(QWidget):
             task_params["model_name"] = params["model_name"]
 
         if task_params["model_name"] in ["image_restoration"]:
-            # 不需要水印检测
-            pass
+            task_params["restoration_watermark_type"] = params.get("restoration_watermark_type", "general")
+            task_params["restoration_prompt"] = params.get("restoration_prompt", "")
         else:
             # 水印检测
             if "watermark_detect_type" not in params:
