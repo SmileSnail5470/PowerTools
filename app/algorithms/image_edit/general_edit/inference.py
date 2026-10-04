@@ -282,11 +282,13 @@ class ImageEditInference:
             if prompt is None:
                 raise ValueError("Mask is not provided but no promot are available")
             width, height, ori_width, ori_height = self._resolve_infer_size(image_list)
-            if (width, height) == (ori_width, ori_height):
+            if image_list is None:
+                condition = None
+            elif (width, height) == (ori_width, ori_height):
                 condition = image_list[0]
             else:
                 condition = image_list[0].resize((width, height), resample=Image.Resampling.LANCZOS)
-            image = self._infer(prompt=prompt, input_images=[condition], width=width, height=height)
+            image = self._infer(prompt=prompt, input_images=[condition] if condition is not None else None, width=width, height=height)
             if ori_height and ori_width and image.size != (ori_width, ori_height):
                 image = image.resize((ori_width, ori_height), resample=Image.Resampling.LANCZOS)
             return np.array(image)
