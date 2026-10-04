@@ -11,3 +11,4 @@ app/resources/deps/super_resolution/*
 *.pyd
 *.so
 *.lic
+temp/

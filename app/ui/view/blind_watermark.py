@@ -373,6 +373,7 @@ class ModelSelectCard(HeaderCardWidget):
                 card.set_selected(True)
                 self.model_name.emit(card.get_name())
                 return
+        self.model_name.emit("")
 
     def _on_task_finished_by_model(self, model_name):
         current_index = self.stacked_widget.currentIndex()
@@ -640,22 +641,23 @@ class HeaderWidget(QWidget):
         if not self.is_batch_task:
             blind_watermark_remove_task_status_model.start_step(name=self.tr("准备任务"))
         blind_watermark_remove_active_futures.clear()
-        for func, args, kwargs in total_tasks:
-            input_path = kwargs["input_path"]
+
+        def submit_task(func, args, kwargs, input_path):
+            retry_callback = lambda f=func, a=args, k=kwargs, p=input_path: submit_task(f, a, k, p)
             future = global_task_manager.submit(func, *args, **kwargs)
             blind_watermark_remove_active_futures.append(future)
-            future.finished.connect(
-                lambda result, path=input_path: self._task_finished(path, result)
-            )
+            future.finished.connect(lambda result, path=input_path: self._task_finished(path, result))
             future.failed.connect(
-                lambda e, path=input_path: blind_watermark_remove_task_status_model.report_failure(path, e)
+                lambda error, path=input_path, retry=retry_callback: blind_watermark_remove_task_status_model.report_failure(path, error, retry)
             )
             future.cancelled.connect(
-                lambda path=input_path: blind_watermark_remove_task_status_model.report_failure(path, "任务被取消")
+                lambda path=input_path, retry=retry_callback: blind_watermark_remove_task_status_model.report_failure(path, "任务被取消", retry)
             )
-            future.progress.connect(
-                lambda value, msg, path=input_path: self._task_progress(path, value, msg)
-            )
+            future.progress.connect(lambda value, msg, path=input_path: self._task_progress(path, value, msg))
+
+        for func, args, kwargs in total_tasks:
+            input_path = kwargs["input_path"]
+            submit_task(func, args, kwargs, input_path)
         TeachingTip.create(
             target=self.process_btn,
             icon=InfoBarIcon.SUCCESS,
@@ -697,8 +699,8 @@ class HeaderWidget(QWidget):
         if not params:
             error_msg = self.tr("请设置暗水印去除参数")
             return error_msg, task_params
-        if not cfg.get(cfg.localBlindWatermarkEnabled):
-            error_msg = self.tr("请在设置页面打开 '盲水印AI能力' 开关")
+        if not cfg.get(cfg.localBlindWatermarkRemoveEnabled):
+            error_msg = self.tr("请在设置页面打开 '暗印去除' 能力开关")
             return error_msg, task_params
         if "input_path" not in params or not params["input_path"]:
             error_msg = self.tr("请选择要处理的文件或目录")

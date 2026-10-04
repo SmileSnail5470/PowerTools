@@ -136,6 +136,7 @@ class ModelStyleCard(HeaderCardWidget):
                 card.set_selected(True)
                 self.model_name.emit(card.get_name())
                 return
+        self.model_name.emit("")
 
 class SettingsCard(HeaderCardWidget):
     language_map = {
@@ -451,23 +452,23 @@ class HeaderWidget(QWidget):
             ocr_task_status_model.start_step(name=self.tr("准备任务"))
 
         ocr_active_futures.clear()
-        for func, args, kwargs in total_tasks:
-            input_path = kwargs["input_path"]
+
+        def submit_task(func, args, kwargs, input_path):
+            retry_callback = lambda f=func, a=args, k=kwargs, p=input_path: submit_task(f, a, k, p)
             future = global_task_manager.submit(func, *args, **kwargs)
             ocr_active_futures.append(future)
-            
-            future.finished.connect(
-                lambda result, path=input_path: self._task_finished(path, result)
-            )
+            future.finished.connect(lambda result, path=input_path: self._task_finished(path, result))
             future.failed.connect(
-                lambda e, path=input_path: ocr_task_status_model.report_failure(path, e)
+                lambda error, path=input_path, retry=retry_callback: ocr_task_status_model.report_failure(path, error, retry)
             )
             future.cancelled.connect(
-                lambda path=input_path: ocr_task_status_model.report_failure(path, "任务被取消")
+                lambda path=input_path, retry=retry_callback: ocr_task_status_model.report_failure(path, "任务被取消", retry)
             )
-            future.progress.connect(
-                lambda value, msg, path=input_path: self._task_progress(path, value, msg)
-            )
+            future.progress.connect(lambda value, msg, path=input_path: self._task_progress(path, value, msg))
+
+        for func, args, kwargs in total_tasks:
+            input_path = kwargs["input_path"]
+            submit_task(func, args, kwargs, input_path)
 
         TeachingTip.create(
             target=self.process_btn,
@@ -508,8 +509,8 @@ class HeaderWidget(QWidget):
         if not params:
             error_msg = self.tr("请设置OCR识别参数")
             return error_msg, task_params
-        if not cfg.get(cfg.localOCREnabled):
-            error_msg = self.tr("请在设置页面打开 'OCR 能力' 开关")
+        if not cfg.get(cfg.localTextExtractEnabled):
+            error_msg = self.tr("请在设置页面打开 '文字提取' 能力开关")
             return error_msg, task_params
         
         if "input_path" not in params or not params["input_path"]:

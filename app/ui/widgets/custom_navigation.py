@@ -96,6 +96,16 @@ class CustomNavigation(QWidget):
             self.currentTextChanged.emit(target.text())
             self.itemClicked.emit(index, target.text())
 
+    def set_item_visible(self, index: int, visible: bool):
+        if index < 0 or index >= len(self.items):
+            return
+        self.items[index].setVisible(visible)
+        if not visible and self.current_index == index:
+            for i, item in enumerate(self.items):
+                if item.isVisible():
+                    self.set_current_index(i)
+                    break
+
 
 class NavItem(QLabel):
     def __init__(self, text, index, parent_nav):

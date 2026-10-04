@@ -1,4 +1,3 @@
-import tempfile
 import os
 import cv2
 import numpy as np
@@ -13,6 +12,7 @@ from app.algorithms.visible_watermark_removal.modules.text_detection import dete
 from app.algorithms.visible_watermark_removal.modules.yolo_detecttion import YOLODetection
 from app.algorithms.segment.inference import SegmentationInference
 from app.algorithms.image_edit.general_edit.inference import ImageEditInference
+from app.algorithms.private.image_restoration.inference import ImageRestorationInference
 
 
 class WatermarkSegment():
@@ -151,13 +151,16 @@ class WatermarkSegment():
 class WatermarkInpaint():
     def __init__(
             self, 
-            mask,  
-            pt_inpaint_onnx_path, 
-            cf_onnx_path, 
-            lama_onnx_path,
-            emdf_onnx_path,
-            grig_onnx_path,
-            general_edit_onnx_dir,
+            mask=None,  
+            pt_inpaint_onnx_path="", 
+            cf_onnx_path="", 
+            lama_onnx_path="",
+            emdf_onnx_path="",
+            grig_onnx_path="",
+            general_edit_onnx_dir="",
+            image_restoration_onnx_dir="",
+            restoration_prompt="",
+            restoration_watermark_type="general",
             model_type="lama",
             dilate_num=2,
         ):
@@ -170,6 +173,9 @@ class WatermarkInpaint():
         self.emdf_onnx_path = emdf_onnx_path
         self.grig_onnx_path = grig_onnx_path
         self.general_edit_onnx_dir = general_edit_onnx_dir
+        self.image_restoration_onnx_dir = image_restoration_onnx_dir
+        self.restoration_prompt = restoration_prompt
+        self.restoration_watermark_type = restoration_watermark_type
 
     def _save_watermark_removed_image(self, image, output_path):
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
@@ -186,6 +192,16 @@ class WatermarkInpaint():
             task_type="watermark_remove"
         )
         return result
+
+    def _process_image_with_image_restoration(self, image_path):
+        image_restoration_inpaint = ImageRestorationInference(model_dir=self.image_restoration_onnx_dir)
+        result = image_restoration_inpaint.infer(
+            prompt=self.restoration_prompt,
+            input_path=image_path,
+            task_type="watermark_remove",
+            watermark_type=self.restoration_watermark_type,
+        )
+        return result  # [H, W, 3] 0~255 uint8 RGB
 
     def _process_image_with_lama(self, image_path):
         lama_inpaint = LamaInpaint()
@@ -280,6 +296,8 @@ class WatermarkInpaint():
             img = self._process_image_with_emdf(image_path=image_path)
         elif self.model_type == "general_edit":
             img = self._process_image_with_general_edit(image_path=image_path)
+        elif self.model_type == "image_restoration":
+            img = self._process_image_with_image_restoration(image_path=image_path)
         else:
             raise Exception(f"not support {self.model_type}")
         
@@ -331,7 +349,7 @@ class ImageWatermarkRemove():
             segment_onnx_dir,
             general_edit_onnx_dir,
             mask_path: str = "",
-            refine_type: str = "patchwiper",                    # patchwiper/lama/transparent/cv2/coordfill/grig/emdf
+            refine_type: str = "patchwiper",                    # patchwiper/lama/transparent/cv2/coordfill/grig/emdf/general_edit/image_restoration
             watermark_type: str = "all",                        # text / all
             ai_detect_type: str = "ai_interactive_detect",      # ai_interactive_detect/ai_auto_detect
             ai_interactive_type: str = "semantic_detect",       # semantic_detect/space_detect
@@ -390,6 +408,27 @@ class ImageWatermarkRemove():
             general_edit_onnx_dir=general_edit_onnx_dir,
             model_type=refine_type,
             dilate_num=dilate_num,
+        )
+        image_inpainting.inpaint(image_path=image_path, output_path=output_path)
+        if progress_cb is not None:
+            progress_cb("WaterRemoved", "")
+
+    def run_without_mask(
+            self, 
+            image_path, 
+            output_path,
+            image_restoration_onnx_dir,
+            refine_type: str = "image_restoration",
+            **kwargs
+        ):
+        progress_cb = kwargs.pop("progress_cb", None)
+        if progress_cb is not None:
+            progress_cb("WaterRemoveStart", "")
+        image_inpainting = WatermarkInpaint(
+            image_restoration_onnx_dir=image_restoration_onnx_dir,
+            restoration_prompt=kwargs.get("restoration_prompt", ""),
+            restoration_watermark_type=kwargs.get("restoration_watermark_type", "general"),
+            model_type=refine_type,
         )
         image_inpainting.inpaint(image_path=image_path, output_path=output_path)
         if progress_cb is not None:

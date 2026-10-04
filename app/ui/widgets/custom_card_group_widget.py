@@ -128,11 +128,11 @@ class StyleCard(QFrame):
     UpdateLicenseInfo = Signal()
 
     ICON_MAP = {
-        "#4facfe": "✏️",   # PatchWiper：细节增强 / 手工修补感
-        "#f093fb": "🧠",   # EMDF：智能修补 / 自适应
-        "#a18cd1": "⚖️",   # GRIG：平衡修复
-        "#84fab0": "🍃",   # LaMa：自然、保守、平滑
-        "#fbc2eb": "🪣",   # CoordFill：快速填充
+        "#4facfe": "✏️",
+        "#f093fb": "🧠",
+        "#a18cd1": "⚖️",
+        "#84fab0": "🍃",
+        "#fbc2eb": "🪣",
     }
 
     MODEL_FREE = "free"
@@ -356,6 +356,15 @@ class StyleCard(QFrame):
 
     def get_name(self):
         return self.name
+
+    def set_interactive(self, interactive):
+        if not self._is_authorized:
+            return
+        self._is_interactive = bool(interactive)
+        if not self._is_interactive and self.is_selected:
+            self.set_selected(False)
+        else:
+            self._update_interactive_style()
 
     def set_selected(self, selected):
         if selected and not self._is_interactive:

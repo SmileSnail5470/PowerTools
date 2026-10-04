@@ -1,7 +1,7 @@
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List
+from typing import Callable, List
 from PySide6.QtCore import QObject, Signal, QTimer
 from app.ui.common.config import cfg
 
@@ -49,6 +49,7 @@ class BatchStatus:
     failed: int = 0
     skipped: int = 0
     failures: list = field(default_factory=list)
+    retry_callbacks: List[Callable[[], None]] = field(default_factory=list)
 
 
 @dataclass
@@ -189,13 +190,48 @@ class TaskStatusModel(QObject):
         if not self._check_finished():
             self.notify()
 
-    def report_failure(self, filename: str, reason: str):
+    def report_failure(self, filename: str, reason: str, retry_callback: Callable[[], None] = None):
         self.status.batch.processed += 1
         self.status.batch.failed += 1
         self.status.batch.failures.append((filename, reason))
+        if retry_callback is not None:
+            self.status.batch.retry_callbacks.append(retry_callback)
         self._update_performance()
         if not self._check_finished():
             self.notify()
+
+    def retry_failures(self) -> int:
+        if self.status.state == TaskState.RUNNING:
+            return 0
+        batch = self.status.batch
+        retry_callbacks = list(batch.retry_callbacks)
+        if not retry_callbacks:
+            return 0
+
+        batch.total = len(retry_callbacks)
+        batch.processed = 0
+        batch.success = 0
+        batch.failed = 0
+        batch.skipped = 0
+        batch.failures.clear()
+        batch.retry_callbacks.clear()
+        self.status.state = TaskState.RUNNING
+        self.status.active_workers.clear()
+        self.status.performance = PerformanceStatus(start_time=time.time())
+        for step in self.status.pipeline_steps:
+            step.state = StepState.PENDING
+            step.start_time = 0.0
+            step.duration = 0.0
+        if self.status.pipeline_steps:
+            preparation_step = self.status.pipeline_steps[0]
+            preparation_step.state = StepState.RUNNING
+            preparation_step.start_time = self.status.performance.start_time
+        self._heartbeat_timer.start()
+        self.notify_immediate()
+
+        for retry_callback in retry_callbacks:
+            retry_callback()
+        return len(retry_callbacks)
 
     def _update_performance(self):
         perf = self.status.performance

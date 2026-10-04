@@ -302,6 +302,7 @@ class BlindWatermarkModelCard(HeaderCardWidget):
 
         main_layout.addStretch()
         bind_widget_to_param(self, "blind_watermark_model_name", watermark_add_params, "blind_watermark_model_name", transform=None)
+        self.blind_watermark_model_name.emit("placeholder_model")
         self.select_first_interactive()
         global_event_bus.License_update.connect(self.select_first_interactive)
         global_event_bus.watermarkAdd_TaskFinishedByModel.connect(self.update_model_card_info)
@@ -338,6 +339,7 @@ class BlindWatermarkModelCard(HeaderCardWidget):
                 card_instance.set_selected(True)
                 self.blind_watermark_model_name.emit(model_name)
                 return
+        self.blind_watermark_model_name.emit("")
 
     def set_watermark_type(self, type_name: str):
         if type_name == "blind":
@@ -820,11 +822,12 @@ class HeaderWidget(QWidget):
         if not w.exec():
             return
         
-        allowed_use, error_msg = feature_gate.can_use(feature_name=feature_gate.get_feature_name(watermark_add_params.to_dict()["blind_watermark_model_name"]), return_errmsg=True)
-        if not allowed_use:
-            MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
-            return
-        task_params["_feature_name_"] = feature_gate.get_feature_name(watermark_add_params.to_dict()["blind_watermark_model_name"])
+        if watermark_add_params.to_dict()["blind_watermark_model_name"] != "placeholder_model":
+            allowed_use, error_msg = feature_gate.can_use(feature_name=feature_gate.get_feature_name(watermark_add_params.to_dict()["blind_watermark_model_name"]), return_errmsg=True)
+            if not allowed_use:
+                MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
+                return
+            task_params["_feature_name_"] = feature_gate.get_feature_name(watermark_add_params.to_dict()["blind_watermark_model_name"])
         
         total_tasks = []
         input_path = task_params["input_path"]
@@ -849,23 +852,23 @@ class HeaderWidget(QWidget):
             task_status_model.start_step(name=self.tr("准备任务"))
 
         watermark_add_active_futures.clear()
-        for func, args, kwargs in total_tasks:
-            input_path = kwargs["input_path"]
+
+        def submit_task(func, args, kwargs, input_path):
+            retry_callback = lambda f=func, a=args, k=kwargs, p=input_path: submit_task(f, a, k, p)
             future = global_task_manager.submit(func, *args, **kwargs)
             watermark_add_active_futures.append(future)
-            
-            future.finished.connect(
-                lambda result, path=input_path: self._task_finished(path, result)
-            )
+            future.finished.connect(lambda result, path=input_path: self._task_finished(path, result))
             future.failed.connect(
-                lambda e, path=input_path: task_status_model.report_failure(path, e)
+                lambda error, path=input_path, retry=retry_callback: task_status_model.report_failure(path, error, retry)
             )
             future.cancelled.connect(
-                lambda path=input_path: task_status_model.report_failure(path, "任务被取消")
+                lambda path=input_path, retry=retry_callback: task_status_model.report_failure(path, "任务被取消", retry)
             )
-            future.progress.connect(
-                lambda value, msg, path=input_path: self._task_progress(path, value, msg)
-            )
+            future.progress.connect(lambda value, msg, path=input_path: self._task_progress(path, value, msg))
+
+        for func, args, kwargs in total_tasks:
+            input_path = kwargs["input_path"]
+            submit_task(func, args, kwargs, input_path)
 
         TeachingTip.create(
             target=self.process_btn,
@@ -914,8 +917,8 @@ class HeaderWidget(QWidget):
         if not params:
             error_msg = self.tr("请设置水印参数")
             return error_msg, task_params
-        if not cfg.get(cfg.localBlindWatermarkEnabled):
-            error_msg = self.tr("请在设置页面打开 '盲水印AI能力' 开关")
+        if not cfg.get(cfg.localWatermarkAddEnabled):
+            error_msg = self.tr("请在设置页面打开 '水印添加' 能力开关")
             return error_msg, task_params
         
         if "input_path" not in params or not params["input_path"]:
@@ -936,7 +939,7 @@ class HeaderWidget(QWidget):
         
         if "blind_watermark_task_type" in params and params["blind_watermark_task_type"] == "extract_blind_watermark":
             task_params["blind_watermark_task_type"] = params["blind_watermark_task_type"]
-            if "blind_watermark_model_name" not in params:
+            if "blind_watermark_model_name" not in params or params["blind_watermark_model_name"] == "placeholder_model":
                 error_msg = self.tr("请选择盲水印算法")
                 return error_msg, task_params
             task_params["blind_watermark_model_name"] = params["blind_watermark_model_name"]
@@ -972,7 +975,7 @@ class HeaderWidget(QWidget):
             if not params["watermark_text"]:
                 error_msg = self.tr("请设置水印文本")
                 return error_msg, task_params
-            if "blind_watermark_model_name" not in params:
+            if "blind_watermark_model_name" not in params or params["blind_watermark_model_name"] == "placeholder_model":
                 error_msg = self.tr("请选择盲水印算法")
                 return error_msg, task_params
             task_params["watermark_text"] = params["watermark_text"]

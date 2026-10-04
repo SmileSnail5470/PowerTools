@@ -300,6 +300,7 @@ class ModelSelectCard(HeaderCardWidget):
                 card.set_selected(True)
                 self.model_name.emit(card.get_name())
                 return
+        self.model_name.emit("")
 
     def _on_task_finished_by_model(self, model_name):
         current_index = self.stacked_widget.currentIndex()
@@ -579,21 +580,21 @@ class HeaderWidget(QWidget):
         image_edit_task_status_model.start_step(name=self.tr("准备任务"))
 
         image_edit_active_futures.clear()
-        future = global_task_manager.submit(func, *args, **kwargs)
-        image_edit_active_futures.append(future)
 
-        future.finished.connect(
-            lambda result, path=input_path: self._task_finished(path, result)
-        )
-        future.failed.connect(
-            lambda e, path=input_path: image_edit_task_status_model.report_failure(path, e)
-        )
-        future.cancelled.connect(
-            lambda path=input_path: image_edit_task_status_model.report_failure(path, "任务被取消")
-        )
-        future.progress.connect(
-            lambda value, msg, path=input_path: self._task_progress(path, value, msg)
-        )
+        def submit_task(func, args, kwargs, input_path):
+            retry_callback = lambda f=func, a=args, k=kwargs, p=input_path: submit_task(f, a, k, p)
+            future = global_task_manager.submit(func, *args, **kwargs)
+            image_edit_active_futures.append(future)
+            future.finished.connect(lambda result, path=input_path: self._task_finished(path, result))
+            future.failed.connect(
+                lambda error, path=input_path, retry=retry_callback: image_edit_task_status_model.report_failure(path, error, retry)
+            )
+            future.cancelled.connect(
+                lambda path=input_path, retry=retry_callback: image_edit_task_status_model.report_failure(path, "任务被取消", retry)
+            )
+            future.progress.connect(lambda value, msg, path=input_path: self._task_progress(path, value, msg))
+
+        submit_task(func, args, kwargs, input_path)
 
         TeachingTip.create(
             target=self.process_btn,
@@ -632,7 +633,7 @@ class HeaderWidget(QWidget):
             error_msg = self.tr("请设置图像编辑参数")
             return error_msg, task_params
         if not cfg.get(cfg.localImageEditEnabled):
-            error_msg = self.tr("请在设置页面打开 '图像编辑AI能力' 开关")
+            error_msg = self.tr("请在设置页面打开 '图像编辑' 能力开关")
             return error_msg, task_params
         if "prompt" not in params or not params.get("prompt", "").strip():
             error_msg = self.tr("请输入编辑提示词")

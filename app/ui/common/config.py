@@ -62,24 +62,23 @@ class Config(QConfig):
     # 软件设置
     ffmpeg_path = ConfigItem("SoftwareSettings", "FFmpegPath", softwareInvalidPath, FolderValidator())
     # 显卡环境配置
-    gpuMemoryLimit = OptionsConfigItem("SoftwareSettings", "GPUMemoryLimit", "16", OptionsValidator(["6", "8", "12", "16", "24"]))
+    gpuMemoryLimit = OptionsConfigItem("SoftwareSettings", "GPUMemoryLimit", "16", OptionsValidator(["8", "12", "16", "24"]))
     cudaPath = ConfigItem("SoftwareSettings", "CUDAPath", softwareInvalidPath, FolderValidator())
     cudnnPath = ConfigItem("SoftwareSettings", "CUDNNPath", softwareInvalidPath, FolderValidator())
 
     # 本地AI设置
     default_deps_path = os.path.join(pathlib.Path.home(), "PowerToolsResources", "resources", "deps")
-    localAIModelDeps = ConfigItem("LocalAISettings", "LocalAIModelDeps", default_deps_path, FolderValidator())
-    localBlindWatermarkEnabled = ConfigItem("LocalAISettings", "LocalBlindWatermarkEnabled", False, BoolValidator())
-    localWatermarkRemovalEnabled = ConfigItem("LocalAISettings", "LocalWatermarkRemovalEnabled", False, BoolValidator())
-    localObjectSegmentationEnabled = ConfigItem("LocalAISettings", "LocalObjectSegmentationEnabled", False, BoolValidator())
-    localOCREnabled = ConfigItem("LocalAISettings", "localOCREnabled", False, BoolValidator())
-    localVideoInpaintingEnabled = ConfigItem("LocalAISettings", "localVideoInpaintingEnabled", False, BoolValidator())
-    localObjectTrackingEnabled = ConfigItem("LocalAISettings", "localObjectTrackingEnabled", False, BoolValidator())
-    localImageEditEnabled = ConfigItem("LocalAISettings", "localImageEditEnabled", False, BoolValidator())
+    localAIModelDeps = ConfigItem("LocalAISettings", "LocalAIModelDeps", default_deps_path, FolderValidator())    
+    localWatermarkAddEnabled = ConfigItem("LocalAISettings", "LocalWatermarkAddEnabled", False, BoolValidator())
+    localWatermarkRemoveEnabled = ConfigItem("LocalAISettings", "LocalWatermarkRemoveEnabled", False, BoolValidator())
+    localTextExtractEnabled = ConfigItem("LocalAISettings", "LocalTextExtractEnabled", False, BoolValidator())
+    localBlindWatermarkRemoveEnabled = ConfigItem("LocalAISettings", "LocalBlindWatermarkRemoveEnabled", False, BoolValidator())
+    localImageEditEnabled = ConfigItem("LocalAISettings", "LocalImageEditEnabled", False, BoolValidator())
+    localImageRestorationEnabled = ConfigItem("LocalAISettings", "LocalImageRestorationEnabled", False, BoolValidator())
 
     # 高级设置
     logLevel = OptionsConfigItem("AdvancedSettings", "LogLevel", "INFO", OptionsValidator(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]))
-    taskParallelNumber = OptionsConfigItem("AdvancedSettings", "TaskParallelNumber", 8, OptionsValidator([1, 2, 4, 8, 16]), restart=True)
+    taskParallelNumber = OptionsConfigItem("AdvancedSettings", "TaskParallelNumber", 1, OptionsValidator([1, 2, 4, 8, 16]), restart=True)
     hardwareOptimizationType = OptionsConfigItem("AdvancedSettings", "HardwareOptimizationType", "Auto", OptionsValidator(["Auto", "CPU", "GPU"]))
 
     def __init__(self):
@@ -90,6 +89,8 @@ class Config(QConfig):
         self._init_connect()
         self._update_gpu_env()
         
+        os.environ["POWERTOOLS_VERSION"] = "2.0.0"  # 每次发版本，这里要更新
+
         os.environ["POWERTOOLS_FFMPEG_BIN"] = self.get(self.ffmpeg_path)
         self.ffmpeg_path.valueChanged.connect(update_ffmpeg_path)
         os.environ["POWERTOOLS_LOCAL_AI_MODEL_DEPS"] = self.get(self.localAIModelDeps)

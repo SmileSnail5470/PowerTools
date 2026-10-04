@@ -126,11 +126,11 @@ class GuideCard(SimpleCardWidget):
 class Tutorial(QWidget):
     settingsRequested = Signal()
 
-    RELEASES_URL = "https://pan.quark.cn/list#/list/all/0036d165fa7d4b288c1efd4f35d98082-PowerTools%20%E8%BD%AF%E4%BB%B6"
-    FFMPEG_URL = "https://pan.quark.cn/list#/list/all/0036d165fa7d4b288c1efd4f35d98082-PowerTools%20%E8%BD%AF%E4%BB%B6/8a2962595bfe4906be261f67260c622c-%E8%A7%86%E9%A2%91%E5%A4%84%E7%90%86%E8%BD%AF%E4%BB%B6*101windows"
-    CUDA_URL = "https://pan.quark.cn/list#/list/all/0036d165fa7d4b288c1efd4f35d98082-PowerTools%20%E8%BD%AF%E4%BB%B6/f9b0116b503f47e8a9d2d469a0ea3dde-%E6%98%BE%E5%8D%A1%E4%BE%9D%E8%B5%96%E9%A9%B1%E5%8A%A8"
-    CUDNN_URL = "https://pan.quark.cn/list#/list/all/0036d165fa7d4b288c1efd4f35d98082-PowerTools%20%E8%BD%AF%E4%BB%B6/f9b0116b503f47e8a9d2d469a0ea3dde-%E6%98%BE%E5%8D%A1%E4%BE%9D%E8%B5%96%E9%A9%B1%E5%8A%A8"
-    MODEL_URL = "https://pan.quark.cn/list#/list/all/410981f94d9843e680b09e971778d7f7-PowerTools%20%E6%A8%A1%E5%9E%8B"
+    RELEASES_URL = "https://pan.quark.cn/s/82baadea041e"
+    FFMPEG_URL = "https://pan.quark.cn/s/82baadea041e"
+    CUDA_URL = "https://pan.quark.cn/s/82baadea041e"
+    CUDNN_URL = "https://pan.quark.cn/s/82baadea041e"
+    MODEL_URL = "https://pan.quark.cn/s/9882c326a44d"
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
@@ -194,10 +194,6 @@ class Tutorial(QWidget):
     def _setup_content(self, main_layout: QVBoxLayout):
         scroll = ScrollArea(self)
         scroll.setObjectName("tutorialScroll")
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.enableTransparentBackground()
 
         page = QWidget(scroll)
         page_layout = QHBoxLayout(page)
@@ -205,8 +201,8 @@ class Tutorial(QWidget):
 
         content = QWidget(page)
         content.setObjectName("tutorialContent")
-        content.setMaximumWidth(1080)
-        content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        # content.setMaximumWidth(1080)
+        # content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(24, 20, 24, 48)
         content_layout.setSpacing(28)
@@ -219,6 +215,10 @@ class Tutorial(QWidget):
 
         page_layout.addWidget(content, 1, Qt.AlignTop)
         scroll.setWidget(page)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.enableTransparentBackground()
         main_layout.addWidget(scroll, 1)
 
     def _create_quick_start_section(self) -> QWidget:
@@ -254,7 +254,7 @@ class Tutorial(QWidget):
             GuideCard(
                 FIF.SPEED_HIGH,
                 self.tr("GPU 加速"),
-                self.tr("AI 加速需 CUDA 12.x 与 cuDNN 9.x，安装后在设置中验证。"),
+                self.tr("AI 加速需 CUDA 12.x 与 cuDNN 9.x。安装后在设置中验证，需设置到 .dll 文件父目录。"),
                 tags=(self.tr("可选"), self.tr("NVIDIA")),
                 actions=(
                     (
@@ -327,28 +327,28 @@ class Tutorial(QWidget):
                 FIF.ADD_TO,
                 self.tr("水印添加"),
                 self.tr("设置内容、位置与透明度，支持可见和盲水印。"),
-                tags=(self.tr("盲水印模型"),),
+                tags=(self.tr("可见水印与盲水印"),),
                 parent=self,
             ),
             GuideCard(
                 FIF.ERASE_TOOL,
                 self.tr("水印移除"),
                 self.tr("自动检测或手动选区，选择模型后完成修复。"),
-                tags=(self.tr("水印去除"), self.tr("物体分割"), self.tr("图像编辑"), self.tr("视频修复"), self.tr("对象跟踪(视频)")),
-                parent=self,
-            ),
-            GuideCard(
-                FIF.BROOM,
-                self.tr("暗印去除"),
-                self.tr("匹配暗印类型，可按需修复颜色与视频时序。"),
-                tags=(self.tr("图像编辑"),),
+                tags=(self.tr("水印去除"),),
                 parent=self,
             ),
             GuideCard(
                 FIF.DOCUMENT,
                 self.tr("文字提取"),
                 self.tr("设置语言与置信度，识别后校对低清晰度文字。"),
-                tags=(self.tr("OCR"),),
+                tags=(self.tr("文字提取"),),
+                parent=self,
+            ),
+            GuideCard(
+                FIF.BROOM,
+                self.tr("暗印去除"),
+                self.tr("匹配暗印类型，可按需修复颜色与视频时序。"),
+                tags=(self.tr("暗印去除"),),
                 parent=self,
             ),
             GuideCard(
@@ -356,6 +356,13 @@ class Tutorial(QWidget):
                 self.tr("图像编辑"),
                 self.tr("使用提示词和选区描述目标效果，建议小范围迭代。"),
                 tags=(self.tr("图像编辑"),),
+                parent=self,
+            ),
+            GuideCard(
+                FIF.BRUSH,
+                self.tr("图像修复"),
+                self.tr("支持多种图像修复场景，可选微调修复提示词。"),
+                tags=(self.tr("图像修复"),),
                 parent=self,
             ),
         ]

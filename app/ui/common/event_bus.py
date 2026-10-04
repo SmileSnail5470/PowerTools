@@ -33,6 +33,13 @@ class GlobalEventBus(QObject):
     blindWatermarkRemove_ImageNavigationInit = Signal()
     blindWatermarkRemove_TaskFinishedByModel = Signal(str)
 
+    # 图像修复 UI
+    imageRestoration_InputFileUpdate = Signal(str)
+    imageRestoration_TaskFinished = Signal(str, str)
+    imageRestoration_PreviewFile = Signal(str)
+    imageRestoration_ImageNavigationInit = Signal()
+    imageRestoration_TaskFinishedByModel = Signal(str)
+
     # 图像编辑 UI
     imageEdit_InputFileUpdate = Signal(str)
     imageEdit_TaskFinished = Signal(str, str)
