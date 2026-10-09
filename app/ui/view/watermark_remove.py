@@ -378,7 +378,13 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         general_edit_separator = CardSeparator(self)
         image_layout.addWidget(general_edit_separator)
 
-        patchwiper_card = StyleCard("#4facfe", self.tr("细节增强"), self.tr("智能重建细节，提升清晰度，速度慢(不适合字幕)"))
+        object_removal_card = StyleCard("#e3fb93", self.tr("智能消除"), self.tr("精准消除多余物体，自然填补背景，速度很快"))
+        object_removal_card.set_name("object_removal")
+        image_layout.addWidget(object_removal_card)
+        object_removal_separator = CardSeparator(self)
+        image_layout.addWidget(object_removal_separator)
+
+        patchwiper_card = StyleCard("#4facfe", self.tr("细节增强"), self.tr("智能重建细节，提升清晰度，速度快 (不适合字幕)"))
         patchwiper_card.set_name("patchwiper")
         image_layout.addWidget(patchwiper_card)
         patchwiper_separator = CardSeparator(self)
@@ -406,8 +412,23 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         grig_card.set_name("grig")
         image_layout.addWidget(grig_card)
 
-        self.image_cards = [general_edit_card, patchwiper_card, lama_card, coordfill_card, emdf_card, grig_card]
-        self.image_card_separators = [general_edit_separator, patchwiper_separator, lama_separator, coordfill_card, emdf_separator]
+        self.image_cards = [
+            general_edit_card, 
+            object_removal_card,
+            patchwiper_card,
+            coordfill_card,
+            lama_card,  
+            emdf_card, 
+            grig_card
+        ]
+        self.image_card_separators = [
+            general_edit_separator, 
+            object_removal_separator, 
+            patchwiper_separator,
+            coordfill_separator,
+            lama_separator, 
+            emdf_separator
+        ]
         self.image_model_visible_count = 4
         self.image_models_expanded = False
 
@@ -455,22 +476,20 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         video_layout.setContentsMargins(0, 6, 0, 6)
         video_layout.setSpacing(0)
 
-        video_seq_card = StyleCard("#9b59b6", self.tr("视频时序级擦除"), self.tr("跨帧追踪锁定，无闪烁，适合复杂动态视频"))
+        video_engine_card = StyleCard("#2980b9", self.tr("关键帧级擦除"), self.tr("图片模型处理关键帧，智能传播至连续帧，兼顾效果与时序一致性，速度适中"))
+        video_engine_card.set_name("video_engine")
+        video_layout.addWidget(video_engine_card)
+        video_seq_separator = CardSeparator(self)
+        video_layout.addWidget(video_seq_separator)
+
+        video_seq_card = StyleCard("#9b59b6", self.tr("视频时序级擦除"), self.tr("跨帧追踪锁定，无闪烁，适合复杂动态视频，速度较慢"))
         video_seq_card.set_name("ppt")
         video_layout.addWidget(video_seq_card)
-        # video_seq_separator = CardSeparator(self)
-        # video_layout.addWidget(video_seq_separator)
-
-        # video_engine_card = StyleCard("#2980b9", self.tr("关键帧级擦除"), self.tr("图片模型处理关键帧，智能传播至连续帧，兼顾效果与时序一致性"))
-        # video_engine_card.set_name("video_engine")
-        # video_layout.addWidget(video_engine_card)
-
         
         video_layout.addStretch()
         self.stacked_widget.addWidget(video_container)
         
-        # self.video_cards = [video_seq_card, video_engine_card]
-        self.video_cards = [video_seq_card]
+        self.video_cards = [video_engine_card, video_seq_card]
         self.all_cards.extend(self.video_cards)
 
         self.tab_image.toggled.connect(lambda checked: self.on_tab_changed(0, checked))

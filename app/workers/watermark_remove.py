@@ -170,7 +170,7 @@ class WatermarkRemoveWork(BaseWorker):
                     "yolo_detection_onnx_path": os.path.join(onnx_model_dir, "yolo.encmodel"),
                     "segment_onnx_dir": segment_model_dir,
                     "general_edit_onnx_dir": general_edit_dir,
-                    "refine_type": "general_edit",
+                    "refine_type": "object_removal",
                     "watermark_type": "text" if "watermark_content" in kwargs and kwargs["watermark_content"] == "text_watermark" else "subtitle" if "watermark_content" in kwargs and kwargs["watermark_content"] == "subtitle" else "all",
                     "ai_detect_type": kwargs["watermark_detect_type"],
                     "ai_interactive_type": kwargs["watermark_ai_interactive_type"] if "watermark_ai_interactive_type" in kwargs else "semantic_detect",
