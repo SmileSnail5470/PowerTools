@@ -7,7 +7,7 @@ import platform
 
 
 APP_NAME = "PowerTools"
-VERSION = "2.0.0"
+VERSION = "2.0.1"
 COPYRIGHT = "SmileSnail5470"
 MAIN_ENTRY = "main.py"
 ICON_PATH_MAC = "app/ui/resources/images/logo.icns"

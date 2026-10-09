@@ -13,6 +13,7 @@ from app.algorithms.visible_watermark_removal.modules.yolo_detecttion import YOL
 from app.algorithms.segment.inference import SegmentationInference
 from app.algorithms.image_edit.general_edit.inference import ImageEditInference
 from app.algorithms.private.image_restoration.inference import ImageRestorationInference
+from app.algorithms.private.object_remove.inference import ObjectRemoveInference
 
 
 class WatermarkSegment():
@@ -159,6 +160,7 @@ class WatermarkInpaint():
             grig_onnx_path="",
             general_edit_onnx_dir="",
             image_restoration_onnx_dir="",
+            object_remove_onnx_dir="",
             restoration_prompt="",
             restoration_watermark_type="general",
             model_type="lama",
@@ -174,6 +176,7 @@ class WatermarkInpaint():
         self.grig_onnx_path = grig_onnx_path
         self.general_edit_onnx_dir = general_edit_onnx_dir
         self.image_restoration_onnx_dir = image_restoration_onnx_dir
+        self.object_remove_onnx_dir = object_remove_onnx_dir
         self.restoration_prompt = restoration_prompt
         self.restoration_watermark_type = restoration_watermark_type
 
@@ -200,6 +203,18 @@ class WatermarkInpaint():
             input_path=image_path,
             task_type="watermark_remove",
             watermark_type=self.restoration_watermark_type,
+        )
+        return result  # [H, W, 3] 0~255 uint8 RGB
+
+    def _process_image_with_object_removal(self, image_path):
+        object_remove_inpaint = ObjectRemoveInference(
+            model_dir=self.object_remove_onnx_dir,
+            dilate_num=self.dilate_num,
+        )
+        result = object_remove_inpaint.infer(
+            input_path=image_path,
+            mask=self.mask,
+            task_type="object_remove",
         )
         return result  # [H, W, 3] 0~255 uint8 RGB
 
@@ -298,6 +313,8 @@ class WatermarkInpaint():
             img = self._process_image_with_general_edit(image_path=image_path)
         elif self.model_type == "image_restoration":
             img = self._process_image_with_image_restoration(image_path=image_path)
+        elif self.model_type == "object_removal":
+            img = self._process_image_with_object_removal(image_path=image_path)
         else:
             raise Exception(f"not support {self.model_type}")
         
@@ -348,8 +365,9 @@ class ImageWatermarkRemove():
             yolo_detection_onnx_path,
             segment_onnx_dir,
             general_edit_onnx_dir,
+            object_remove_onnx_dir="",
             mask_path: str = "",
-            refine_type: str = "patchwiper",                    # patchwiper/lama/transparent/cv2/coordfill/grig/emdf/general_edit/image_restoration
+            refine_type: str = "patchwiper",                    # patchwiper/lama/transparent/cv2/coordfill/grig/emdf/general_edit/image_restoration/object_removal
             watermark_type: str = "all",                        # text / all
             ai_detect_type: str = "ai_interactive_detect",      # ai_interactive_detect/ai_auto_detect
             ai_interactive_type: str = "semantic_detect",       # semantic_detect/space_detect
@@ -406,6 +424,7 @@ class ImageWatermarkRemove():
             emdf_onnx_path=emdf_onnx_path,
             grig_onnx_path=grig_onnx_path,
             general_edit_onnx_dir=general_edit_onnx_dir,
+            object_remove_onnx_dir=object_remove_onnx_dir,
             model_type=refine_type,
             dilate_num=dilate_num,
         )

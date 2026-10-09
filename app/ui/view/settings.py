@@ -342,9 +342,58 @@ class StatusBadge(QWidget):
         """)
 
 
+class UpdateReminderBadge(QWidget):
+    clicked = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip(self.tr("检测到可更新的模型，点击更新"))
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 4, 10, 4)
+        layout.setSpacing(5)
+
+        self.dot = QWidget()
+        self.dot.setFixedSize(8, 8)
+        self.dot.setStyleSheet("background: #f97316; border-radius: 4px;")
+
+        self.label = QLabel(self.tr("可更新"))
+        self.label.setStyleSheet("color: #f97316; background: transparent; padding: 0; margin: 0;")
+        setFont(self.label, 11, QFont.DemiBold)
+
+        layout.addWidget(self.dot)
+        layout.addWidget(self.label)
+
+        self.setStyleSheet("""
+            UpdateReminderBadge {
+                background: #fff7ed;
+                border: 1px solid #fdba74;
+                border-radius: 10px;
+            }
+            UpdateReminderBadge:hover {
+                background: #ffedd5;
+                border: 1px solid #fb923c;
+            }
+        """)
+        self.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        self.hide()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def set_available(self, available: bool):
+        self.setVisible(bool(available))
+
+
 class ModelVariantPanel(QWidget):
     variantChanged = Signal(str)
     updateRequested = Signal()
+    modelStatusChanged = Signal(bool)
 
     def __init__(self, capability: dict, parent=None):
         super().__init__(parent)
@@ -497,6 +546,10 @@ class ModelVariantPanel(QWidget):
         self._check_model_status()
         self._update_size_label(self.get_variant())
         self._update_update_btn()
+        self.modelStatusChanged.emit(self.has_update())
+
+    def has_update(self) -> bool:
+        return bool(self.model_dirs()) and bool(self.missing_dirs())
 
     def _check_model_status(self):
         dirs = self.model_dirs()
@@ -1514,6 +1567,7 @@ class Settings(QWidget):
     def _create_local_ai_settings(self):
         self.ai_toggle_switchs: list[ToggleSwitch] = []
         self.ai_capability_panels: dict = {}
+        self.ai_update_reminders: dict = {}
         ai_settings_cards = []
         ai_settings = CustomGroupBox(title=self.tr("🤖 本地AI设置"))
 
@@ -1567,8 +1621,24 @@ class Settings(QWidget):
             pass
         panel = ModelVariantPanel(capability=capability, parent=self)
         self.ai_capability_panels[key] = panel
+
+        update_reminder = UpdateReminderBadge(parent=self)
+        self.ai_update_reminders[key] = update_reminder
+
         self._bind_ai_toggle(switch=switch, badge=badge, capability=capability, panel=panel)
         panel.updateRequested.connect(
+            lambda switch=switch, badge=badge, capability=capability, panel=panel:
+            self._on_update_requested(switch=switch, badge=badge, capability=capability, panel=panel)
+        )
+        panel.modelStatusChanged.connect(
+            lambda available, switch=switch, reminder=update_reminder:
+            reminder.set_available(available and switch.isActive())
+        )
+        switch.toggled.connect(
+            lambda flag, reminder=update_reminder, panel=panel:
+            reminder.set_available(flag and panel.has_update())
+        )
+        update_reminder.clicked.connect(
             lambda switch=switch, badge=badge, capability=capability, panel=panel:
             self._on_update_requested(switch=switch, badge=badge, capability=capability, panel=panel)
         )
@@ -1578,11 +1648,14 @@ class Settings(QWidget):
             content=self.tr(capability["description"]),
             parent=self
         )
+        card.addWidget(update_reminder, stretch=0)
         card.addWidget(badge, stretch=0)
         card.addWidget(switch, stretch=0)
         card.addWidget(chevron, stretch=0)
         card.vBoxLayout.addWidget(panel)
         card.setSeparatorVisible(True)
+        # 初始化可更新提醒的可见性
+        update_reminder.set_available(switch.isActive() and panel.has_update())
         return card
     
     def _create_performance_settings(self):

@@ -457,6 +457,7 @@ class VideoWatermarkRemover:
         yolo_detection_onnx_path = args.get("yolo_detection_onnx_path")
         segment_onnx_dir = args.get("segment_onnx_dir")
         general_edit_onnx_dir = args.get("general_edit_onnx_dir")
+        object_remove_onnx_dir = args.get("object_remove_onnx_dir", "")
         refine_type = args.get("refine_type")
         watermark_type = args.get("watermark_type")
         ai_detect_type = args.get("ai_detect_type")
@@ -485,6 +486,7 @@ class VideoWatermarkRemover:
                 yolo_detection_onnx_path=yolo_detection_onnx_path,
                 segment_onnx_dir=segment_onnx_dir,
                 general_edit_onnx_dir=general_edit_onnx_dir,
+                object_remove_onnx_dir=object_remove_onnx_dir,
                 mask_path=str(tmp_mask_path),
                 refine_type=refine_type,
                 watermark_type=watermark_type,
@@ -606,6 +608,7 @@ class VideoWatermarkRemover:
             ppt_onnx_basedir,
             tacker_onnx_dir,
             general_edit_onnx_dir,
+            object_remove_onnx_dir="",
             mask_path: str = "",
             refine_type: str = "coordfill",
             use_cache_mask: bool = False,
@@ -723,6 +726,7 @@ class VideoWatermarkRemover:
                     "yolo_detection_onnx_path": yolo_detection_onnx_path,
                     "segment_onnx_dir": segment_onnx_dir,
                     "general_edit_onnx_dir": general_edit_onnx_dir,
+                    "object_remove_onnx_dir": object_remove_onnx_dir,
                     "refine_type": refine_type,
                     "watermark_type": watermark_type,
                     "ai_detect_type": ai_detect_type,
