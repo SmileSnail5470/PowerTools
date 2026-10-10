@@ -144,10 +144,10 @@ class WatermarkRemoveWork(BaseWorker):
                 self._get_video_instance().process_video_without_mask(**params)
         else:
             video_config = EngineConfig(
-                prompt=kwargs.get("prompt", ""),
-                task_type=kwargs.get("task_type", "watermark_remove"),
+                prompt=kwargs.get("prompt", None),
+                task_type=kwargs.get("task_type", None),
                 rife_model_path=kwargs.get("rife_model_path") or os.path.join(self.deps_path, _resolve_hardware_variant(), "video_engine"),
-                keyframe_stride=int(kwargs.get("keyframe_stride", 0)),
+                keyframe_stride=int(kwargs.get("keyframe_stride", 2)),
                 ffmpeg_path=kwargs.get("ffmpeg_path") or os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
                 should_cancel=cancel_requested,
                 is_static_watermark=True if "watermark_format" in kwargs and kwargs["watermark_format"] == "static_watermark" else False,

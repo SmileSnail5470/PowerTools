@@ -390,17 +390,17 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         patchwiper_separator = CardSeparator(self)
         image_layout.addWidget(patchwiper_separator)
 
-        lama_card = StyleCard("#84fab0", self.tr("自然保守"), self.tr("画面衔接自然，可能丢失细节，速度适中"))
-        lama_card.set_name("lama")
-        image_layout.addWidget(lama_card)
-        lama_separator = CardSeparator(self)
-        image_layout.addWidget(lama_separator)
-
         coordfill_card = StyleCard("#fbc2eb", self.tr("快速填充"), self.tr("细节表现一般，适合简单背景，速度极快"))
         coordfill_card.set_name("coordfill")
         image_layout.addWidget(coordfill_card)
         coordfill_separator = CardSeparator(self)
         image_layout.addWidget(coordfill_separator)
+        
+        lama_card = StyleCard("#84fab0", self.tr("自然保守"), self.tr("画面衔接自然，可能丢失细节，速度适中"))
+        lama_card.set_name("lama")
+        image_layout.addWidget(lama_card)
+        lama_separator = CardSeparator(self)
+        image_layout.addWidget(lama_separator)
 
         emdf_card = StyleCard("#f093fb", self.tr("自适应修补"), self.tr("效果稳定，可能丢失细节，速度稍慢"))
         emdf_card.set_name("emdf")

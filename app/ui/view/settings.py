@@ -381,7 +381,7 @@ class UpdateReminderBadge(QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self.clicked.emit()
+            # self.clicked.emit()
             event.accept()
             return
         super().mousePressEvent(event)
@@ -464,7 +464,7 @@ class ModelVariantPanel(QWidget):
         self.mirror_switch.toggled.connect(self._on_mirror_toggled)
         mirror_row.addWidget(self.mirror_switch)
 
-        mirror_tip = QLabel(self.tr("开启后使用 hf-mirror.com 镜像加速下载"))
+        mirror_tip = QLabel(self.tr("开启需关闭本地 VPN、关闭需打开本地 VPN"))
         mirror_tip.setStyleSheet("color: #9ca3af; border: none;")
         setFont(mirror_tip, 11)
         mirror_row.addWidget(mirror_tip)
@@ -1422,6 +1422,8 @@ class Settings(QWidget):
                 ]
             else:
                 cudnn_dll_paths = ["libcudnn.so.9"]
+            if "x64" in cudnn_path and "12." not in cudnn_path:
+                return False, "请选择包含 12.x 的路径"
             for item in cudnn_dll_paths:
                 item_path = os.path.join(cudnn_path, item)
                 if not os.path.exists(item_path):
@@ -1638,10 +1640,10 @@ class Settings(QWidget):
             lambda flag, reminder=update_reminder, panel=panel:
             reminder.set_available(flag and panel.has_update())
         )
-        update_reminder.clicked.connect(
-            lambda switch=switch, badge=badge, capability=capability, panel=panel:
-            self._on_update_requested(switch=switch, badge=badge, capability=capability, panel=panel)
-        )
+        # update_reminder.clicked.connect(
+        #     lambda switch=switch, badge=badge, capability=capability, panel=panel:
+        #     self._on_update_requested(switch=switch, badge=badge, capability=capability, panel=panel)
+        # )
         chevron = self._create_chevron_btn(panel)
         card = CustomCardGroupWidget(
             title=f"{self.tr(capability['title'])}",
