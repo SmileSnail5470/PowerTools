@@ -160,7 +160,7 @@ class WatermarkRemoveWork(BaseWorker):
                 output_video=output_file,
                 plugin="watermark_removal",
                 config=video_config,
-                mask=None,
+                mask=kwargs["manual_watermark_mask_path"] if "manual_watermark_mask_path" in kwargs and kwargs["manual_watermark_mask_path"] else None,
                 plugin_kwargs={
                     "sr_segment_onnx_path": os.path.join(onnx_model_dir, "sr_segment.encmodel"),
                     "pt_segment_onnx_path": os.path.join(onnx_model_dir, "pt_segment.encmodel"),
