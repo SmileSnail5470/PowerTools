@@ -3,6 +3,7 @@ import os
 import sys
 import pathlib
 from enum import Enum
+from version import VERSION as version
 
 from PySide6.QtCore import QLocale, Signal
 from app.ui.library.qfluentwidgets import (
@@ -89,7 +90,7 @@ class Config(QConfig):
         self._init_connect()
         self._update_gpu_env()
         
-        os.environ["POWERTOOLS_VERSION"] = "2.0.1"  # 每次发版本，这里要更新
+        os.environ["POWERTOOLS_VERSION"] = version
 
         os.environ["POWERTOOLS_FFMPEG_BIN"] = self.get(self.ffmpeg_path)
         self.ffmpeg_path.valueChanged.connect(update_ffmpeg_path)

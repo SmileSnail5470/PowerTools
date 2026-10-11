@@ -4,10 +4,11 @@ import shlex
 import subprocess
 import sys
 import platform
+from version import VERSION as version
 
 
 APP_NAME = "PowerTools"
-VERSION = "2.0.1"
+VERSION = version
 COPYRIGHT = "SmileSnail5470"
 MAIN_ENTRY = "main.py"
 ICON_PATH_MAC = "app/ui/resources/images/logo.icns"

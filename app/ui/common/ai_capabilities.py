@@ -32,7 +32,7 @@ MODEL_DIR_SIZES = {
         "image_edit/reverse_edit": 2198,
         "image_edit/sr_edit": 2528,
         "image_restoration/general_restoration": 6640,
-        "image_edit/object_remove": 7383,
+        "image_edit/object_remove": 3625,
     },
 }
 
