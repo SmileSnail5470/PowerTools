@@ -11,7 +11,7 @@ from app.algorithms.visible_watermark_removal.modules.lama_inpaint import LamaIn
 from app.algorithms.visible_watermark_removal.modules.text_detection import detect_text_watermarks
 from app.algorithms.visible_watermark_removal.modules.yolo_detecttion import YOLODetection
 from app.algorithms.segment.inference import SegmentationInference
-from app.algorithms.image_edit.general_edit.inference import ImageEditInference
+from app.algorithms.private.image_edit.general_edit.inference import ImageEditInference
 from app.algorithms.private.image_restoration.inference import ImageRestorationInference
 from app.algorithms.private.object_remove.inference import ObjectRemoveInference
 

@@ -5,7 +5,7 @@ from PIL import Image
 from app.ui.common.config import cfg
 from app.workers.work_base import BaseWorker, _resolve_hardware_variant
 from app.utils.logger.decorators import log_exception
-from app.algorithms.image_edit.general_edit.inference import ImageEditInference
+from app.algorithms.private.image_edit.general_edit.inference import ImageEditInference
 
 
 class ImageEditWork(BaseWorker):
