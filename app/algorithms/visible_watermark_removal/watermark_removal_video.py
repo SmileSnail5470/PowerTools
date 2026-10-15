@@ -526,6 +526,18 @@ class VideoWatermarkRemover:
         del pipeline
         self._past_frames_back(input_frames_dir, cropped_out_dir, output_dir, bbox)
 
+    def _get_video_info(self, ffmpeg_path, input_video_path):
+        if ffmpeg_path and os.path.isfile(ffmpeg_path):
+            ffmpeg_path = os.path.dirname(ffmpeg_path)
+        os.environ['PATH'] = ffmpeg_path + os.pathsep + os.environ['PATH']
+        probe = ffmpeg.probe(input_video_path)
+        video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
+        if not video_stream:
+            raise ValueError(f"Can not get {input_video_path} stream information.")
+        fps = float(video_stream["avg_frame_rate"].split("/")[0]) / float(video_stream["avg_frame_rate"].split("/")[1])
+        has_audio = any(stream['codec_type'] == 'audio' for stream in probe['streams'])
+        return fps, has_audio
+
     def process_video(self, input_video_path: str, output_video_path: str, config: VideoWatermarkRemoveConfig):
         det = config.detection
         msk = config.mask
