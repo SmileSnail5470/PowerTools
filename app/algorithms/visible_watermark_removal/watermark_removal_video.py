@@ -11,6 +11,8 @@ from app.algorithms.visible_watermark_removal.watermark_removal_image import Ima
 from app.algorithms.visible_watermark_removal.video_modules.ppt.inference import PPTInferenceORT
 # from app.algorithms.tracker.mask_tracker_nano import MaskTrackerNano
 from app.algorithms.tracker.mask_tracker_edgetam import MaskTrackerEdgeTAM
+from app.algorithms.visible_watermark_removal.params_config import VideoWatermarkRemoveConfig, RestorationRemoveConfig
+from app.algorithms.visible_watermark_removal.params_config import ImageWatermarkRemoveConfig, MaskConfig, RuntimeConfig
 
 
 class VideoWatermarkRemover:
@@ -446,143 +448,105 @@ class VideoWatermarkRemover:
     def _image_model_inpainting(self, args: dict):
         processed_frames_dir = args.get("processed_frames_dir")
         frame_mask_map = args.get("frame_mask_map")
-        sr_segment_onnx_path = args.get("sr_segment_onnx_path")
-        pt_segment_onnx_path = args.get("pt_segment_onnx_path")
-        pt_inpaint_onnx_path = args.get("pt_inpaint_onnx_path")
-        cf_onnx_path = args.get("cf_onnx_path")
-        lama_onnx_path = args.get("lama_onnx_path")
-        emdf_onnx_path = args.get("emdf_onnx_path")
-        grig_onnx_path = args.get("grig_onnx_path")
-        text_detection_onnx_path = args.get("text_detection_onnx_path")
-        yolo_detection_onnx_path = args.get("yolo_detection_onnx_path")
-        segment_onnx_dir = args.get("segment_onnx_dir")
-        general_edit_onnx_dir = args.get("general_edit_onnx_dir")
-        object_remove_onnx_dir = args.get("object_remove_onnx_dir", "")
-        refine_type = args.get("refine_type")
-        watermark_type = args.get("watermark_type")
-        ai_detect_type = args.get("ai_detect_type")
-        ai_interactive_type = args.get("ai_interactive_type")
-        ai_interactive_prompt = args.get("ai_interactive_prompt")
-        ai_interactive_boxes = args.get("ai_interactive_boxes")
-        watermark_confidence = args.get("watermark_confidence")
-        dilate_num = args.get("dilate_num")
-        callback_func = args.get("callback_func", None)
-        kwargs = args.get("kwargs", {})
+        config: VideoWatermarkRemoveConfig = args.get("config")
+        callback_func = config.runtime.callback_func
         total_frames = len(frame_mask_map.keys())
 
         for frame_file, tmp_mask_path in frame_mask_map.items():
             output_frame_path = os.path.join(str(processed_frames_dir), os.path.basename(str(frame_file)))
-            ImageWatermarkRemove().run(
-                frame_file,
-                output_frame_path,
-                sr_segment_onnx_path=sr_segment_onnx_path,
-                pt_segment_onnx_path=pt_segment_onnx_path,
-                pt_inpaint_onnx_path=pt_inpaint_onnx_path, 
-                cf_onnx_path=cf_onnx_path, 
-                lama_onnx_path=lama_onnx_path,
-                emdf_onnx_path=emdf_onnx_path,
-                grig_onnx_path=grig_onnx_path,
-                text_detection_onnx_path=text_detection_onnx_path,
-                yolo_detection_onnx_path=yolo_detection_onnx_path,
-                segment_onnx_dir=segment_onnx_dir,
-                general_edit_onnx_dir=general_edit_onnx_dir,
-                object_remove_onnx_dir=object_remove_onnx_dir,
-                mask_path=str(tmp_mask_path),
-                refine_type=refine_type,
-                watermark_type=watermark_type,
-                ai_detect_type=ai_detect_type,
-                ai_interactive_type=ai_interactive_type,
-                ai_interactive_prompt=ai_interactive_prompt,
-                ai_interactive_boxes=ai_interactive_boxes,
-                watermark_confidence=watermark_confidence,
-                dilate_num=dilate_num,
-                **kwargs
+            frame_config = ImageWatermarkRemoveConfig(
+                segment=config.segment,
+                inpaint=config.inpaint,
+                detection=config.detection,
+                mask=MaskConfig(
+                    mask_path=str(tmp_mask_path),
+                    refine_type=config.mask.refine_type,
+                    dilate_num=config.mask.dilate_num,
+                ),
+                runtime=RuntimeConfig(),
             )
+            ImageWatermarkRemove().run(frame_file, output_frame_path, config=frame_config)
             if callback_func:
                 callback_func(len(os.listdir(str(processed_frames_dir))), total_frames)
 
-    def _video_model_inpainting(self, args: dict):
+    def _video_ppt_inpainting(self, args: dict):
         frame_files = args.get("frame_files")
         processed_frames_dir = args.get("processed_frames_dir")
         frame_mask_map = args.get("frame_mask_map")
-        refine_type = args.get("refine_type")
         dilate_num = args.get("dilate_num")
-        if refine_type == "ppt":
-            ppt_onnx_basedir = args.get("ppt_onnx_basedir")
-            ONNX_PATHS = {
-                "raft": os.path.join(ppt_onnx_basedir, "raft", "raft_iter20.encmodel"),
-                "recurrent_flow_complete": os.path.join(ppt_onnx_basedir, "recurrent_flow_completion"),
-                "ppt": {
-                    'encoder': os.path.join(ppt_onnx_basedir, "propagation_transformer", "encoder.encmodel"),
-                    'decoder': os.path.join(ppt_onnx_basedir, "propagation_transformer", "decoder.encmodel"),
-                    "image_prop_step": os.path.join(ppt_onnx_basedir, "propagation_transformer", "img_prop_step.encmodel"),
-                    'ss': os.path.join(ppt_onnx_basedir, "propagation_transformer", "soft_split.encmodel"),
-                    'sc': os.path.join(ppt_onnx_basedir, "propagation_transformer", "soft_comp.encmodel"),
-                    'bp_backward_step': os.path.join(ppt_onnx_basedir, "propagation_transformer", "backward_step.encmodel"),
-                    'bp_forward_step': os.path.join(ppt_onnx_basedir, "propagation_transformer", "forward_step.encmodel"),
-                    'bp_backward_first': os.path.join(ppt_onnx_basedir, "propagation_transformer", "backward_first.encmodel"),
-                    'bp_forward_first': os.path.join(ppt_onnx_basedir, "propagation_transformer", "forward_first.encmodel"),
-                    'bp_fusion': os.path.join(ppt_onnx_basedir, "propagation_transformer", "fusion.encmodel"),
-                    'transformer': {
-                        'core': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"attention_{i}_core.encmodel") for i in range(8)],
-                        'attn': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"attention_{i}_comp.encmodel") for i in range(8)],
-                        'proj': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"output_{i}_proj.encmodel") for i in range(8)],
-                        'norm1': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"norm1_{i}_comp.encmodel") for i in range(8)],
-                        'norm2': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"norm2_{i}_comp.encmodel") for i in range(8)],
-                        'mlp': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"mlp_{i}_comp.encmodel") for i in range(8)],
-                    }
+        ppt_onnx_basedir = args.get("ppt_onnx_basedir")
+        ONNX_PATHS = {
+            "raft": os.path.join(ppt_onnx_basedir, "raft", "raft_iter20.encmodel"),
+            "recurrent_flow_complete": os.path.join(ppt_onnx_basedir, "recurrent_flow_completion"),
+            "ppt": {
+                'encoder': os.path.join(ppt_onnx_basedir, "propagation_transformer", "encoder.encmodel"),
+                'decoder': os.path.join(ppt_onnx_basedir, "propagation_transformer", "decoder.encmodel"),
+                "image_prop_step": os.path.join(ppt_onnx_basedir, "propagation_transformer", "img_prop_step.encmodel"),
+                'ss': os.path.join(ppt_onnx_basedir, "propagation_transformer", "soft_split.encmodel"),
+                'sc': os.path.join(ppt_onnx_basedir, "propagation_transformer", "soft_comp.encmodel"),
+                'bp_backward_step': os.path.join(ppt_onnx_basedir, "propagation_transformer", "backward_step.encmodel"),
+                'bp_forward_step': os.path.join(ppt_onnx_basedir, "propagation_transformer", "forward_step.encmodel"),
+                'bp_backward_first': os.path.join(ppt_onnx_basedir, "propagation_transformer", "backward_first.encmodel"),
+                'bp_forward_first': os.path.join(ppt_onnx_basedir, "propagation_transformer", "forward_first.encmodel"),
+                'bp_fusion': os.path.join(ppt_onnx_basedir, "propagation_transformer", "fusion.encmodel"),
+                'transformer': {
+                    'core': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"attention_{i}_core.encmodel") for i in range(8)],
+                    'attn': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"attention_{i}_comp.encmodel") for i in range(8)],
+                    'proj': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"output_{i}_proj.encmodel") for i in range(8)],
+                    'norm1': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"norm1_{i}_comp.encmodel") for i in range(8)],
+                    'norm2': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"norm2_{i}_comp.encmodel") for i in range(8)],
+                    'mlp': [os.path.join(ppt_onnx_basedir, 'propagation_transformer', f"mlp_{i}_comp.encmodel") for i in range(8)],
                 }
             }
-            if len(frame_mask_map.keys()) < len(frame_files):
-                input_frames_dir = os.path.dirname(str(frame_files[0]))
-                masks_dir = os.path.dirname(str(list(frame_mask_map.values())[0]))
-                input_frames_dir = os.path.join(os.path.dirname(input_frames_dir), "real_{0}_tmp".format(os.path.basename(input_frames_dir)))
-                masks_dir = os.path.join(os.path.dirname(masks_dir), "real_{0}_tmp".format(os.path.basename(masks_dir)))
-                os.makedirs(input_frames_dir, exist_ok=True)
-                os.makedirs(masks_dir, exist_ok=True)
-                for frame_file, mask_file in frame_mask_map.items():
-                    shutil.copy2(str(frame_file), os.path.join(input_frames_dir, os.path.basename(str(frame_file))))
-                    shutil.copy2(str(mask_file), os.path.join(masks_dir, os.path.basename(str(mask_file))))
-            else:
-                input_frames_dir = os.path.dirname(str(frame_files[0]))
-                masks_dir = os.path.dirname(frame_mask_map[str(frame_files[0])])
-            output_dir = str(processed_frames_dir)
-            cropped_out_dir = os.path.join(os.path.dirname(output_dir), "{0}_cropped".format(os.path.basename(output_dir)))
-            bbox = self._get_roi(masks_dir)
-            new_input_frames_dir, new_masks_dir = self._crop_frames_and_masks(input_frames_dir, masks_dir, bbox)
-            xmin, ymin, xmax, ymax = bbox
-            process_w, process_h = xmax - xmin, ymax - ymin
-            init_subvideo_length = int(os.environ.get("POWERTOOLS_SUBVIDEO_LENGTH", 100))
-            gpu_memory_limit = int(os.environ.get("POWERTOOLS_GPU_MEMORY_LIMIT", 16))
-            if max(process_h, process_w) < 540:
-                resize_ratio = 1.0
-                subvideo_length = 80 if gpu_memory_limit > 12 else 70 if gpu_memory_limit > 8 else 60
-            elif max(process_h, process_w) < 720:
-                resize_ratio = 540.0 / max(process_h, process_w)
-                subvideo_length = 70 if gpu_memory_limit > 12 else 60 if gpu_memory_limit > 8 else 50
-            else:
-                resize_ratio = 720.0 / max(process_h, process_w)
-                subvideo_length = 60 if gpu_memory_limit > 12 else 50 if gpu_memory_limit > 8 else 40
-            subvideo_length = min(subvideo_length, init_subvideo_length)
-            logging.getLogger("subprocess").info(
-                f"Process video resize ratio {resize_ratio} and subvideo length {subvideo_length} and process size {(process_w, process_h)} and gpu memory limit {gpu_memory_limit}"
-            )
-            pipeline = PPTInferenceORT(
-                onnx_paths=ONNX_PATHS,
-                resize_ratio=resize_ratio,
-                height=-1,
-                width=-1,
-                mask_dilation=dilate_num+2,
-                ref_stride=10,
-                neighbor_length=10,
-                subvideo_length=subvideo_length
-            )
-            pipeline.inference(input_frames_dir=new_input_frames_dir, masks_dir=new_masks_dir, output_dir=cropped_out_dir)
-            pipeline.release()
-            del pipeline
-            self._past_frames_back(input_frames_dir, cropped_out_dir, output_dir, bbox)
+        }
+        if len(frame_mask_map.keys()) < len(frame_files):
+            input_frames_dir = os.path.dirname(str(frame_files[0]))
+            masks_dir = os.path.dirname(str(list(frame_mask_map.values())[0]))
+            input_frames_dir = os.path.join(os.path.dirname(input_frames_dir), "real_{0}_tmp".format(os.path.basename(input_frames_dir)))
+            masks_dir = os.path.join(os.path.dirname(masks_dir), "real_{0}_tmp".format(os.path.basename(masks_dir)))
+            os.makedirs(input_frames_dir, exist_ok=True)
+            os.makedirs(masks_dir, exist_ok=True)
+            for frame_file, mask_file in frame_mask_map.items():
+                shutil.copy2(str(frame_file), os.path.join(input_frames_dir, os.path.basename(str(frame_file))))
+                shutil.copy2(str(mask_file), os.path.join(masks_dir, os.path.basename(str(mask_file))))
         else:
-            raise ValueError(f"Unsupported video inpainting model: {refine_type}")
+            input_frames_dir = os.path.dirname(str(frame_files[0]))
+            masks_dir = os.path.dirname(frame_mask_map[str(frame_files[0])])
+        output_dir = str(processed_frames_dir)
+        cropped_out_dir = os.path.join(os.path.dirname(output_dir), "{0}_cropped".format(os.path.basename(output_dir)))
+        bbox = self._get_roi(masks_dir)
+        new_input_frames_dir, new_masks_dir = self._crop_frames_and_masks(input_frames_dir, masks_dir, bbox)
+        xmin, ymin, xmax, ymax = bbox
+        process_w, process_h = xmax - xmin, ymax - ymin
+        init_subvideo_length = int(os.environ.get("POWERTOOLS_SUBVIDEO_LENGTH", 100))
+        gpu_memory_limit = int(os.environ.get("POWERTOOLS_GPU_MEMORY_LIMIT", 16))
+        if max(process_h, process_w) < 540:
+            resize_ratio = 1.0
+            subvideo_length = 80 if gpu_memory_limit > 12 else 70 if gpu_memory_limit > 8 else 60
+        elif max(process_h, process_w) < 720:
+            resize_ratio = 540.0 / max(process_h, process_w)
+            subvideo_length = 70 if gpu_memory_limit > 12 else 60 if gpu_memory_limit > 8 else 50
+        else:
+            resize_ratio = 720.0 / max(process_h, process_w)
+            subvideo_length = 60 if gpu_memory_limit > 12 else 50 if gpu_memory_limit > 8 else 40
+        subvideo_length = min(subvideo_length, init_subvideo_length)
+        logging.getLogger("subprocess").info(
+            f"Process video resize ratio {resize_ratio} and subvideo length {subvideo_length} and process size {(process_w, process_h)} and gpu memory limit {gpu_memory_limit}"
+        )
+        pipeline = PPTInferenceORT(
+            onnx_paths=ONNX_PATHS,
+            resize_ratio=resize_ratio,
+            height=-1,
+            width=-1,
+            mask_dilation=dilate_num+2,
+            ref_stride=10,
+            neighbor_length=10,
+            subvideo_length=subvideo_length
+        )
+        pipeline.inference(input_frames_dir=new_input_frames_dir, masks_dir=new_masks_dir, output_dir=cropped_out_dir)
+        pipeline.release()
+        del pipeline
+        self._past_frames_back(input_frames_dir, cropped_out_dir, output_dir, bbox)
 
     def _merge_video_prepare(self, all_frame_files: list, output_dir):
         processed_frames_name = os.listdir(output_dir)
@@ -591,41 +555,14 @@ class VideoWatermarkRemover:
                 continue
             shutil.copy2(str(one_frame_file), os.path.join(output_dir, one_frame_file.name))
 
-    def process_video(
-            self, 
-            input_video_path, 
-            output_video_path,
-            sr_segment_onnx_path,
-            pt_segment_onnx_path,
-            pt_inpaint_onnx_path, 
-            cf_onnx_path, 
-            lama_onnx_path,
-            emdf_onnx_path,
-            grig_onnx_path,
-            text_detection_onnx_path,
-            yolo_detection_onnx_path,
-            segment_onnx_dir,
-            ppt_onnx_basedir,
-            tacker_onnx_dir,
-            general_edit_onnx_dir,
-            object_remove_onnx_dir="",
-            mask_path: str = "",
-            refine_type: str = "coordfill",
-            use_cache_mask: bool = False,
-            watermark_type: str = "all",
-            ai_detect_type: str = "ai_interactive_detect",      # ai_interactive_detect/ai_auto_detect
-            ai_interactive_type: str = "semantic_detect",       # semantic_detect/space_detect
-            ai_interactive_prompt: str = "watermark",
-            ai_interactive_boxes: list = [],
-            watermark_confidence: float = 0.5,
-            watermark_boxes: list = [],
-            watermark_tracking_data: dict = {},
-            dilate_num: int = 2,
-            ffmpeg_path: str = "",
-            callback_func = None,
-            **kwargs
-        ):
-        progress_cb = kwargs.pop("progress_cb", None)
+    def process_video(self, input_video_path: str, output_video_path: str, config: VideoWatermarkRemoveConfig):
+        det = config.detection
+        msk = config.mask
+        rt = config.runtime
+        seg = config.segment
+        progress_cb = rt.progress_cb
+        ffmpeg_path = rt.ffmpeg_path
+
         if ffmpeg_path and os.path.isfile(ffmpeg_path):
             ffmpeg_path = os.path.dirname(ffmpeg_path)
         os.environ['PATH'] = ffmpeg_path + os.pathsep + os.environ['PATH']
@@ -640,11 +577,12 @@ class VideoWatermarkRemover:
         
         has_audio = any(stream['codec_type'] == 'audio' for stream in probe['streams'])
 
-        if watermark_tracking_data and watermark_tracking_data.get("keyframes") and watermark_tracking_data.get("end_frame") is not None:
-            self.video_tracking_data = watermark_tracking_data
+        tracking_data = msk.watermark_tracking_data
+        if tracking_data and tracking_data.get("keyframes") and tracking_data.get("end_frame") is not None:
+            self.video_tracking_data = tracking_data
         else:
             self.video_tracking_data = None
-        self.watermark_boxes = watermark_boxes
+        self.watermark_boxes = det.watermark_boxes
         
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -669,22 +607,22 @@ class VideoWatermarkRemover:
             self._prepare_masks(
                 tmp_mask_dir=tmp_mask_dir, 
                 frame_mask_map=frame_mask_map, 
-                mask_path=mask_path, 
-                use_cache_mask=use_cache_mask, 
-                watermark_type=watermark_type,
-                ai_detect_type=ai_detect_type,
-                ai_interactive_type=ai_interactive_type,
-                ai_interactive_prompt=ai_interactive_prompt,
-                ai_interactive_boxes=ai_interactive_boxes,
-                watermark_confidence=watermark_confidence,
+                mask_path=msk.mask_path, 
+                use_cache_mask=msk.use_cache_mask, 
+                watermark_type=det.watermark_type,
+                ai_detect_type=det.ai_detect_type,
+                ai_interactive_type=det.ai_interactive_type,
+                ai_interactive_prompt=det.ai_interactive_prompt,
+                ai_interactive_boxes=det.ai_interactive_boxes,
+                watermark_confidence=det.watermark_confidence,
                 frame_files=frame_files,
-                sr_segment_onnx_path=sr_segment_onnx_path,
-                pt_segment_onnx_path=pt_segment_onnx_path,
-                text_detection_onnx_path=text_detection_onnx_path,
-                yolo_detection_onnx_path=yolo_detection_onnx_path,
-                segment_onnx_dir=segment_onnx_dir,
-                tacker_onnx_dir=tacker_onnx_dir,
-                **kwargs
+                sr_segment_onnx_path=seg.sr_segment_onnx_path,
+                pt_segment_onnx_path=seg.pt_segment_onnx_path,
+                text_detection_onnx_path=seg.text_detection_onnx_path,
+                yolo_detection_onnx_path=seg.yolo_detection_onnx_path,
+                segment_onnx_dir=seg.segment_onnx_dir,
+                tacker_onnx_dir=config.video_extra.tacker_onnx_dir,
+                **det.to_segment_kwargs(),
             )
             if progress_cb is not None:
                 tmp_visualzation_path = os.path.join(os.path.dirname(str(tmp_mask_dir)), "masks_visualization")
@@ -696,7 +634,8 @@ class VideoWatermarkRemover:
                         file_path=os.path.join(tmp_visualzation_path, os.path.basename(str(frame_file)))
                     )
                 if "POWERTOOLS_TMPE_DIR" in os.environ and os.environ["POWERTOOLS_TMPE_DIR"]:
-                    output_video_tmp_path = os.path.join(os.environ["POWERTOOLS_TMPE_DIR"], "tmpdir", "{0}_mask_visualization.mp4".format(os.path.basename(output_video_path.rsplit(".", 1)[0])))
+                    name_prefix = os.path.basename(output_video_path.rsplit(".", 1)[0])
+                    output_video_tmp_path = os.path.join(os.environ["POWERTOOLS_TMPE_DIR"], "tmpdir", "{0}_mask_visualization.mp4".format(name_prefix))
                 else:
                     output_video_tmp_path = "{0}_mask_visualization.mp4".format(output_video_path.rsplit(".", 1)[0])
                 if not os.path.exists(os.path.dirname(output_video_tmp_path)):
@@ -711,44 +650,22 @@ class VideoWatermarkRemover:
                 )
                 progress_cb("MaskCompleted", output_video_tmp_path)
             
-            if refine_type not in self.video_models_name:
-                args = {
+            if msk.refine_type not in self.video_models_name:
+                self._image_model_inpainting({
                     "processed_frames_dir": processed_frames_dir,
                     "frame_mask_map": frame_mask_map,
-                    "sr_segment_onnx_path": sr_segment_onnx_path,
-                    "pt_segment_onnx_path": pt_segment_onnx_path,
-                    "pt_inpaint_onnx_path": pt_inpaint_onnx_path,
-                    "cf_onnx_path": cf_onnx_path,
-                    "lama_onnx_path": lama_onnx_path,
-                    "emdf_onnx_path": emdf_onnx_path,
-                    "grig_onnx_path": grig_onnx_path,
-                    "text_detection_onnx_path": text_detection_onnx_path,
-                    "yolo_detection_onnx_path": yolo_detection_onnx_path,
-                    "segment_onnx_dir": segment_onnx_dir,
-                    "general_edit_onnx_dir": general_edit_onnx_dir,
-                    "object_remove_onnx_dir": object_remove_onnx_dir,
-                    "refine_type": refine_type,
-                    "watermark_type": watermark_type,
-                    "ai_detect_type": ai_detect_type,
-                    "ai_interactive_type": ai_interactive_type,
-                    "ai_interactive_prompt": ai_interactive_prompt,
-                    "ai_interactive_boxes": ai_interactive_boxes,
-                    "watermark_confidence": watermark_confidence,
-                    "dilate_num": dilate_num,
-                    "callback_func": callback_func,
-                    "kwargs": kwargs
-                }
-                self._image_model_inpainting(args)
-            else:
-                args = {
+                    "config": config,
+                })
+            elif msk.refine_type == "ppt":
+                self._video_ppt_inpainting({
                     "frame_files": frame_files,
                     "processed_frames_dir": processed_frames_dir,
                     "frame_mask_map": frame_mask_map,
-                    "dilate_num": dilate_num,
-                    "refine_type": refine_type,
-                    "ppt_onnx_basedir": ppt_onnx_basedir
-                }
-                self._video_model_inpainting(args)
+                    "dilate_num": msk.dilate_num,
+                    "ppt_onnx_basedir": config.video_extra.ppt_onnx_basedir,
+                })
+            else:
+                raise Exception(f"Unsuppot refine_type value {msk.refine_type}")
             if progress_cb is not None:
                 progress_cb("WaterRemoved", "")
             self._merge_video_prepare(frame_files, processed_frames_dir)
@@ -760,31 +677,20 @@ class VideoWatermarkRemover:
                 output_video_path=output_video_path
             )
 
-    def process_video_without_mask(
-            self, 
-            input_video_path, 
-            output_video_path,
-            image_restoration_onnx_dir,
-            refine_type: str = "image_restoration",
-            ffmpeg_path: str = "",
-            callback_func = None,
-            **kwargs
-        ):
-        progress_cb = kwargs.pop("progress_cb", None)
+    def process_video_without_mask(self, input_video_path: str, output_video_path: str, config: RestorationRemoveConfig):
+        rt = config.runtime
+        progress_cb = rt.progress_cb
+        callback_func = rt.callback_func
+        ffmpeg_path = rt.ffmpeg_path
         if ffmpeg_path and os.path.isfile(ffmpeg_path):
             ffmpeg_path = os.path.dirname(ffmpeg_path)
         os.environ['PATH'] = ffmpeg_path + os.pathsep + os.environ['PATH']
-
         probe = ffmpeg.probe(input_video_path)
         video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
-        
         if not video_stream:
             raise ValueError(f"Can not get {input_video_path} stream information.")
-        
         fps = float(video_stream["avg_frame_rate"].split("/")[0]) / float(video_stream["avg_frame_rate"].split("/")[1])
-        
         has_audio = any(stream['codec_type'] == 'audio' for stream in probe['streams'])
-        
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             frames_dir = temp_path / 'frames'
@@ -802,15 +708,14 @@ class VideoWatermarkRemover:
             processed_frames_dir.mkdir()
             if progress_cb is not None:
                 progress_cb("WaterRemoveStart", "")
+            frame_config = RestorationRemoveConfig(
+                restoration=config.restoration,
+                params=config.params,
+                runtime=RuntimeConfig(),
+            )
             for frame_file in frame_files:
                 output_frame_path = os.path.join(str(processed_frames_dir), os.path.basename(str(frame_file)))
-                ImageWatermarkRemove().run_without_mask(
-                    frame_file,
-                    output_frame_path,
-                    image_restoration_onnx_dir=image_restoration_onnx_dir,
-                    refine_type=refine_type,
-                    **kwargs
-                )
+                ImageWatermarkRemove().run_without_mask(str(frame_file), output_frame_path, config=frame_config)
                 if callback_func:
                     callback_func(len(os.listdir(str(processed_frames_dir))), len(frame_files))
             if progress_cb is not None:

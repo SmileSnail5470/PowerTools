@@ -7,6 +7,20 @@ from app.algorithms.private.video_engine.config import EngineConfig
 from app.algorithms.private.video_engine.engine import process_video
 from app.algorithms.visible_watermark_removal.watermark_removal_image import ImageWatermarkRemove
 from app.algorithms.visible_watermark_removal.watermark_removal_video import VideoWatermarkRemover
+from app.algorithms.visible_watermark_removal.params_config import (
+    DetectionConfig,
+    ImageWatermarkRemoveConfig,
+    InpaintModelPaths,
+    MaskConfig,
+    RestorationConfig,
+    RestorationModelPaths,
+    RestorationRemoveConfig,
+    RuntimeConfig,
+    SegmentModelPaths,
+    VideoExtraModelPaths,
+    VideoMaskConfig,
+    VideoWatermarkRemoveConfig,
+)
 
 
 
@@ -52,96 +66,106 @@ class WatermarkRemoveWork(BaseWorker):
             os.environ["_feature_name_"] = kwargs["_feature_name_"]
         if "POWERTOOLS_TMPE_DIR" not in os.environ:
             os.environ["POWERTOOLS_TMPE_DIR"] = cfg.get(cfg.cachePath)
+
+        segment_paths = SegmentModelPaths(
+            sr_segment_onnx_path=os.path.join(onnx_model_dir, "sr_segment.encmodel"),
+            pt_segment_onnx_path=os.path.join(onnx_model_dir, "pt_segment.encmodel"),
+            text_detection_onnx_path=os.path.join(onnx_model_dir, "pp_ocr_det.encmodel"),
+            yolo_detection_onnx_path=os.path.join(onnx_model_dir, "yolo.encmodel"),
+            segment_onnx_dir=segment_model_dir,
+        )
+        inpaint_paths = InpaintModelPaths(
+            pt_inpaint_onnx_path=os.path.join(onnx_model_dir, "pt_inpaint.encmodel"),
+            cf_onnx_path=os.path.join(onnx_model_dir, "cf.encmodel"),
+            lama_onnx_path=os.path.join(onnx_model_dir, "lama_fp32.encmodel"),
+            emdf_onnx_path=os.path.join(onnx_model_dir, "emdf_inpaint.encmodel"),
+            grig_onnx_path=os.path.join(onnx_model_dir, "grig_inpaint.encmodel"),
+            general_edit_onnx_dir=general_edit_dir,
+            object_remove_onnx_dir=object_remove_dir,
+        )
+        detection_cfg = DetectionConfig(
+            watermark_type=(
+                "text" if kwargs.get("watermark_content") == "text_watermark"
+                else "subtitle" if kwargs.get("watermark_content") == "subtitle"
+                else "all"
+            ),
+            ai_detect_type=kwargs["watermark_detect_type"],
+            ai_interactive_type=kwargs.get("watermark_ai_interactive_type", "semantic_detect"),
+            ai_interactive_prompt=kwargs.get("watermark_detect_prompt", "watermark"),
+            ai_interactive_boxes=kwargs.get("watermark_boxes", []),
+            watermark_confidence=kwargs.get("watermark_confidence", 0.5),
+            watermark_boxes=kwargs.get("image_boxes", []),
+        )
+        runtime_cfg = RuntimeConfig(
+            progress_cb=progress_cb,
+            ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
+        )
+
         if file_type == "image":
             if kwargs["model_name"] not in ["image_restoration"]:
-                params = {
-                    "image_path": input_path, 
-                    "output_path": output_file,
-                    "sr_segment_onnx_path": os.path.join(onnx_model_dir, "sr_segment.encmodel"),
-                    "pt_segment_onnx_path": os.path.join(onnx_model_dir, "pt_segment.encmodel"),
-                    "pt_inpaint_onnx_path": os.path.join(onnx_model_dir, "pt_inpaint.encmodel"), 
-                    "cf_onnx_path": os.path.join(onnx_model_dir, "cf.encmodel"), 
-                    "lama_onnx_path": os.path.join(onnx_model_dir, "lama_fp32.encmodel"),
-                    "emdf_onnx_path": os.path.join(onnx_model_dir, "emdf_inpaint.encmodel"),
-                    "grig_onnx_path": os.path.join(onnx_model_dir, "grig_inpaint.encmodel"),
-                    "text_detection_onnx_path": os.path.join(onnx_model_dir, "pp_ocr_det.encmodel"),
-                    "yolo_detection_onnx_path": os.path.join(onnx_model_dir, "yolo.encmodel"),
-                    "segment_onnx_dir": segment_model_dir,
-                    "general_edit_onnx_dir": general_edit_dir,
-                    "object_remove_onnx_dir": object_remove_dir,
-                    "mask_path": kwargs["manual_watermark_mask_path"] if "manual_watermark_mask_path" in kwargs and kwargs["manual_watermark_mask_path"] else "",
-                    "refine_type": kwargs["model_name"],
-                    "watermark_type": "text" if "watermark_content" in kwargs and kwargs["watermark_content"] == "text_watermark" else "subtitle" if "watermark_content" in kwargs and kwargs["watermark_content"] == "subtitle" else "all",
-                    "ai_detect_type": kwargs["watermark_detect_type"],
-                    "ai_interactive_type": kwargs["watermark_ai_interactive_type"] if "watermark_ai_interactive_type" in kwargs else "semantic_detect",
-                    "ai_interactive_prompt": kwargs["watermark_detect_prompt"] if "watermark_detect_prompt" in kwargs else "watermark",
-                    "ai_interactive_boxes": kwargs["watermark_boxes"] if "watermark_boxes" in kwargs else [],
-                    "watermark_confidence": kwargs["watermark_confidence"] if "watermark_confidence" in kwargs else 0.5,
-                    "watermark_boxes": kwargs["image_boxes"] if "image_boxes" in kwargs else [],
-                    "dilate_num": int(kwargs["mask_dilate"]),
-                    "progress_cb": progress_cb,
-                }
-                self._get_image_instance().run(**params)
+                image_cfg = ImageWatermarkRemoveConfig(
+                    segment=segment_paths,
+                    inpaint=inpaint_paths,
+                    detection=detection_cfg,
+                    mask=MaskConfig(
+                        mask_path=kwargs["manual_watermark_mask_path"] if kwargs.get("manual_watermark_mask_path") else "",
+                        refine_type=kwargs["model_name"],
+                        dilate_num=int(kwargs["mask_dilate"]),
+                    ),
+                    runtime=runtime_cfg,
+                )
+                self._get_image_instance().run(input_path, output_file, config=image_cfg)
             else:
-                params = {
-                    "image_path": input_path, 
-                    "output_path": output_file,
-                    "image_restoration_onnx_dir": image_restoration_dir,
-                    "refine_type": kwargs["model_name"],
-                    "restoration_prompt": kwargs.get("restoration_prompt", ""),
-                    "restoration_watermark_type": kwargs.get("restoration_watermark_type", "general"),
-                    "progress_cb": progress_cb,
-                }
-                self._get_image_instance().run_without_mask(**params)
+                restoration_cfg = RestorationRemoveConfig(
+                    restoration=RestorationModelPaths(image_restoration_onnx_dir=image_restoration_dir),
+                    params=RestorationConfig(
+                        refine_type="image_restoration",
+                        restoration_prompt=kwargs.get("restoration_prompt", ""),
+                        restoration_watermark_type=kwargs.get("restoration_watermark_type", "general"),
+                    ),
+                    runtime=runtime_cfg,
+                )
+                self._get_image_instance().run_without_mask(input_path, output_file, config=restoration_cfg)
         elif kwargs["model_name"] != "video_engine":
             if kwargs["model_name"] not in ["image_restoration"]:
                 ppt_onnx_basedir = os.path.join(self.deps_path, _resolve_hardware_variant(), "video_inpainting", "ppt")
                 tacker_onnx_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "tracker")
-                params = {
-                    "input_video_path": input_path, 
-                    "output_video_path": output_file,
-                    "sr_segment_onnx_path": os.path.join(onnx_model_dir, "sr_segment.encmodel"),
-                    "pt_segment_onnx_path": os.path.join(onnx_model_dir, "pt_segment.encmodel"),
-                    "pt_inpaint_onnx_path": os.path.join(onnx_model_dir, "pt_inpaint.encmodel"), 
-                    "cf_onnx_path": os.path.join(onnx_model_dir, "cf.encmodel"), 
-                    "lama_onnx_path": os.path.join(onnx_model_dir, "lama_fp32.encmodel"),
-                    "emdf_onnx_path": os.path.join(onnx_model_dir, "emdf_inpaint.encmodel"),
-                    "grig_onnx_path": os.path.join(onnx_model_dir, "grig_inpaint.encmodel"),
-                    "text_detection_onnx_path": os.path.join(onnx_model_dir, "pp_ocr_det.encmodel"),
-                    "yolo_detection_onnx_path": os.path.join(onnx_model_dir, "yolo.encmodel"),
-                    "segment_onnx_dir": segment_model_dir,
-                    "ppt_onnx_basedir": ppt_onnx_basedir,
-                    "tacker_onnx_dir": tacker_onnx_dir,
-                    "general_edit_onnx_dir": general_edit_dir,
-                    "object_remove_onnx_dir": object_remove_dir,
-                    "mask_path": kwargs["manual_watermark_mask_path"] if "manual_watermark_mask_path" in kwargs and kwargs["manual_watermark_mask_path"] else "",
-                    "refine_type": kwargs["model_name"],
-                    "use_cache_mask": True if "watermark_format" in kwargs and kwargs["watermark_format"] == "static_watermark" else False,
-                    "watermark_type": "text" if "watermark_content" in kwargs and kwargs["watermark_content"] == "text_watermark" else "subtitle" if "watermark_content" in kwargs and kwargs["watermark_content"] == "subtitle" else "all",
-                    "ai_detect_type": kwargs["watermark_detect_type"],
-                    "ai_interactive_type": kwargs["watermark_ai_interactive_type"] if "watermark_ai_interactive_type" in kwargs else "semantic_detect",
-                    "ai_interactive_prompt": kwargs["watermark_detect_prompt"] if "watermark_detect_prompt" in kwargs else "watermark",
-                    "ai_interactive_boxes": kwargs["watermark_boxes"] if "watermark_boxes" in kwargs else [],
-                    "watermark_confidence": kwargs["watermark_confidence"] if "watermark_confidence" in kwargs else 0.5,
-                    "watermark_boxes": kwargs["image_boxes"] if "image_boxes" in kwargs else [],
-                    "watermark_tracking_data": kwargs["watermark_tracking_data"] if "watermark_tracking_data" in kwargs else [],
-                    "dilate_num": int(kwargs["mask_dilate"]),
-                    "ffmpeg_path": os.getenv("POWERTOOLS_FFMPEG_BIN"),
-                    "progress_cb": progress_cb,
-                }
-                self._get_video_instance().process_video(**params)
+                video_cfg = VideoWatermarkRemoveConfig(
+                    segment=segment_paths,
+                    inpaint=inpaint_paths,
+                    video_extra=VideoExtraModelPaths(
+                        ppt_onnx_basedir=ppt_onnx_basedir,
+                        tacker_onnx_dir=tacker_onnx_dir,
+                    ),
+                    detection=detection_cfg,
+                    mask=VideoMaskConfig(
+                        mask_path=kwargs["manual_watermark_mask_path"] if kwargs.get("manual_watermark_mask_path") else "",
+                        refine_type=kwargs["model_name"],
+                        dilate_num=int(kwargs["mask_dilate"]),
+                        use_cache_mask=(kwargs.get("watermark_format") == "static_watermark"),
+                        watermark_tracking_data=kwargs.get("watermark_tracking_data", {}),
+                    ),
+                    runtime=RuntimeConfig(
+                        progress_cb=progress_cb,
+                        ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
+                        callback_func=None,
+                    ),
+                )
+                self._get_video_instance().process_video(input_path, output_file, config=video_cfg)
             else:
-                params = {
-                    "input_video_path": input_path, 
-                    "output_video_path": output_file,
-                    "image_restoration_onnx_dir": image_restoration_dir,
-                    "refine_type": kwargs["model_name"],
-                    "restoration_prompt": kwargs.get("restoration_prompt", ""),
-                    "restoration_watermark_type": kwargs.get("restoration_watermark_type", "general"),
-                    "ffmpeg_path": os.getenv("POWERTOOLS_FFMPEG_BIN"),
-                    "progress_cb": progress_cb,
-                }
-                self._get_video_instance().process_video_without_mask(**params)
+                restoration_cfg = RestorationRemoveConfig(
+                    restoration=RestorationModelPaths(image_restoration_onnx_dir=image_restoration_dir),
+                    params=RestorationConfig(
+                        refine_type="image_restoration",
+                        restoration_prompt=kwargs.get("restoration_prompt", ""),
+                        restoration_watermark_type=kwargs.get("restoration_watermark_type", "general"),
+                    ),
+                    runtime=RuntimeConfig(
+                        progress_cb=progress_cb,
+                        ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
+                    ),
+                )
+                self._get_video_instance().process_video_without_mask(input_path, output_file, config=restoration_cfg)
         else:
             video_config = EngineConfig(
                 prompt=kwargs.get("prompt", None),
@@ -160,7 +184,7 @@ class WatermarkRemoveWork(BaseWorker):
                 output_video=output_file,
                 plugin="watermark_removal",
                 config=video_config,
-                mask=kwargs["manual_watermark_mask_path"] if "manual_watermark_mask_path" in kwargs and kwargs["manual_watermark_mask_path"] else None,
+                mask=kwargs["manual_watermark_mask_path"] if kwargs.get("manual_watermark_mask_path") else None,
                 plugin_kwargs={
                     "sr_segment_onnx_path": os.path.join(onnx_model_dir, "sr_segment.encmodel"),
                     "pt_segment_onnx_path": os.path.join(onnx_model_dir, "pt_segment.encmodel"),
@@ -175,13 +199,17 @@ class WatermarkRemoveWork(BaseWorker):
                     "general_edit_onnx_dir": general_edit_dir,
                     "object_remove_onnx_dir": object_remove_dir,
                     "refine_type": "object_removal",
-                    "watermark_type": "text" if "watermark_content" in kwargs and kwargs["watermark_content"] == "text_watermark" else "subtitle" if "watermark_content" in kwargs and kwargs["watermark_content"] == "subtitle" else "all",
+                    "watermark_type": (
+                        "text" if kwargs.get("watermark_content") == "text_watermark"
+                        else "subtitle" if kwargs.get("watermark_content") == "subtitle"
+                        else "all"
+                    ),
                     "ai_detect_type": kwargs["watermark_detect_type"],
-                    "ai_interactive_type": kwargs["watermark_ai_interactive_type"] if "watermark_ai_interactive_type" in kwargs else "semantic_detect",
-                    "ai_interactive_prompt": kwargs["watermark_detect_prompt"] if "watermark_detect_prompt" in kwargs else "watermark",
-                    "ai_interactive_boxes": kwargs["watermark_boxes"] if "watermark_boxes" in kwargs else [],
-                    "watermark_confidence": kwargs["watermark_confidence"] if "watermark_confidence" in kwargs else 0.5,
-                    "watermark_boxes": kwargs["image_boxes"] if "image_boxes" in kwargs else [],
+                    "ai_interactive_type": kwargs.get("watermark_ai_interactive_type", "semantic_detect"),
+                    "ai_interactive_prompt": kwargs.get("watermark_detect_prompt", "watermark"),
+                    "ai_interactive_boxes": kwargs.get("watermark_boxes", []),
+                    "watermark_confidence": kwargs.get("watermark_confidence", 0.5),
+                    "watermark_boxes": kwargs.get("image_boxes", []),
                     "dilate_num": int(kwargs["mask_dilate"]),
                 },
             )

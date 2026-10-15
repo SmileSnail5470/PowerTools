@@ -14,6 +14,7 @@ from app.algorithms.segment.inference import SegmentationInference
 from app.algorithms.private.image_edit.general_edit.inference import ImageEditInference
 from app.algorithms.private.image_restoration.inference import ImageRestorationInference
 from app.algorithms.private.object_remove.inference import ObjectRemoveInference
+from app.algorithms.visible_watermark_removal.params_config import ImageWatermarkRemoveConfig, RestorationRemoveConfig
 
 
 class WatermarkSegment():
@@ -350,60 +351,50 @@ class ImageWatermarkRemove():
         mask = ((mask > 0) * 255).astype(np.uint8)
         return mask
 
-    def run(
-            self, 
-            image_path, 
-            output_path,
-            sr_segment_onnx_path,
-            pt_segment_onnx_path,
-            pt_inpaint_onnx_path, 
-            cf_onnx_path, 
-            lama_onnx_path,
-            emdf_onnx_path,
-            grig_onnx_path,
-            text_detection_onnx_path,
-            yolo_detection_onnx_path,
-            segment_onnx_dir,
-            general_edit_onnx_dir,
-            object_remove_onnx_dir="",
-            mask_path: str = "",
-            refine_type: str = "patchwiper",                    # patchwiper/lama/transparent/cv2/coordfill/grig/emdf/general_edit/image_restoration/object_removal
-            watermark_type: str = "all",                        # text / all
-            ai_detect_type: str = "ai_interactive_detect",      # ai_interactive_detect/ai_auto_detect
-            ai_interactive_type: str = "semantic_detect",       # semantic_detect/space_detect
-            ai_interactive_prompt: str = "watermark",
-            ai_interactive_boxes: list = [],
-            watermark_confidence: float = 0.5,
-            watermark_boxes: list = [],
-            dilate_num: int = 2,
-            **kwargs
-        ):
-        progress_cb = kwargs.pop("progress_cb", None)
+    def run(self, image_path: str, output_path: str, config: ImageWatermarkRemoveConfig, **kwargs):
+        seg = config.segment
+        inp = config.inpaint
+        det = config.detection
+        msk = config.mask
+        rt = config.runtime
+
+        progress_cb = rt.progress_cb
         if progress_cb is not None:
             progress_cb("MaskStart", "")
-        if not mask_path:
-            mask = WatermarkSegment(watermark_type, ai_detect_type, ai_interactive_type, ai_interactive_prompt, ai_interactive_boxes, watermark_confidence).segment(
+
+        if not msk.mask_path:
+            mask = WatermarkSegment(
+                det.watermark_type,
+                det.ai_detect_type,
+                det.ai_interactive_type,
+                det.ai_interactive_prompt,
+                det.ai_interactive_boxes,
+                det.watermark_confidence,
+            ).segment(
                 image_path=image_path,
-                sr_onnx_path=sr_segment_onnx_path,
-                pt_onnx_path=pt_segment_onnx_path,
-                text_detection_onnx_path=text_detection_onnx_path,
-                yolo_detection_onnx_path=yolo_detection_onnx_path,
-                segment_onnx_dir=segment_onnx_dir,
-                **kwargs
+                sr_onnx_path=seg.sr_segment_onnx_path,
+                pt_onnx_path=seg.pt_segment_onnx_path,
+                text_detection_onnx_path=seg.text_detection_onnx_path,
+                yolo_detection_onnx_path=seg.yolo_detection_onnx_path,
+                segment_onnx_dir=seg.segment_onnx_dir,
+                **det.to_segment_kwargs(),
+                **kwargs,
             )
-            if watermark_boxes and not (ai_detect_type == "ai_interactive_detect" and ai_interactive_type == "space_detect"):
+            if det.watermark_boxes and not (det.ai_detect_type == "ai_interactive_detect" and det.ai_interactive_type == "space_detect"):
                 h, w = mask.shape
                 mask_image = np.zeros((h, w), dtype=np.uint8)
-                for bbox in watermark_boxes:
+                for bbox in det.watermark_boxes:
                     xmin, ymin, xmax, ymax = bbox
                     mask_image[ymin:ymax, xmin:xmax] = mask[ymin:ymax, xmin:xmax]
                 mask = mask_image
         else:
-            mask = self._read_mask(mask_path=mask_path)
+            mask = self._read_mask(mask_path=msk.mask_path)
+
         if progress_cb is not None:
             if "POWERTOOLS_TMPE_DIR" in os.environ and os.environ["POWERTOOLS_TMPE_DIR"]:
-                mask_tmp_path = os.path.join(os.environ["POWERTOOLS_TMPE_DIR"], "tmpdir", "{0}_mask.png".format(os.path.basename(output_path.rsplit(".", 1)[0])))
-            elif "visible_mask_path" in kwargs and kwargs["visible_mask_path"]:
+                name_prefix = os.path.basename(output_path.rsplit(".", 1)[0])
+                mask_tmp_path = os.path.join(os.environ["POWERTOOLS_TMPE_DIR"], "tmpdir", "{0}_mask.png".format(name_prefix))
+            elif kwargs.get("visible_mask_path"):
                 mask_tmp_path = kwargs["visible_mask_path"]
             else:
                 mask_tmp_path = "{0}_mask.png".format(output_path.rsplit(".", 1)[0])
@@ -418,36 +409,32 @@ class ImageWatermarkRemove():
 
         image_inpainting = WatermarkInpaint(
             mask=mask,
-            pt_inpaint_onnx_path=pt_inpaint_onnx_path,
-            cf_onnx_path=cf_onnx_path,
-            lama_onnx_path=lama_onnx_path,
-            emdf_onnx_path=emdf_onnx_path,
-            grig_onnx_path=grig_onnx_path,
-            general_edit_onnx_dir=general_edit_onnx_dir,
-            object_remove_onnx_dir=object_remove_onnx_dir,
-            model_type=refine_type,
-            dilate_num=dilate_num,
+            pt_inpaint_onnx_path=inp.pt_inpaint_onnx_path,
+            cf_onnx_path=inp.cf_onnx_path,
+            lama_onnx_path=inp.lama_onnx_path,
+            emdf_onnx_path=inp.emdf_onnx_path,
+            grig_onnx_path=inp.grig_onnx_path,
+            general_edit_onnx_dir=inp.general_edit_onnx_dir,
+            object_remove_onnx_dir=inp.object_remove_onnx_dir,
+            model_type=msk.refine_type,
+            dilate_num=msk.dilate_num,
         )
         image_inpainting.inpaint(image_path=image_path, output_path=output_path)
         if progress_cb is not None:
             progress_cb("WaterRemoved", "")
 
-    def run_without_mask(
-            self, 
-            image_path, 
-            output_path,
-            image_restoration_onnx_dir,
-            refine_type: str = "image_restoration",
-            **kwargs
-        ):
-        progress_cb = kwargs.pop("progress_cb", None)
+    def run_without_mask(self, image_path: str, output_path: str, config: RestorationRemoveConfig):
+        params = config.params
+        progress_cb = config.runtime.progress_cb
+
         if progress_cb is not None:
             progress_cb("WaterRemoveStart", "")
+
         image_inpainting = WatermarkInpaint(
-            image_restoration_onnx_dir=image_restoration_onnx_dir,
-            restoration_prompt=kwargs.get("restoration_prompt", ""),
-            restoration_watermark_type=kwargs.get("restoration_watermark_type", "general"),
-            model_type=refine_type,
+            image_restoration_onnx_dir=config.restoration.image_restoration_onnx_dir,
+            restoration_prompt=params.restoration_prompt,
+            restoration_watermark_type=params.restoration_watermark_type,
+            model_type=params.refine_type,
         )
         image_inpainting.inpaint(image_path=image_path, output_path=output_path)
         if progress_cb is not None:
