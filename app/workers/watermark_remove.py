@@ -3,8 +3,6 @@ import os
 from app.ui.common.config import cfg
 from app.workers.work_base import BaseWorker, _resolve_hardware_variant
 from app.utils.logger.decorators import log_exception
-from app.algorithms.private.video_engine.config import EngineConfig
-from app.algorithms.private.video_engine.engine import process_video
 from app.algorithms.visible_watermark_removal.watermark_removal_image import ImageWatermarkRemove
 from app.algorithms.visible_watermark_removal.watermark_removal_video import VideoWatermarkRemover
 from app.algorithms.visible_watermark_removal.params_config import (
@@ -17,6 +15,9 @@ from app.algorithms.visible_watermark_removal.params_config import (
     RestorationRemoveConfig,
     RuntimeConfig,
     SegmentModelPaths,
+    VideoEngineConfig,
+    VideoEngineModelPaths,
+    VideoEngineRemoveConfig,
     VideoExtraModelPaths,
     VideoMaskConfig,
     VideoWatermarkRemoveConfig,
@@ -167,52 +168,25 @@ class WatermarkRemoveWork(BaseWorker):
                 )
                 self._get_video_instance().process_video_without_mask(input_path, output_file, config=restoration_cfg)
         else:
-            video_config = EngineConfig(
-                prompt=kwargs.get("prompt", None),
-                task_type=kwargs.get("task_type", None),
-                rife_model_path=kwargs.get("rife_model_path") or os.path.join(self.deps_path, _resolve_hardware_variant(), "video_engine"),
-                keyframe_stride=int(kwargs.get("keyframe_stride", 2)),
-                ffmpeg_path=kwargs.get("ffmpeg_path") or os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
-                should_cancel=cancel_requested,
-                is_static_watermark=True if "watermark_format" in kwargs and kwargs["watermark_format"] == "static_watermark" else False,
-                progress_cb=progress_cb
-            )
-            if progress_cb:
-                progress_cb("WaterRemoveStart", "")
-            process_video(
-                input_video=input_path,
-                output_video=output_file,
-                plugin="watermark_removal",
-                config=video_config,
-                mask=kwargs["manual_watermark_mask_path"] if kwargs.get("manual_watermark_mask_path") else None,
-                plugin_kwargs={
-                    "sr_segment_onnx_path": os.path.join(onnx_model_dir, "sr_segment.encmodel"),
-                    "pt_segment_onnx_path": os.path.join(onnx_model_dir, "pt_segment.encmodel"),
-                    "pt_inpaint_onnx_path": os.path.join(onnx_model_dir, "pt_inpaint.encmodel"), 
-                    "cf_onnx_path": os.path.join(onnx_model_dir, "cf.encmodel"), 
-                    "lama_onnx_path": os.path.join(onnx_model_dir, "lama_fp32.encmodel"),
-                    "emdf_onnx_path": os.path.join(onnx_model_dir, "emdf_inpaint.encmodel"),
-                    "grig_onnx_path": os.path.join(onnx_model_dir, "grig_inpaint.encmodel"),
-                    "text_detection_onnx_path": os.path.join(onnx_model_dir, "pp_ocr_det.encmodel"),
-                    "yolo_detection_onnx_path": os.path.join(onnx_model_dir, "yolo.encmodel"),
-                    "segment_onnx_dir": segment_model_dir,
-                    "general_edit_onnx_dir": general_edit_dir,
-                    "object_remove_onnx_dir": object_remove_dir,
-                    "refine_type": "object_removal",
-                    "watermark_type": (
-                        "text" if kwargs.get("watermark_content") == "text_watermark"
-                        else "subtitle" if kwargs.get("watermark_content") == "subtitle"
-                        else "all"
+            engine_remove_cfg = VideoEngineRemoveConfig(
+                engine=VideoEngineConfig(
+                    model_paths=VideoEngineModelPaths(
+                        video_engine_model_dir=kwargs.get("rife_model_path") or os.path.join(self.deps_path, _resolve_hardware_variant(), "video_engine"),
                     ),
-                    "ai_detect_type": kwargs["watermark_detect_type"],
-                    "ai_interactive_type": kwargs.get("watermark_ai_interactive_type", "semantic_detect"),
-                    "ai_interactive_prompt": kwargs.get("watermark_detect_prompt", "watermark"),
-                    "ai_interactive_boxes": kwargs.get("watermark_boxes", []),
-                    "watermark_confidence": kwargs.get("watermark_confidence", 0.5),
-                    "watermark_boxes": kwargs.get("image_boxes", []),
-                    "dilate_num": int(kwargs["mask_dilate"]),
-                },
+                    prompt=kwargs.get("prompt"),
+                    task_type=kwargs.get("task_type"),
+                    keyframe_stride=int(kwargs.get("keyframe_stride", 2)),
+                    is_static_watermark=(kwargs.get("watermark_format") == "static_watermark"),
+                    mask_path=kwargs["manual_watermark_mask_path"] if kwargs.get("manual_watermark_mask_path") else "",
+                ),
+                segment=segment_paths,
+                inpaint=inpaint_paths,
+                detection=detection_cfg,
+                runtime=RuntimeConfig(
+                    progress_cb=progress_cb,
+                    ffmpeg_path=kwargs.get("ffmpeg_path") or os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
+                    should_cancel=cancel_requested,
+                ),
             )
-            if progress_cb:
-                progress_cb("WaterRemoved", "")
+            self._get_video_instance().process_video_engine(input_path, output_file, config=engine_remove_cfg)
         return output_file
