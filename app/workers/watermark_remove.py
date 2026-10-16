@@ -100,8 +100,8 @@ class WatermarkRemoveWork(BaseWorker):
         runtime_cfg = RuntimeConfig(
             progress_cb=progress_cb,
             ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
+            should_cancel=cancel_requested,
         )
-
         if file_type == "image":
             if kwargs["model_name"] not in ["image_restoration"]:
                 image_cfg = ImageWatermarkRemoveConfig(
@@ -150,6 +150,7 @@ class WatermarkRemoveWork(BaseWorker):
                         progress_cb=progress_cb,
                         ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
                         callback_func=None,
+                        should_cancel=cancel_requested,
                     ),
                 )
                 self._get_video_instance().process_video(input_path, output_file, config=video_cfg)
@@ -164,6 +165,7 @@ class WatermarkRemoveWork(BaseWorker):
                     runtime=RuntimeConfig(
                         progress_cb=progress_cb,
                         ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
+                        should_cancel=cancel_requested,
                     ),
                 )
                 self._get_video_instance().process_video_without_mask(input_path, output_file, config=restoration_cfg)
@@ -171,7 +173,7 @@ class WatermarkRemoveWork(BaseWorker):
             engine_remove_cfg = VideoEngineRemoveConfig(
                 engine=VideoEngineConfig(
                     model_paths=VideoEngineModelPaths(
-                        video_engine_model_dir=kwargs.get("rife_model_path") or os.path.join(self.deps_path, _resolve_hardware_variant(), "video_engine"),
+                        video_engine_model_dir=os.path.join(self.deps_path, _resolve_hardware_variant(), "video_engine"),
                     ),
                     prompt=kwargs.get("prompt"),
                     task_type=kwargs.get("task_type"),
