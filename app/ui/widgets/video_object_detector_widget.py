@@ -302,6 +302,8 @@ class VideoPreviewViewport(QWidget):
 
 
 class VideoObjectDetectorWidget(QDialog):
+    ISSUE_FRAME = 1
+
     def __init__(self, file_path: str | None = None, parent=None):
         super().__init__(parent)
         self.file_path = None
@@ -917,13 +919,7 @@ class VideoObjectDetectorWidget(QDialog):
         self._set_button_icon(resegment, FluentIcon.SYNC)
         resegment.setFixedHeight(32)
         resegment.clicked.connect(self._show_inference_notice)
-        keyframe = QPushButton(self.tr("关键帧"))
-        keyframe.setObjectName("smallNeutralButton")
-        self._set_button_icon(keyframe, FluentIcon.PIN)
-        keyframe.setFixedHeight(32)
-        keyframe.clicked.connect(self._set_anchor_to_current_frame)
         result_actions.addWidget(resegment, 0, 0)
-        result_actions.addWidget(keyframe, 0, 1)
         result_layout.addLayout(result_actions)
         layout.addWidget(result_card)
 
@@ -961,7 +957,7 @@ class VideoObjectDetectorWidget(QDialog):
         second_layout.setSpacing(10)
         second_header = QHBoxLayout()
         second_header.addWidget(self._color_dot("#f59e0b", 12), 0, Qt.AlignVCenter)
-        second_name = QLabel("Object #2 (vehicle)")
+        second_name = QLabel(self.tr("不可靠帧 · 第 {0} 帧").format(self.ISSUE_FRAME))
         second_name.setObjectName("objectTitle")
         setFont(second_name, 12, QFont.Bold)
         second_header.addWidget(second_name)
@@ -971,12 +967,20 @@ class VideoObjectDetectorWidget(QDialog):
         second_header.addWidget(second_state)
         second_layout.addLayout(second_header)
         second_layout.addWidget(self._pill_label(self.tr("遮挡导致边界模糊，建议跳转到对应帧进行人工修正或重跑。"), "warningTextPill"))
-        jump = QPushButton(self.tr("跳转至异常帧 #38 修正"))
-        jump.setObjectName("amberButton")
-        self._set_button_icon(jump, FluentIcon.SEARCH, dark=True)
+        issue_actions = QHBoxLayout()
+        issue_actions.setSpacing(8)
+        jump = QPushButton(self.tr("跳转到修复帧"))
+        jump.setObjectName("smallNeutralButton")
+        self._set_button_icon(jump, FluentIcon.SEARCH)
         jump.setFixedHeight(36)
         jump.clicked.connect(self._jump_to_issue_frame)
-        second_layout.addWidget(jump)
+        repair = QPushButton(self.tr("修复当前帧"))
+        repair.setObjectName("amberButton")
+        repair.setFixedHeight(36)
+        repair.clicked.connect(self._show_inference_notice)
+        issue_actions.addWidget(jump)
+        issue_actions.addWidget(repair)
+        second_layout.addLayout(issue_actions)
         self.issue_cards_layout.addWidget(second)
         self.issue_cards_layout.addStretch()
         self.issue_scroll.setWidget(issue_cards)
@@ -1191,9 +1195,6 @@ class VideoObjectDetectorWidget(QDialog):
         label = self.tr("正向") if prompt_mode == "pos" else self.tr("负向")
         self._set_label_status(self.canvas_status, self.tr("●  已添加{0}画面提示").format(label), "ready")
 
-    def _set_anchor_to_current_frame(self):
-        self.anchor_spin.setValue(self.current_frame)
-
     def _on_range_start_changed(self, frame: int, range_end: QSpinBox | None = None):
         if range_end is None:
             range_end = self.range_end
@@ -1207,7 +1208,7 @@ class VideoObjectDetectorWidget(QDialog):
             range_start.setValue(frame)
 
     def _jump_to_issue_frame(self):
-        self.timeline.setValue(min(38, self.timeline.maximum()))
+        self.timeline.setValue(min(self.ISSUE_FRAME, self.timeline.maximum()))
 
     @staticmethod
     def _set_label_status(label: QLabel, text: str, state: str):
