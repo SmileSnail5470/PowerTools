@@ -467,8 +467,8 @@ class WatermarkDetectSettings(QWidget):
             #inputBox:focus { border: 1.5px solid #2563EB; }
             
             #chip { 
-                background: #F1F5F9; border: none; border-radius: 15px; 
-                padding: 6px 12px; color: #64748B; 
+                background: #F1F5F9; border: 1px solid #e2e8f0; border-radius: 8px; 
+                padding: 5px 10px; color: #64748B; 
             }
             #chip:hover { background: #2563EB; color: white; }
             

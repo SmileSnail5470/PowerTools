@@ -5,7 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
+    QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
     QSizePolicy, QSlider, QSpinBox, QVBoxLayout, QWidget
 )
 from app.ui.library.qfluentwidgets import FluentIcon, Theme, getFont, setFont
@@ -24,6 +24,8 @@ class VideoFrameCanvas(QFrame):
         self._frame = QImage()
         self._placeholder = self.tr("打开视频以预览画面")
         self._view_mode = "overlay"
+        self._show_detection_overlay = True
+        self._show_prompts = True
         self._prompt_mode = "pos"
         self._drag_start = None
         self._drag_rect = None
@@ -34,9 +36,11 @@ class VideoFrameCanvas(QFrame):
         self._hint_animation.setEasingCurve(QEasingCurve.OutCubic)
         self._hint_animation.valueChanged.connect(self._set_hint_opacity)
 
-    def set_frame(self, frame: QImage, placeholder: str = ""):
+    def set_frame(self, frame: QImage, placeholder: str = "", show_detection_overlay: bool = True, show_prompts: bool = True):
         self._frame = frame
         self._placeholder = placeholder or self.tr("打开视频以预览画面")
+        self._show_detection_overlay = show_detection_overlay
+        self._show_prompts = show_prompts
         self.update()
 
     def set_view_mode(self, mode: str):
@@ -57,9 +61,10 @@ class VideoFrameCanvas(QFrame):
             painter.setPen(QColor("#94a3b8"))
             painter.setFont(getFont(14, QFont.DemiBold))
             painter.drawText(self.rect(), Qt.AlignCenter, self._placeholder)
-            painter.setPen(QColor("#64748b"))
-            painter.setFont(getFont(10))
-            painter.drawText(self.rect().adjusted(0, 38, 0, 0), Qt.AlignHCenter | Qt.AlignTop, self.tr("支持 MP4、MOV、AVI 等常见视频格式"))
+            if self._placeholder == self.tr("打开视频以预览画面"):
+                painter.setPen(QColor("#64748b"))
+                painter.setFont(getFont(10))
+                painter.drawText(self.rect().adjusted(0, 38, 0, 0), Qt.AlignHCenter | Qt.AlignTop, self.tr("支持 MP4、MOV、AVI 等常见视频格式"))
             event.accept()
             return
         target = self._image_target_rect()
@@ -73,44 +78,46 @@ class VideoFrameCanvas(QFrame):
             self._paint_hover_hint(painter)
             event.accept()
             return
-        bounds = QRectF(
-            target.x() + target.width() * 0.266,
-            target.y() + target.height() * 0.222,
-            target.width() * 0.125,
-            target.height() * 0.389,
-        )
-        if self._view_mode == "mask":
+        if self._show_detection_overlay:
+            bounds = QRectF(
+                target.x() + target.width() * 0.266,
+                target.y() + target.height() * 0.222,
+                target.width() * 0.125,
+                target.height() * 0.389,
+            )
+            if self._view_mode == "mask":
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(QColor(99, 102, 241, 225))
+                mask = QRectF(
+                    bounds.x() + bounds.width() * 0.2,
+                    bounds.y() + bounds.height() * 0.08,
+                    bounds.width() * 0.62,
+                    bounds.height() * 0.86,
+                )
+                painter.drawRoundedRect(mask, 12, 12)
+            else:
+                painter.setBrush(QColor(99, 102, 241, 42))
+                painter.setPen(QPen(QColor("#6366f1"), 2, Qt.DashLine))
+                painter.drawRoundedRect(bounds, 4, 4)
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(99, 102, 241, 225))
-            mask = QRectF(
-                bounds.x() + bounds.width() * 0.2,
-                bounds.y() + bounds.height() * 0.08,
-                bounds.width() * 0.62,
-                bounds.height() * 0.86,
-            )
-            painter.drawRoundedRect(mask, 12, 12)
-        else:
-            painter.setBrush(QColor(99, 102, 241, 42))
-            painter.setPen(QPen(QColor("#6366f1"), 2, Qt.DashLine))
-            painter.drawRoundedRect(bounds, 4, 4)
-        painter.setPen(Qt.NoPen)
-        if self._view_mode != "mask":
-            painter.setBrush(QColor("#4f46e5"))
-            label_rect = QRectF(bounds.x(), bounds.y() - 22, 128, 20)
-            painter.drawRoundedRect(label_rect, 4, 4)
-            painter.setPen(Qt.white)
-            painter.setFont(getFont(9, QFont.DemiBold))
-            painter.drawText(label_rect, Qt.AlignCenter, self.tr("#1 person (SAM3)"))
-        for prompt_rect, prompt_mode in self._prompts:
-            prompt = QRectF(
-                target.x() + prompt_rect.x() * target.width(),
-                target.y() + prompt_rect.y() * target.height(),
-                prompt_rect.width() * target.width(),
-                prompt_rect.height() * target.height(),
-            )
-            self._paint_prompt(painter, prompt, prompt_mode)
-        if self._drag_rect is not None:
-            self._paint_prompt(painter, self._drag_rect, self._prompt_mode)
+            if self._view_mode != "mask":
+                painter.setBrush(QColor("#4f46e5"))
+                label_rect = QRectF(bounds.x(), bounds.y() - 22, 128, 20)
+                painter.drawRoundedRect(label_rect, 4, 4)
+                painter.setPen(Qt.white)
+                painter.setFont(getFont(9, QFont.DemiBold))
+                painter.drawText(label_rect, Qt.AlignCenter, self.tr("#1 person (SAM3)"))
+        if self._show_prompts:
+            for prompt_rect, prompt_mode in self._prompts:
+                prompt = QRectF(
+                    target.x() + prompt_rect.x() * target.width(),
+                    target.y() + prompt_rect.y() * target.height(),
+                    prompt_rect.width() * target.width(),
+                    prompt_rect.height() * target.height(),
+                )
+                self._paint_prompt(painter, prompt, prompt_mode)
+            if self._drag_rect is not None:
+                self._paint_prompt(painter, self._drag_rect, self._prompt_mode)
 
         painter.restore()
         self._paint_hover_hint(painter)
@@ -229,10 +236,7 @@ class VideoFrameCanvas(QFrame):
 
     @staticmethod
     def _clamp_to_target(point: QPointF, target: QRectF) -> QPointF:
-        return QPointF(
-            min(max(point.x(), target.left()), target.right()),
-            min(max(point.y(), target.top()), target.bottom()),
-        )
+        return QPointF(min(max(point.x(), target.left()), target.right()), min(max(point.y(), target.top()), target.bottom()))
 
 
 class VideoPreviewViewport(QWidget):
@@ -272,8 +276,8 @@ class VideoPreviewViewport(QWidget):
     def _layout_content(self):
         if self.canvas is None or self.toolbar is None:
             return
-        available = self.rect().adjusted(24, 24, -24, -24)
-        width = min(896, available.width(), round(available.height() * 16 / 9))
+        available = self.rect().adjusted(8, 8, -8, -8)
+        width = min(available.width(), round(available.height() * 16 / 9))
         height = round(width * 9 / 16)
         toolbar_width = max(0, self.width() - 32)
         margins = self.toolbar_layout.contentsMargins()
@@ -312,6 +316,9 @@ class VideoObjectDetectorWidget(QDialog):
         self.is_playing = False
         self._playback_compact = False
         self._playback_legend_labels = []
+        self.result_video_captures: dict[str, dict[str, cv2.VideoCapture | None]] = {model: {"mask": None, "overlay": None} for model in ("sam3", "edgetam")}
+        self.result_video_paths: dict[str, dict[str, str | None]] = {model: {"mask": None, "overlay": None} for model in ("sam3", "edgetam")}
+        self._frame_detection_results: dict[int, tuple[float | None, dict[str, int]]] = {}
 
         self.setWindowTitle(self.tr("视频分割与跟踪工作台"))
         self.setObjectName("videoObjectDetector")
@@ -437,15 +444,9 @@ class VideoObjectDetectorWidget(QDialog):
         center = self._build_preview_panel()
         content.addWidget(center, 1)
 
-        self.right_scroll = QScrollArea()
-        self.right_scroll.setObjectName("sideScroll")
-        self.right_scroll.setWidgetResizable(True)
-        self.right_scroll.setFrameShape(QFrame.NoFrame)
-        self.right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.right_scroll.setVerticalScrollBar(ScrollBar(Qt.Vertical, self.right_scroll))
-        self.right_scroll.setFixedWidth(352)
-        self.right_scroll.setWidget(self._build_objects_panel())
-        content.addWidget(self.right_scroll)
+        self.right_panel = self._build_objects_panel()
+        self.right_panel.setFixedWidth(352)
+        content.addWidget(self.right_panel)
 
     def _update_video_info_pill(self, resolution: tuple | None, fps: float = 0.0, total: int = 0):
         if resolution:
@@ -467,6 +468,35 @@ class VideoObjectDetectorWidget(QDialog):
 
     def _default_save_path(self) -> str:
         return str(Path(cfg.get(cfg.cachePath)) / "VideoSegmentation" / "results")
+
+    def notify_result_video(self, view: str, file_path: str | Path | None,  model: str | None = None):
+        if view not in ("mask", "overlay"):
+            raise ValueError("view must be 'mask' or 'overlay'")
+        result_model = model or self.current_model
+        if result_model not in self.result_video_captures:
+            raise ValueError("model must be 'sam3' or 'edgetam'")
+        path_value = None
+        capture = None
+        if file_path is not None:
+            path = Path(file_path).expanduser()
+            if not path.is_file():
+                message = self.tr("●  检测结果文件不存在: {0}").format(path)
+                self._set_label_status(self.canvas_status, message, "error")
+                raise FileNotFoundError(path)
+            path_value = str(path.resolve())
+            capture = cv2.VideoCapture(path_value)
+            if not capture.isOpened():
+                capture.release()
+                message = self.tr("●  无法打开检测结果视频: {0}").format(path)
+                self._set_label_status(self.canvas_status, message, "error")
+                raise ValueError(message)
+        old_capture = self.result_video_captures[result_model][view]
+        if old_capture is not None:
+            old_capture.release()
+        self.result_video_captures[result_model][view] = capture
+        self.result_video_paths[result_model][view] = path_value
+        if result_model == self.current_model and view == self.current_view:
+            self._update_frame()
 
     def _choose_save_path_for(self, line_edit: QLineEdit):
         directory = QFileDialog.getExistingDirectory(
@@ -747,7 +777,7 @@ class VideoObjectDetectorWidget(QDialog):
         view_layout.setContentsMargins(4, 4, 4, 4)
         view_layout.setSpacing(2)
         self.view_buttons = {}
-        for key, text in (("overlay", "半透明叠加"), ("original", "原视频"), ("mask", "仅掩码")):
+        for key, text in (("original", "原视频"), ("overlay", "半透明叠加"), ("mask", "仅掩码")):
             button = QPushButton(self.tr(text))
             button.setCheckable(True)
             button.setObjectName("viewButton")
@@ -755,7 +785,7 @@ class VideoObjectDetectorWidget(QDialog):
             button.clicked.connect(lambda _checked=False, mode=key: self._select_view(mode))
             self.view_buttons[key] = button
             view_layout.addWidget(button)
-        self.view_buttons["overlay"].setChecked(True)
+        self.view_buttons["original"].setChecked(True)
 
         self.canvas_status = QLabel(self.tr("●  状态: 已分割 (Normal)"))
         self.canvas_status.setObjectName("canvasStatus")
@@ -840,10 +870,11 @@ class VideoObjectDetectorWidget(QDialog):
         setFont(title, 12, QFont.DemiBold)
         heading.addWidget(title)
         heading.addStretch()
-        badge = QLabel(self.tr("SAM3 输出"))
+        badge = QLabel(self.tr("精确检测输出"))
         badge.setObjectName("indigoBadge")
         setFont(badge, 12)
-        heading.addWidget(badge)
+        self.result_model_badge = badge
+        heading.addWidget(badge, alignment=Qt.AlignmentFlag.AlignVCenter)
         panel_layout.addWidget(header)
 
         body = QWidget()
@@ -853,30 +884,34 @@ class VideoObjectDetectorWidget(QDialog):
         layout.setSpacing(12)
         panel_layout.addWidget(body, 1)
 
-        first = QFrame()
-        first.setObjectName("objectCard")
-        first_layout = QVBoxLayout(first)
-        first_layout.setContentsMargins(12, 12, 12, 12)
-        first_layout.setSpacing(10)
-        first_header = QHBoxLayout()
-        first_header.addWidget(self._color_dot("#6366f1", 12), 0, Qt.AlignVCenter)
-        first_name = QLabel("Object #1 (person)")
-        first_name.setObjectName("objectTitle")
-        setFont(first_name, 12, QFont.Bold)
-        first_header.addWidget(first_name)
-        first_header.addStretch()
-        first_state = QLabel(self.tr("正常"))
-        first_state.setObjectName("successBadge")
-        first_header.addWidget(first_state)
-        first_layout.addLayout(first_header)
-        first_layout.addWidget(self._detail_row(self.tr("当前边界框:"), "[340, 160, 500, 440]"))
-        divider = QFrame()
-        divider.setObjectName("cardDivider")
-        divider.setFixedHeight(1)
-        first_layout.addWidget(divider)
-        first_actions = QGridLayout()
-        first_actions.setContentsMargins(0, 0, 0, 0)
-        first_actions.setSpacing(8)
+        result_card = QFrame()
+        result_card.setObjectName("objectCard")
+        result_layout = QVBoxLayout(result_card)
+        result_layout.setContentsMargins(12, 12, 12, 12)
+        result_layout.setSpacing(10)
+        result_header = QHBoxLayout()
+        result_header.addWidget(self._color_dot("#6366f1", 12), 0, Qt.AlignVCenter)
+        result_title = QLabel()
+        result_title.setObjectName("objectTitle")
+        setFont(result_title, 12, QFont.Bold)
+        result_header.addWidget(result_title)
+        result_header.addStretch()
+        self.result_frame_label = result_title
+        result_state = QLabel(self.tr("待检测"))
+        result_state.setObjectName("indigoBadge")
+        result_header.addWidget(result_state)
+        self.result_state_label = result_state
+        result_layout.addLayout(result_header)
+        result_layout.addWidget(self._detail_row(self.tr("检测分数:"), "—", "result_score_value"))
+        result_layout.addWidget(self._detail_row(self.tr("检测对象:"), self.tr("watermark"), "result_objects_value"))
+        result_layout.addWidget(self._detail_row(self.tr("对象数量:"), "—", "result_count_value"))
+        result_divider = QFrame()
+        result_divider.setObjectName("cardDivider")
+        result_divider.setFixedHeight(1)
+        result_layout.addWidget(result_divider)
+        result_actions = QGridLayout()
+        result_actions.setContentsMargins(0, 0, 0, 0)
+        result_actions.setSpacing(8)
         resegment = QPushButton(self.tr("重新分割"))
         resegment.setObjectName("smallNeutralButton")
         self._set_button_icon(resegment, FluentIcon.SYNC)
@@ -887,10 +922,37 @@ class VideoObjectDetectorWidget(QDialog):
         self._set_button_icon(keyframe, FluentIcon.PIN)
         keyframe.setFixedHeight(32)
         keyframe.clicked.connect(self._set_anchor_to_current_frame)
-        first_actions.addWidget(resegment, 0, 0)
-        first_actions.addWidget(keyframe, 0, 1)
-        first_layout.addLayout(first_actions)
-        layout.addWidget(first)
+        result_actions.addWidget(resegment, 0, 0)
+        result_actions.addWidget(keyframe, 0, 1)
+        result_layout.addLayout(result_actions)
+        layout.addWidget(result_card)
+
+        divider = QFrame()
+        divider.setObjectName("cardDivider")
+        divider.setFixedHeight(1)
+        layout.addWidget(divider)
+
+        issue_header = QHBoxLayout()
+        issue_title = QLabel(self.tr("需要修复"))
+        issue_title.setObjectName("sectionTitle")
+        setFont(issue_title, 12, QFont.DemiBold)
+        issue_header.addWidget(issue_title)
+        issue_header.addStretch()
+        self.issue_count_label = QLabel("1")
+        self.issue_count_label.setObjectName("warningBadge")
+        issue_header.addWidget(self.issue_count_label)
+        layout.addLayout(issue_header)
+
+        self.issue_scroll = QScrollArea()
+        self.issue_scroll.setObjectName("issueScroll")
+        self.issue_scroll.setWidgetResizable(True)
+        self.issue_scroll.setFrameShape(QFrame.NoFrame)
+        self.issue_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.issue_scroll.setVerticalScrollBar(ScrollBar(Qt.Vertical, self.issue_scroll))
+        issue_cards = QWidget()
+        self.issue_cards_layout = QVBoxLayout(issue_cards)
+        self.issue_cards_layout.setContentsMargins(0, 0, 0, 0)
+        self.issue_cards_layout.setSpacing(10)
 
         second = QFrame()
         second.setObjectName("warningCard")
@@ -908,23 +970,17 @@ class VideoObjectDetectorWidget(QDialog):
         second_state.setObjectName("warningBadge")
         second_header.addWidget(second_state)
         second_layout.addLayout(second_header)
-        second_layout.addWidget(
-            self._pill_label(
-                self.tr("遮挡导致边界模糊，建议跳转到对应帧进行人工修正或重跑。"),
-                "warningTextPill",
-            )
-        )
+        second_layout.addWidget(self._pill_label(self.tr("遮挡导致边界模糊，建议跳转到对应帧进行人工修正或重跑。"), "warningTextPill"))
         jump = QPushButton(self.tr("跳转至异常帧 #38 修正"))
         jump.setObjectName("amberButton")
         self._set_button_icon(jump, FluentIcon.SEARCH, dark=True)
         jump.setFixedHeight(36)
         jump.clicked.connect(self._jump_to_issue_frame)
         second_layout.addWidget(jump)
-        layout.addWidget(second)
-        layout.addStretch()
-
-        footer = self._info_pill(self.tr("系统默认只展示当前激活算法结果。"))
-        panel_layout.addWidget(footer)
+        self.issue_cards_layout.addWidget(second)
+        self.issue_cards_layout.addStretch()
+        self.issue_scroll.setWidget(issue_cards)
+        layout.addWidget(self.issue_scroll, 1)
         return panel
 
     def _prompt_chip(self, text: str, value: str) -> QPushButton:
@@ -1019,7 +1075,7 @@ class VideoObjectDetectorWidget(QDialog):
         button.setChecked(model == "sam3")
         return button
 
-    def _detail_row(self, label_text: str, value_text: str):
+    def _detail_row(self, label_text: str, value_text: str, value_attr: str | None = None):
         row = QWidget()
         layout = QHBoxLayout(row)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -1027,6 +1083,9 @@ class VideoObjectDetectorWidget(QDialog):
         label.setObjectName("detailLabel")
         value = QLabel(value_text)
         value.setObjectName("detailValue")
+        value.setWordWrap(True)
+        if value_attr:
+            setattr(self, value_attr, value)
         layout.addWidget(label)
         layout.addStretch()
         layout.addWidget(value)
@@ -1085,6 +1144,8 @@ class VideoObjectDetectorWidget(QDialog):
         self.model_edgetam.setChecked(model == "edgetam")
         self.sam3_params.setVisible(model == "sam3")
         self.edgetam_params.setVisible(model == "edgetam")
+        self.result_model_badge.setText(self.tr("精确检测输出" if model == "sam3" else "快速检测输出"))
+        self._update_frame()
 
     def _select_view(self, mode: str):
         if mode not in self.view_buttons:
@@ -1093,6 +1154,29 @@ class VideoObjectDetectorWidget(QDialog):
         for key, button in self.view_buttons.items():
             button.setChecked(key == mode)
         self.canvas.set_view_mode(mode)
+        self._update_frame()
+
+    def set_frame_detection_result(self, frame: int, score: float | None, objects: dict[str, int]):
+        self._frame_detection_results[frame] = (score, objects.copy())
+        if frame == self.current_frame:
+            self._update_frame_detection_summary()
+
+    def _update_frame_detection_summary(self):
+        self.result_frame_label.setText(self.tr("第 {0} 帧检测结果").format(self.current_frame))
+        result = self._frame_detection_results.get(self.current_frame)
+        if result is None:
+            self.result_score_value.setText("—")
+            self.result_objects_value.setText(self.tr("检测完成后显示"))
+            self.result_count_value.setText("—")
+            self.result_state_label.setText(self.tr("待检测"))
+            return
+        score, objects = result
+        self.result_score_value.setText("—" if score is None else f"{score:.3f}")
+        object_count = sum(max(0, count) for count in objects.values())
+        object_text = "、".join(f"{name} × {count}" for name, count in objects.items() if count > 0)
+        self.result_objects_value.setText(object_text or self.tr("未检测到对象"))
+        self.result_count_value.setText(str(object_count))
+        self.result_state_label.setText(self.tr("检测完成"))
 
     def _select_prompt_tool(self, tool: str):
         if tool not in ("pos", "neg"):
@@ -1208,29 +1292,35 @@ class VideoObjectDetectorWidget(QDialog):
         self._update_frame()
 
     def _update_frame(self):
-        if self.cap and self.cap.isOpened():
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame - 1)
-            success, frame = self.cap.read()
+        if self.current_view == "original":
+            capture = self.cap
+            missing_placeholder = self.tr("打开视频以预览画面")
+        else:
+            capture = self.result_video_captures[self.current_model][self.current_view]
+            if capture is None:
+                self.canvas.set_frame(QImage(), self.tr("检测完成后显示"))
+                self._update_frame_counter()
+                self._update_frame_detection_summary()
+                return
+            missing_placeholder = self.tr("当前帧暂无检测结果")
+
+        if capture is not None and capture.isOpened():
+            capture.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame - 1)
+            success, frame = capture.read()
             if not success:
-                self.canvas.set_frame(QImage(), self.tr("无法读取当前帧"))
-                self._set_label_status(
-                    self.canvas_status, self.tr("●  当前帧读取失败"), "error"
-                )
+                self.canvas.set_frame(QImage(), missing_placeholder)
+                if self.current_view == "original":
+                    self._set_label_status(self.canvas_status, self.tr("●  当前帧读取失败"), "error")
             else:
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 height, width, channels = rgb.shape
-                image = QImage(
-                    rgb.data,
-                    width,
-                    height,
-                    channels * width,
-                    QImage.Format_RGB888,
-                ).copy()
-                self.canvas.set_frame(image)
+                image = QImage(rgb.data, width, height, channels * width, QImage.Format_RGB888,).copy()
+                self.canvas.set_frame(image, show_detection_overlay=False, show_prompts=self.current_view == "original")
         else:
-            self.canvas.set_frame(QImage())
+            self.canvas.set_frame(QImage(), missing_placeholder)
 
         self._update_frame_counter()
+        self._update_frame_detection_summary()
 
     def _step_frame(self, delta: int = 1):
         next_frame = max(
@@ -1264,17 +1354,18 @@ class VideoObjectDetectorWidget(QDialog):
             self._set_button_icon(self.play_button, FluentIcon.PLAY, dark=True)
 
     def _show_inference_notice(self):
-        self._set_label_status(
-            self.canvas_status,
-            self.tr("●  当前为界面预览，尚未接入推理算法"),
-            "warning",
-        )
+        self._set_label_status(self.canvas_status, self.tr("●  当前为界面预览，尚未接入推理算法"), "warning")
 
     def closeEvent(self, event):
         self._stop_playback()
         if self.cap:
             self.cap.release()
             self.cap = None
+        for model_captures in self.result_video_captures.values():
+            for view, capture in model_captures.items():
+                if capture is not None:
+                    capture.release()
+                    model_captures[view] = None
         super().closeEvent(event)
 
 
@@ -1799,6 +1890,7 @@ VIDEO_OBJECT_DETECTOR_STYLESHEET = """
             #objectCard, #warningCard { border-radius: 14px; }
             #objectCard { background: #f8fafc; border: 1px solid #e2e8f0; }
             #objectCard:hover { border-color: #a5b4fc; }
+            #issueScroll { background: transparent; border: none; }
             #warningCard {
                 background: rgba(255, 251, 235, 0.7);
                 border: 1px solid #fde68a;
