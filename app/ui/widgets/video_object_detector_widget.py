@@ -6,7 +6,7 @@ from PySide6.QtCore import QEasingCurve, QPointF, QRectF, QSize, Qt, QTimer, QVa
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
-    QSizePolicy, QSlider, QSpinBox, QVBoxLayout, QWidget
+    QProgressBar, QSizePolicy, QSlider, QSpinBox, QVBoxLayout, QWidget
 )
 from app.ui.library.qfluentwidgets import FluentIcon, Theme, getFont, setFont
 from app.utils.image_io import open_video_capture
@@ -73,6 +73,17 @@ class VideoFrameCanvas(QFrame):
         painter.save()
         painter.setClipPath(clip)
         painter.drawImage(target, self._frame)
+        if self._show_prompts:
+            for prompt_rect, prompt_mode in self._prompts:
+                prompt = QRectF(
+                    target.x() + prompt_rect.x() * target.width(),
+                    target.y() + prompt_rect.y() * target.height(),
+                    prompt_rect.width() * target.width(),
+                    prompt_rect.height() * target.height(),
+                )
+                self._paint_prompt(painter, prompt, prompt_mode)
+            if self._drag_rect is not None:
+                self._paint_prompt(painter, self._drag_rect, self._prompt_mode)
         if self._view_mode == "original":
             painter.restore()
             self._paint_hover_hint(painter)
@@ -107,18 +118,6 @@ class VideoFrameCanvas(QFrame):
                 painter.setPen(Qt.white)
                 painter.setFont(getFont(9, QFont.DemiBold))
                 painter.drawText(label_rect, Qt.AlignCenter, self.tr("#1 person (SAM3)"))
-        if self._show_prompts:
-            for prompt_rect, prompt_mode in self._prompts:
-                prompt = QRectF(
-                    target.x() + prompt_rect.x() * target.width(),
-                    target.y() + prompt_rect.y() * target.height(),
-                    prompt_rect.width() * target.width(),
-                    prompt_rect.height() * target.height(),
-                )
-                self._paint_prompt(painter, prompt, prompt_mode)
-            if self._drag_rect is not None:
-                self._paint_prompt(painter, self._drag_rect, self._prompt_mode)
-
         painter.restore()
         self._paint_hover_hint(painter)
         event.accept()
@@ -172,7 +171,7 @@ class VideoFrameCanvas(QFrame):
 
     def mousePressEvent(self, event):
         target = self._image_target_rect() if not self._frame.isNull() else QRectF()
-        if event.button() == Qt.LeftButton and self._view_mode != "original" and target.contains(event.position()):
+        if event.button() == Qt.LeftButton and target.contains(event.position()):
             self._drag_start = QPointF(event.position())
             self._drag_rect = QRectF(self._drag_start, self._drag_start)
             self.update()
@@ -192,20 +191,19 @@ class VideoFrameCanvas(QFrame):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton and self._drag_start is not None:
-            if self._view_mode != "original":
-                target = self._image_target_rect()
-                position = self._clamp_to_target(QPointF(event.position()), target)
-                rect = QRectF(self._drag_start, position).normalized()
-                rect = rect.intersected(target)
-                if rect.width() >= 4 and rect.height() >= 4:
-                    normalized = QRectF(
-                        (rect.x() - target.x()) / max(target.width(), 1),
-                        (rect.y() - target.y()) / max(target.height(), 1),
-                        rect.width() / max(target.width(), 1),
-                        rect.height() / max(target.height(), 1),
-                    )
-                    self._prompts.append((normalized, self._prompt_mode))
-                    self.promptAdded.emit((normalized, self._prompt_mode))
+            target = self._image_target_rect()
+            position = self._clamp_to_target(QPointF(event.position()), target)
+            rect = QRectF(self._drag_start, position).normalized()
+            rect = rect.intersected(target)
+            if rect.width() >= 4 and rect.height() >= 4:
+                normalized = QRectF(
+                    (rect.x() - target.x()) / max(target.width(), 1),
+                    (rect.y() - target.y()) / max(target.height(), 1),
+                    rect.width() / max(target.width(), 1),
+                    rect.height() / max(target.height(), 1),
+                )
+                self._prompts.append((normalized, self._prompt_mode))
+                self.promptAdded.emit((normalized, self._prompt_mode))
             self._drag_start = None
             self._drag_rect = None
             self.update()
@@ -312,14 +310,12 @@ class VideoObjectDetectorWidget(QDialog):
         self.total_frames = 120
         self.current_frame = 14
         self.current_model = "sam3"
-        self.current_task = "sam3"
-        self.current_view = "overlay"
+        self.current_view = "original"
         self.prompt_tool = "pos"
         self.is_playing = False
         self._playback_compact = False
         self._playback_legend_labels = []
         self.result_video_captures: dict[str, dict[str, cv2.VideoCapture | None]] = {model: {"mask": None, "overlay": None} for model in ("sam3", "edgetam")}
-        self.result_video_paths: dict[str, dict[str, str | None]] = {model: {"mask": None, "overlay": None} for model in ("sam3", "edgetam")}
         self._frame_detection_results: dict[int, tuple[float | None, dict[str, int]]] = {}
 
         self.setWindowTitle(self.tr("视频分割与跟踪工作台"))
@@ -496,7 +492,6 @@ class VideoObjectDetectorWidget(QDialog):
         if old_capture is not None:
             old_capture.release()
         self.result_video_captures[result_model][view] = capture
-        self.result_video_paths[result_model][view] = path_value
         if result_model == self.current_model and view == self.current_view:
             self._update_frame()
 
@@ -1143,7 +1138,6 @@ class VideoObjectDetectorWidget(QDialog):
         if model not in ("sam3", "edgetam"):
             return
         self.current_model = model
-        self.current_task = model
         self.model_sam3.setChecked(model == "sam3")
         self.model_edgetam.setChecked(model == "edgetam")
         self.sam3_params.setVisible(model == "sam3")
