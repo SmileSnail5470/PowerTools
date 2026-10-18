@@ -11,6 +11,7 @@ from app.ui.common.config import cfg
 from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
 from app.ui.widgets.watermark_manual_select_widget import WatermarkMaskTool
 from app.ui.widgets.video_watermark_tracking import VideoWatermarkTrackingDialog
+from app.ui.widgets.video_object_detector_widget import VideoObjectDetectorWidget
 
 
 class OptionCard(QFrame):
@@ -169,7 +170,7 @@ class WatermarkDetectSettings(QWidget):
         self.auto_tracking_btn = QPushButton(self.tr("🎯 启用跟踪(可选)"))
         self.auto_tracking_btn.setObjectName("secondaryBtn")
         self.auto_tracking_btn.setCursor(Qt.PointingHandCursor)
-        self.auto_tracking_btn.clicked.connect(self._open_tracking_dialog)
+        self.auto_tracking_btn.clicked.connect(self._open_video_object_detector)
         auto_tracking_container_l.addWidget(self.auto_tracking_btn)
         self.auto_tracking_container.setVisible(False)
         p0_l.addWidget(self.auto_tracking_container)
@@ -312,7 +313,7 @@ class WatermarkDetectSettings(QWidget):
         self.interactive_tracking_btn = QPushButton(self.tr("🎯 启用跟踪(可选)"))
         self.interactive_tracking_btn.setObjectName("secondaryBtn")
         self.interactive_tracking_btn.setCursor(Qt.PointingHandCursor)
-        self.interactive_tracking_btn.clicked.connect(self._open_tracking_dialog)
+        self.interactive_tracking_btn.clicked.connect(self._open_video_object_detector)
         self.interactive_tracking_container.setVisible(False)
         tracking_container_l.addWidget(self.interactive_tracking_btn)
         p1_l.addWidget(self.interactive_tracking_container)
@@ -610,6 +611,10 @@ class WatermarkDetectSettings(QWidget):
             return
         dialog = VideoWatermarkTrackingDialog(file_path=self.file_path, parent=self.window())
         dialog.trackingDataReady.connect(self._on_tracking_data_ready)
+        dialog.exec()
+
+    def _open_video_object_detector(self):
+        dialog = VideoObjectDetectorWidget(file_path=self.file_path, parent=self.window())
         dialog.exec()
 
     def _on_tracking_data_ready(self, data):
