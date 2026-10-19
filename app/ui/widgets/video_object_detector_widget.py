@@ -5,10 +5,11 @@ from pathlib import Path
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
-    QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
+    QDialog, QFileDialog, QFrame, QGraphicsOpacityEffect, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
     QProgressBar, QSizePolicy, QSlider, QSpinBox, QVBoxLayout, QWidget
 )
 from app.ui.library.qfluentwidgets import FluentIcon, Theme, getFont, setFont
+from app.ui.common.utils import global_backend_info_cache
 from app.utils.image_io import open_video_capture
 from app.ui.common.config import cfg
 from app.ui.widgets.image_preview_widget import ScrollBar
@@ -301,6 +302,7 @@ class VideoPreviewViewport(QWidget):
 
 class VideoObjectDetectorWidget(QDialog):
     ISSUE_FRAME = 1
+    taskTerminateRequested = Signal()
 
     def __init__(self, file_path: str | None = None, parent=None):
         super().__init__(parent)
@@ -313,6 +315,8 @@ class VideoObjectDetectorWidget(QDialog):
         self.current_view = "original"
         self.prompt_tool = "pos"
         self.is_playing = False
+        self._task_running = False
+        self._task_progress = 0
         self._playback_compact = False
         self._playback_legend_labels = []
         self.result_video_captures: dict[str, dict[str, cv2.VideoCapture | None]] = {model: {"mask": None, "overlay": None} for model in ("sam3", "edgetam")}
@@ -323,6 +327,9 @@ class VideoObjectDetectorWidget(QDialog):
         self.setMinimumSize(1600, 800)
 
         self._build_ui()
+        backend_type, hardware_name = global_backend_info_cache.get()
+        self.device_label.setText(backend_type)
+        self.device_tag.setToolTip(hardware_name or backend_type)
         self._apply_styles()
 
         self.play_timer = QTimer(self)
@@ -408,19 +415,125 @@ class VideoObjectDetectorWidget(QDialog):
         brand_text.addWidget(title)
         brand_text.addWidget(self.brand_subtitle)
         brand_layout.addLayout(brand_text)
+        brand_container.setFixedWidth(280)
 
         header_layout.addWidget(brand_container, 0, 0, Qt.AlignLeft | Qt.AlignVCenter)
+        right_header_spacer = QWidget()
+        right_header_spacer.setFixedWidth(280)
+        header_layout.addWidget(right_header_spacer, 0, 2)
 
-        self.video_info_pill = QLabel(self.tr("视频信息: —  @  — fps  |  共 0 帧"))
+        self.header_toolbar = QFrame()
+        self.header_toolbar.setObjectName("headerToolbar")
+        toolbar_layout = QHBoxLayout(self.header_toolbar)
+        toolbar_layout.setContentsMargins(16, 8, 16, 8)
+        toolbar_layout.setSpacing(12)
+
+        self.video_info_pill = QFrame()
         self.video_info_pill.setObjectName("videoInfoPill")
-        self.video_info_pill.setAlignment(Qt.AlignCenter)
-        setFont(self.video_info_pill, 13)
-        header_layout.addWidget(self.video_info_pill, 0, 2, Qt.AlignCenter)
+        video_info_layout = QHBoxLayout(self.video_info_pill)
+        video_info_layout.setContentsMargins(10, 5, 10, 5)
+        video_info_layout.setSpacing(6)
+        video_icon = QLabel()
+        video_icon.setPixmap(FluentIcon.VIDEO.icon(Theme.LIGHT).pixmap(QSize(14, 14)))
+        video_icon.setFixedSize(14, 14)
+        video_info_layout.addWidget(video_icon)
+        video_info_prefix = QLabel(self.tr("视频信息:"))
+        video_info_prefix.setObjectName("videoInfoTitle")
+        video_info_layout.addWidget(video_info_prefix)
+        self.video_resolution_label = QLabel("—")
+        self.video_resolution_label.setObjectName("videoInfoValue")
+        video_info_layout.addWidget(self.video_resolution_label)
+        self.video_fps_label = QLabel("— fps")
+        self.video_fps_label.setObjectName("videoInfoValue")
+        video_info_layout.addWidget(self.video_fps_label)
+        video_separator = QFrame()
+        video_separator.setObjectName("videoInfoDivider")
+        video_separator.setFixedSize(1, 14)
+        video_info_layout.addWidget(video_separator)
+        self.video_total_frames_label = QLabel(self.tr("共 0 帧"))
+        self.video_total_frames_label.setObjectName("videoInfoSecondary")
+        video_info_layout.addWidget(self.video_total_frames_label)
+        toolbar_layout.addWidget(self.video_info_pill)
 
+        toolbar_layout.addWidget(self._toolbar_separator())
+
+        progress_widget = QWidget()
+        progress_layout = QHBoxLayout(progress_widget)
+        progress_layout.setContentsMargins(0, 0, 0, 0)
+        progress_layout.setSpacing(8)
+        self.task_status_icon = QLabel("●")
+        self.task_status_icon.setObjectName("taskStatusIcon")
+        progress_layout.addWidget(self.task_status_icon)
+        self.task_status_label = QLabel(self.tr("未运行"))
+        self.task_status_label.setObjectName("taskStatusLabel")
+        progress_layout.addWidget(self.task_status_label)
+        self.task_progress_percent = QLabel("0.0%")
+        self.task_progress_percent.setObjectName("taskProgressPercent")
+        self.task_progress_percent.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.task_progress_percent.setMinimumWidth(38)
+        progress_layout.addWidget(self.task_progress_percent)
+        self.task_progress_bar = QProgressBar()
+        self.task_progress_bar.setObjectName("taskProgressBar")
+        self.task_progress_bar.setRange(0, 100)
+        self.task_progress_bar.setValue(0)
+        self.task_progress_bar.setTextVisible(False)
+        self.task_progress_bar.setFixedSize(96, 6)
+        self._progress_opacity_effect = QGraphicsOpacityEffect(self.task_progress_bar)
+        self._progress_opacity_effect.setOpacity(1.0)
+        self.task_progress_bar.setGraphicsEffect(self._progress_opacity_effect)
+        self._progress_pulse = QVariantAnimation(self)
+        self._progress_pulse.setDuration(2000)
+        self._progress_pulse.setStartValue(1.0)
+        self._progress_pulse.setEndValue(0.6)
+        self._progress_pulse.setLoopCount(-1)
+        self._progress_pulse.valueChanged.connect(self._progress_opacity_effect.setOpacity)
+        progress_layout.addWidget(self.task_progress_bar)
+        self.task_frame_counter = QLabel("0/0 帧")
+        self.task_frame_counter.setObjectName("taskFrameCounter")
+        progress_layout.addWidget(self.task_frame_counter)
+        toolbar_layout.addWidget(progress_widget)
+
+        toolbar_layout.addWidget(self._toolbar_separator())
+
+        self.device_tag = QFrame()
+        self.device_tag.setObjectName("deviceTag")
+        device_layout = QHBoxLayout(self.device_tag)
+        device_layout.setContentsMargins(9, 4, 9, 4)
+        device_layout.setSpacing(6)
+        device_icon = QLabel()
+        device_icon.setPixmap(FluentIcon.DEVELOPER_TOOLS.icon(Theme.LIGHT).pixmap(QSize(14, 14)))
+        device_icon.setFixedSize(14, 14)
+        device_layout.addWidget(device_icon)
+        self.device_label = QLabel(self.tr("CPU 运行"))
+        self.device_label.setObjectName("deviceLabel")
+        device_layout.addWidget(self.device_label)
+        toolbar_layout.addWidget(self.device_tag)
+
+        toolbar_layout.addWidget(self._toolbar_separator())
+
+        self.terminate_button = QPushButton()
+        self.terminate_button.setObjectName("terminateButton")
+        self.terminate_button.setCursor(Qt.ArrowCursor)
+        self.terminate_button.setEnabled(False)
+        self.terminate_button.setToolTip(self.tr("当前没有运行中的任务"))
+        stop_icon = QPixmap(14, 14)
+        stop_icon.fill(Qt.transparent)
+        stop_painter = QPainter(stop_icon)
+        stop_painter.setRenderHint(QPainter.Antialiasing)
+        stop_painter.setPen(Qt.NoPen)
+        stop_painter.setBrush(QColor("#dc2626"))
+        stop_painter.drawRoundedRect(2, 2, 10, 10, 1, 1)
+        stop_painter.end()
+        self.terminate_button.setIcon(QIcon(stop_icon))
+        self.terminate_button.setIconSize(QSize(14, 14))
+        self.terminate_button.setText(self.tr("终止任务"))
+        self.terminate_button.clicked.connect(self._confirm_task_termination)
+        toolbar_layout.addWidget(self.terminate_button)
+
+        header_layout.addWidget(self.header_toolbar, 0, 1, Qt.AlignCenter)
         header_layout.setColumnStretch(0, 1)
         header_layout.setColumnStretch(1, 0)
-        header_layout.setColumnStretch(2, 0)
-        header_layout.setColumnStretch(3, 1)
+        header_layout.setColumnStretch(2, 1)
 
         root.addWidget(header)
 
@@ -448,11 +561,114 @@ class VideoObjectDetectorWidget(QDialog):
 
     def _update_video_info_pill(self, resolution: tuple | None, fps: float = 0.0, total: int = 0):
         if resolution:
-            text = (f"{resolution[0]} × {resolution[1]}  @  {fps:.1f} fps  |  共 {total} 帧")
+            self.video_resolution_label.setText(f"{resolution[0]} × {resolution[1]}")
+            self.video_fps_label.setText(f"{fps:.1f} fps")
         else:
-            text = self.tr("—  @  — fps  |  共 0 帧")
-        text = "视频信息: " + text
-        self.video_info_pill.setText(text)
+            self.video_resolution_label.setText("—")
+            self.video_fps_label.setText("— fps")
+        self.video_total_frames_label.setText(self.tr("共 {0} 帧").format(total))
+        self.task_frame_counter.setText(self.tr("{0}/{1} 帧").format(self._task_progress, total))
+
+    @staticmethod
+    def _toolbar_separator() -> QFrame:
+        separator = QFrame()
+        separator.setObjectName("toolbarSeparator")
+        separator.setFixedSize(1, 16)
+        return separator
+
+    def set_task_running(self, running: bool, backend_type: str | None = None, hardware_name: str = ""):
+        if running and not self._task_running:
+            self.set_task_progress(0)
+        self._task_running = running
+        if running:
+            self.task_status_label.setText(self.tr("处理中"))
+            self.task_status_label.setObjectName("taskStatusLabelRunning")
+            self.task_status_icon.setObjectName("taskStatusIconRunning")
+        else:
+            self.task_status_label.setText(self.tr("未运行"))
+            self.task_status_label.setObjectName("taskStatusLabel")
+            self.task_status_icon.setObjectName("taskStatusIcon")
+        self.task_status_label.style().unpolish(self.task_status_label)
+        self.task_status_label.style().polish(self.task_status_label)
+        self.task_status_icon.style().unpolish(self.task_status_icon)
+        self.task_status_icon.style().polish(self.task_status_icon)
+        self.task_progress_bar.style().unpolish(self.task_progress_bar)
+        self.task_progress_bar.style().polish(self.task_progress_bar)
+        if running:
+            self._progress_pulse.start()
+        else:
+            self._progress_pulse.stop()
+            self._progress_opacity_effect.setOpacity(1.0)
+        self.terminate_button.setEnabled(running)
+        self.terminate_button.setCursor(Qt.PointingHandCursor if running else Qt.ArrowCursor)
+        self.terminate_button.setToolTip("" if running else self.tr("当前没有运行中的任务"))
+        if backend_type:
+            self.device_label.setText(backend_type)
+        if hardware_name:
+            self.device_tag.setToolTip(hardware_name)
+        elif backend_type:
+            self.device_tag.setToolTip(backend_type)
+
+    def set_task_progress(self, current_frame: int):
+        self._task_progress = max(0, min(current_frame, self.total_frames))
+        percentage = (self._task_progress / self.total_frames * 100) if self.total_frames else 0
+        self.task_progress_bar.setValue(round(percentage))
+        self.task_progress_percent.setText(f"{percentage:.1f}%")
+        self.task_frame_counter.setText(self.tr("{0}/{1} 帧").format(self._task_progress, self.total_frames))
+
+    def _confirm_task_termination(self):
+        if not self._task_running:
+            return
+
+        dialog = QDialog(self)
+        dialog.setObjectName("terminateDialog")
+        dialog.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        dialog.setModal(True)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 18, 20, 16)
+        layout.setSpacing(10)
+
+        heading = QHBoxLayout()
+        alert_icon = QLabel("!")
+        alert_icon.setObjectName("terminateAlertIcon")
+        alert_icon.setAlignment(Qt.AlignCenter)
+        alert_icon.setFixedSize(34, 34)
+        heading.addWidget(alert_icon)
+        title = QLabel(self.tr("终止当前任务？"))
+        title.setObjectName("terminateDialogTitle")
+        heading.addWidget(title)
+        heading.addStretch()
+        layout.addLayout(heading)
+
+        description = QLabel(self.tr("终止后，当前分割与跟踪计算将被中断，未保存的进度可能会丢失。是否确定终止？"))
+        description.setObjectName("terminateDialogDescription")
+        description.setWordWrap(True)
+        layout.addWidget(description)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        cancel_button = QPushButton(self.tr("取消"))
+        cancel_button.setObjectName("terminateCancelButton")
+        cancel_button.clicked.connect(dialog.reject)
+        buttons.addWidget(cancel_button)
+        confirm_button = QPushButton(self.tr("确定终止"))
+        confirm_button.setObjectName("terminateConfirmButton")
+        confirm_button.clicked.connect(dialog.accept)
+        buttons.addWidget(confirm_button)
+        layout.addLayout(buttons)
+        dialog.setStyleSheet(TERMINATE_DIALOG_STYLESHEET)
+        dialog.setFixedWidth(360)
+        dialog.adjustSize()
+        if dialog.exec() == QDialog.Accepted:
+            self.taskTerminateRequested.emit()
+            self.set_task_running(False)
+            self.task_status_label.setText(self.tr("已终止"))
+            self.task_status_label.setObjectName("taskStatusLabelTerminated")
+            self.task_status_icon.setObjectName("taskStatusIconTerminated")
+            self.task_status_label.style().unpolish(self.task_status_label)
+            self.task_status_label.style().polish(self.task_status_label)
+            self.task_status_icon.style().unpolish(self.task_status_icon)
+            self.task_status_icon.style().polish(self.task_status_icon)
 
     def _update_project_subtitle(self, path: str | None):
         if not path:
@@ -460,7 +676,7 @@ class VideoObjectDetectorWidget(QDialog):
             self.brand_subtitle.setToolTip("")
             return
         fm = QFontMetrics(self.brand_subtitle.font())
-        elided = fm.elidedText(os.path.basename(path), Qt.ElideMiddle, 340)
+        elided = fm.elidedText(os.path.basename(path), Qt.ElideMiddle, 220)
         self.brand_subtitle.setText(self.tr("项目文件: ") + elided)
         self.brand_subtitle.setToolTip(path)
 
@@ -1251,6 +1467,7 @@ class VideoObjectDetectorWidget(QDialog):
     def _load_video(self, file_path: str):
         self._stop_playback()
         self.canvas.clear_prompts()
+        self.set_task_progress(0)
         if self.cap:
             self.cap.release()
             self.cap = None
@@ -1368,8 +1585,111 @@ VIDEO_OBJECT_DETECTOR_STYLESHEET = """
             QDialog#videoObjectDetector { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f8fafc, stop:1 #eef2ff); color: #0f172a; }
             QPushButton { font-size: 12px; font-weight: 500; }
             #topBar {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ffffff, stop:1 #f8fafc);
-                border-bottom: 1px solid #e2e8f0;
+                background: #f3f3f3;
+                border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            }
+            #headerToolbar {
+                background: rgba(255, 255, 255, 0.85);
+                border: 1px solid rgba(0, 0, 0, 0.10);
+                border-radius: 12px;
+            }
+            #toolbarSeparator, #videoInfoDivider {
+                background: #e2e8f0;
+            }
+            #videoInfoPill {
+                background: rgba(241, 245, 249, 0.8);
+                border: 1px solid rgba(226, 232, 240, 0.6);
+                border-radius: 8px;
+            }
+            #videoInfoTitle {
+                color: #64748b;
+                font-size: 11px;
+                font-weight: 500;
+            }
+            #videoInfoValue {
+                color: #1e293b;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            #videoInfoSecondary {
+                color: #64748b;
+                font-size: 11px;
+            }
+            #taskStatusIcon {
+                color: #94a3b8;
+                font-size: 11px;
+            }
+            #taskStatusIconRunning {
+                color: #2563eb;
+                font-size: 11px;
+            }
+            #taskStatusIconTerminated {
+                color: #dc2626;
+                font-size: 11px;
+            }
+            #taskStatusLabel {
+                color: #64748b;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            #taskStatusLabelRunning {
+                color: #334155;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            #taskStatusLabelTerminated {
+                color: #dc2626;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            #taskProgressPercent {
+                color: #2563eb;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            #taskProgressBar {
+                background: #e2e8f0;
+                border: none;
+                border-radius: 3px;
+            }
+            #taskProgressBar::chunk {
+                background: #2563eb;
+                border-radius: 3px;
+            }
+            #taskFrameCounter {
+                color: #64748b;
+                font-family: monospace;
+                font-size: 10px;
+            }
+            #deviceTag {
+                color: #4338ca;
+                background: rgba(238, 242, 255, 0.8);
+                border: 1px solid rgba(199, 210, 254, 0.7);
+                border-radius: 6px;
+            }
+            #deviceLabel {
+                color: #4338ca;
+                font-size: 11px;
+                font-weight: 500;
+            }
+            QPushButton#terminateButton {
+                color: #dc2626;
+                background: #fef2f2;
+                border: 1px solid rgba(254, 202, 202, 0.8);
+                border-radius: 6px;
+                padding: 4px 10px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QPushButton#terminateButton:hover:enabled { background: #fee2e2; }
+            QPushButton#terminateButton:pressed:enabled { background: #fecaca; }
+            QPushButton#terminateButton:disabled {
+                color: #94a3b8;
+                background: #f1f5f9;
+                border-color: #e2e8f0;
+            }
+            QPushButton#terminateButton:disabled::icon {
+                opacity: 0.45;
             }
             #brandIcon {
                 color: #fff;
@@ -1378,13 +1698,6 @@ VIDEO_OBJECT_DETECTOR_STYLESHEET = """
             }
             #brandTitle, #panelHeading, #sectionTitle, #objectTitle { color: #1e293b; }
             #brandSubtitle { color: #94a3b8; }
-            #videoInfoPill {
-                color: #64748B;
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #f8fafc, stop:1 #eef2ff);
-                border: 1px solid rgba(148, 163, 184, 0.42);
-                border-radius: 10px;
-                padding: 6px 12px;
-            }
 
             #leftPanel, #rightPanel {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ffffff, stop:1 #f8fafc);
@@ -1460,15 +1773,6 @@ VIDEO_OBJECT_DETECTOR_STYLESHEET = """
                 border: 1px solid rgba(165, 180, 252, 0.45);
                 border-radius: 6px;
                 padding: 2px 8px;
-            }
-            #videoInfoPrefix {
-                color: #475569;
-                background: rgba(255, 255, 255, 0.18);
-                border: 1px solid rgba(148, 163, 184, 0.3);
-                border-radius: 6px;
-                padding: 3px 8px;
-                font-size: 11px;
-                font-weight: 700;
             }
             #panelTitleIcon {
                 background: transparent;
@@ -1677,7 +1981,7 @@ VIDEO_OBJECT_DETECTOR_STYLESHEET = """
 
             #helperText {
                 color: #64748b;
-                background: rgba(241, 245, 249, 0.9);
+                background: #f1f5f9;
                 border: 1px solid #e2e8f0;
                 border-radius: 8px;
             }
@@ -1885,7 +2189,7 @@ VIDEO_OBJECT_DETECTOR_STYLESHEET = """
             #objectCard, #warningCard { border-radius: 14px; }
             #objectCard { background: #f8fafc; border: 1px solid #e2e8f0; }
             #objectCard:hover { border-color: #a5b4fc; }
-            #issueScroll { background: transparent; border: none; }
+            #issueScroll { background: #f1f5f9; border: none; }
             #warningCard {
                 background: rgba(255, 251, 235, 0.7);
                 border: 1px solid #fde68a;
@@ -1899,4 +2203,45 @@ VIDEO_OBJECT_DETECTOR_STYLESHEET = """
                 font-size: 11px;
             }
             #smallNeutralButton { background: #ffffff; padding: 0 8px; font-size: 12px; }
+"""
+
+TERMINATE_DIALOG_STYLESHEET = """
+            QDialog#terminateDialog {
+                background: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+            }
+            #terminateAlertIcon {
+                color: #dc2626;
+                background: #fee2e2;
+                border-radius: 17px;
+                font-size: 18px;
+                font-weight: 700;
+            }
+            #terminateDialogTitle {
+                color: #1e293b;
+                font-size: 14px;
+                font-weight: 600;
+            }
+            #terminateDialogDescription {
+                color: #475569;
+                font-size: 11px;
+            }
+            QPushButton#terminateCancelButton {
+                color: #334155;
+                background: #f1f5f9;
+                border: none;
+                border-radius: 8px;
+                padding: 6px 14px;
+            }
+            QPushButton#terminateCancelButton:hover { background: #e2e8f0; }
+            QPushButton#terminateConfirmButton {
+                color: #ffffff;
+                background: #dc2626;
+                border: none;
+                border-radius: 8px;
+                padding: 6px 14px;
+            }
+            QPushButton#terminateConfirmButton:hover { background: #b91c1c; }
+            QPushButton#terminateConfirmButton:pressed { background: #991b1b; }
 """
