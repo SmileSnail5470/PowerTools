@@ -17,6 +17,7 @@ from app.ui.widgets.image_preview_widget import ScrollBar
 
 class VideoFrameCanvas(QFrame):
     promptAdded = Signal(tuple)
+    promptStateChanged = Signal(bool, bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -31,6 +32,9 @@ class VideoFrameCanvas(QFrame):
         self._drag_start = None
         self._drag_rect = None
         self._prompts = []
+        self._selected_prompt_index = None
+        self._prompt_history = []
+        self.setFocusPolicy(Qt.StrongFocus)
         self._hint_opacity = 0.0
         self._hint_animation = QVariantAnimation(self)
         self._hint_animation.setDuration(150)
@@ -75,14 +79,14 @@ class VideoFrameCanvas(QFrame):
         painter.setClipPath(clip)
         painter.drawImage(target, self._frame)
         if self._show_prompts:
-            for prompt_rect, prompt_mode in self._prompts:
+            for index, (prompt_rect, prompt_mode) in enumerate(self._prompts):
                 prompt = QRectF(
                     target.x() + prompt_rect.x() * target.width(),
                     target.y() + prompt_rect.y() * target.height(),
                     prompt_rect.width() * target.width(),
                     prompt_rect.height() * target.height(),
                 )
-                self._paint_prompt(painter, prompt, prompt_mode)
+                self._paint_prompt(painter, prompt, prompt_mode, index == self._selected_prompt_index)
             if self._drag_rect is not None:
                 self._paint_prompt(painter, self._drag_rect, self._prompt_mode)
         if self._view_mode == "original":
@@ -128,7 +132,7 @@ class VideoFrameCanvas(QFrame):
             return
         hint_width = max(0, min(400, self.width() - 32))
         hint_rect = QRectF(self.rect().left() + 16, self.rect().bottom() - 48, hint_width, 32)
-        hint_text = self.tr("✎ 画布提示：支持拖拽正框/负框修正掩码。")
+        hint_text = self.tr("✎ 拖拽添加提示框，点击选中后可删除，或撤销上一步操作。")
         hint_font = getFont(10)
         hint_text = QFontMetrics(hint_font).elidedText(hint_text, Qt.ElideRight, max(0, hint_width - 20))
         painter.save()
@@ -166,13 +170,55 @@ class VideoFrameCanvas(QFrame):
 
     def clear_prompts(self):
         self._prompts.clear()
+        self._selected_prompt_index = None
+        self._prompt_history.clear()
         self._drag_start = None
         self._drag_rect = None
         self.update()
+        self._emit_prompt_state()
+
+    def undo_prompt(self):
+        if not self._prompt_history:
+            return
+        self._prompts, self._selected_prompt_index = self._prompt_history.pop()
+        self.update()
+        self._emit_prompt_state()
+
+    def delete_selected_prompt(self):
+        if self._selected_prompt_index is None:
+            return
+        self._save_prompt_state()
+        del self._prompts[self._selected_prompt_index]
+        self._selected_prompt_index = None
+        self.update()
+        self._emit_prompt_state()
+
+    def _save_prompt_state(self):
+        self._prompt_history.append((self._prompts.copy(), self._selected_prompt_index))
+
+    def _emit_prompt_state(self):
+        self.promptStateChanged.emit(bool(self._prompt_history), self._selected_prompt_index is not None)
+
+    def _select_prompt_at(self, position: QPointF, target: QRectF):
+        self._selected_prompt_index = None
+        for index in range(len(self._prompts) - 1, -1, -1):
+            prompt_rect, _ = self._prompts[index]
+            prompt = QRectF(
+                target.x() + prompt_rect.x() * target.width(),
+                target.y() + prompt_rect.y() * target.height(),
+                prompt_rect.width() * target.width(),
+                prompt_rect.height() * target.height(),
+            )
+            if prompt.adjusted(-6, -6, 6, 6).contains(position):
+                self._selected_prompt_index = index
+                break
+        self.update()
+        self._emit_prompt_state()
 
     def mousePressEvent(self, event):
         target = self._image_target_rect() if not self._frame.isNull() else QRectF()
         if event.button() == Qt.LeftButton and target.contains(event.position()):
+            self.setFocus()
             self._drag_start = QPointF(event.position())
             self._drag_rect = QRectF(self._drag_start, self._drag_start)
             self.update()
@@ -203,8 +249,13 @@ class VideoFrameCanvas(QFrame):
                     rect.width() / max(target.width(), 1),
                     rect.height() / max(target.height(), 1),
                 )
+                self._save_prompt_state()
                 self._prompts.append((normalized, self._prompt_mode))
+                self._selected_prompt_index = len(self._prompts) - 1
                 self.promptAdded.emit((normalized, self._prompt_mode))
+                self._emit_prompt_state()
+            else:
+                self._select_prompt_at(position, target)
             self._drag_start = None
             self._drag_rect = None
             self.update()
@@ -213,10 +264,11 @@ class VideoFrameCanvas(QFrame):
         super().mouseReleaseEvent(event)
 
     @staticmethod
-    def _paint_prompt(painter: QPainter, rect: QRectF, mode: str):
+    def _paint_prompt(painter: QPainter, rect: QRectF, mode: str, selected: bool = False):
         color = QColor("#10b981") if mode == "pos" else QColor("#ef4444")
         painter.setBrush(QColor(color.red(), color.green(), color.blue(), 55))
-        painter.setPen(QPen(color, 2))
+        pen_color = QColor("#facc15") if selected else color
+        painter.setPen(QPen(pen_color, 3 if selected else 2, Qt.DashLine if selected else Qt.SolidLine))
         painter.drawRoundedRect(rect, 4, 4)
 
     def _image_target_rect(self) -> QRectF:
@@ -245,23 +297,20 @@ class VideoPreviewViewport(QWidget):
         self.toolbar = None
         self.toolbar_layout = None
         self.view_group = None
+        self.prompt_actions = None
         self.status_label = None
         self._compact_toolbar = None
 
-    def set_content(
-        self,
-        canvas: VideoFrameCanvas,
-        toolbar: QWidget,
-        view_group: QWidget,
-        status_label: QLabel,
-    ):
+    def set_content(self, canvas: VideoFrameCanvas, toolbar: QWidget, view_group: QWidget, prompt_actions: QWidget, status_label: QLabel):
         self.canvas = canvas
         self.toolbar = toolbar
         self.toolbar_layout = toolbar.layout()
         self.view_group = view_group
+        self.prompt_actions = prompt_actions
         self.status_label = status_label
         self.toolbar_layout.addWidget(view_group, 0, 0, Qt.AlignLeft)
-        self.toolbar_layout.addWidget(status_label, 0, 1, Qt.AlignRight)
+        self.toolbar_layout.addWidget(prompt_actions, 0, 1, Qt.AlignCenter)
+        self.toolbar_layout.addWidget(status_label, 0, 2, Qt.AlignRight)
         self.toolbar_layout.setColumnStretch(0, 1)
         self._layout_content()
 
@@ -273,17 +322,15 @@ class VideoPreviewViewport(QWidget):
         self._layout_content()
 
     def _layout_content(self):
-        if self.canvas is None or self.toolbar is None:
+        if self.canvas is None or self.toolbar is None or self.view_group is None or self.prompt_actions is None or self.status_label is None:
             return
-        available = self.rect().adjusted(8, 8, -8, -8)
-        width = min(available.width(), round(available.height() * 16 / 9))
-        height = round(width * 9 / 16)
         toolbar_width = max(0, self.width() - 32)
         margins = self.toolbar_layout.contentsMargins()
         required_width = (
             self.view_group.sizeHint().width()
+            + self.prompt_actions.sizeHint().width()
             + self.status_label.sizeHint().width()
-            + self.toolbar_layout.horizontalSpacing()
+            + self.toolbar_layout.horizontalSpacing() * 2
             + margins.left()
             + margins.right()
         )
@@ -291,13 +338,14 @@ class VideoPreviewViewport(QWidget):
         if compact != self._compact_toolbar:
             self.toolbar_layout.removeWidget(self.status_label)
             if compact:
-                self.toolbar_layout.addWidget(self.status_label, 1, 0, 1, 2, Qt.AlignRight)
+                self.toolbar_layout.addWidget(self.status_label, 1, 0, 1, 3, Qt.AlignRight)
             else:
-                self.toolbar_layout.addWidget(self.status_label, 0, 1, Qt.AlignRight)
+                self.toolbar_layout.addWidget(self.status_label, 0, 2, Qt.AlignRight)
             self._compact_toolbar = compact
         toolbar_height = 72 if compact else 40
-        self.canvas.setGeometry((self.width() - width) // 2, (self.height() - height) // 2, width, height,)
         self.toolbar.setGeometry(16, 16, toolbar_width, toolbar_height)
+        canvas_top = self.toolbar.y() + toolbar_height + 8
+        self.canvas.setGeometry(8, canvas_top, max(0, self.width() - 16), max(0, self.height() - canvas_top - 8))
 
 
 class VideoObjectDetectorWidget(QDialog):
@@ -324,7 +372,7 @@ class VideoObjectDetectorWidget(QDialog):
 
         self.setWindowTitle(self.tr("视频分割与跟踪工作台"))
         self.setObjectName("videoObjectDetector")
-        self.setMinimumSize(1600, 800)
+        self.setFixedSize(1400, 800)
 
         self._build_ui()
         backend_type, hardware_name = global_backend_info_cache.get()
@@ -374,6 +422,7 @@ class VideoObjectDetectorWidget(QDialog):
         layout.addWidget(icon)
 
         label = QLabel(text)
+        label.setObjectName("infoLabel")
         setFont(label, 10)
         label.setWordWrap(False)
         layout.addWidget(label)
@@ -419,7 +468,7 @@ class VideoObjectDetectorWidget(QDialog):
 
         header_layout.addWidget(brand_container, 0, 0, Qt.AlignLeft | Qt.AlignVCenter)
         right_header_spacer = QWidget()
-        right_header_spacer.setFixedWidth(280)
+        right_header_spacer.setFixedWidth(228)
         header_layout.addWidget(right_header_spacer, 0, 2)
 
         self.header_toolbar = QFrame()
@@ -556,7 +605,7 @@ class VideoObjectDetectorWidget(QDialog):
         content.addWidget(center, 1)
 
         self.right_panel = self._build_objects_panel()
-        self.right_panel.setFixedWidth(352)
+        self.right_panel.setFixedWidth(290)
         content.addWidget(self.right_panel)
 
     def _update_video_info_pill(self, resolution: tuple | None, fps: float = 0.0, total: int = 0):
@@ -1000,6 +1049,21 @@ class VideoObjectDetectorWidget(QDialog):
             view_layout.addWidget(button)
         self.view_buttons["original"].setChecked(True)
 
+        prompt_actions = QWidget()
+        prompt_actions_layout = QHBoxLayout(prompt_actions)
+        prompt_actions_layout.setContentsMargins(0, 0, 0, 0)
+        prompt_actions_layout.setSpacing(6)
+        self.undo_prompt_button = QPushButton(self.tr("撤销"))
+        self.undo_prompt_button.setObjectName("promptActionButton")
+        self.undo_prompt_button.setToolTip(self.tr("撤销最近添加或删除的提示框"))
+        self.undo_prompt_button.setEnabled(False)
+        prompt_actions_layout.addWidget(self.undo_prompt_button)
+        self.delete_prompt_button = QPushButton(self.tr("删除"))
+        self.delete_prompt_button.setObjectName("promptActionButton")
+        self.delete_prompt_button.setToolTip(self.tr("删除选中的提示框"))
+        self.delete_prompt_button.setEnabled(False)
+        prompt_actions_layout.addWidget(self.delete_prompt_button)
+
         self.canvas_status = QLabel(self.tr("●  状态: 已分割 (Normal)"))
         self.canvas_status.setObjectName("canvasStatus")
         setFont(self.canvas_status, 12, QFont.Medium)
@@ -1013,7 +1077,10 @@ class VideoObjectDetectorWidget(QDialog):
 
         self.canvas = VideoFrameCanvas(viewport)
         self.canvas.promptAdded.connect(self._on_prompt_added)
-        viewport.set_content(self.canvas, top_bar_widget, view_group, self.canvas_status)
+        self.canvas.promptStateChanged.connect(self._update_prompt_actions)
+        self.undo_prompt_button.clicked.connect(self.canvas.undo_prompt)
+        self.delete_prompt_button.clicked.connect(self.canvas.delete_selected_prompt)
+        viewport.set_content(self.canvas, top_bar_widget, view_group, prompt_actions, self.canvas_status)
         layout.addWidget(viewport, 1)
 
         playback = QFrame()
@@ -1157,6 +1224,7 @@ class VideoObjectDetectorWidget(QDialog):
         self.issue_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.issue_scroll.setVerticalScrollBar(ScrollBar(Qt.Vertical, self.issue_scroll))
         issue_cards = QWidget()
+        issue_cards.setObjectName("issueCards")
         self.issue_cards_layout = QVBoxLayout(issue_cards)
         self.issue_cards_layout.setContentsMargins(0, 0, 0, 0)
         self.issue_cards_layout.setSpacing(10)
@@ -1379,9 +1447,9 @@ class VideoObjectDetectorWidget(QDialog):
         self.result_frame_label.setText(self.tr("第 {0} 帧检测结果").format(self.current_frame))
         result = self._frame_detection_results.get(self.current_frame)
         if result is None:
-            self.result_score_value.setText("—")
+            self.result_score_value.setText("检测完成后显示")
             self.result_objects_value.setText(self.tr("检测完成后显示"))
-            self.result_count_value.setText("—")
+            self.result_count_value.setText("检测完成后显示")
             self.result_state_label.setText(self.tr("待检测"))
             return
         score, objects = result
@@ -1404,6 +1472,10 @@ class VideoObjectDetectorWidget(QDialog):
         prompt_mode = prompt[1]
         label = self.tr("正向") if prompt_mode == "pos" else self.tr("负向")
         self._set_label_status(self.canvas_status, self.tr("●  已添加{0}画面提示").format(label), "ready")
+
+    def _update_prompt_actions(self, can_undo: bool, can_delete: bool):
+        self.undo_prompt_button.setEnabled(can_undo)
+        self.delete_prompt_button.setEnabled(can_delete)
 
     def _on_range_start_changed(self, frame: int, range_end: QSpinBox | None = None):
         if range_end is None:
@@ -1985,6 +2057,12 @@ VIDEO_OBJECT_DETECTOR_STYLESHEET = """
                 border: 1px solid #e2e8f0;
                 border-radius: 8px;
             }
+            #infoLabel {
+                color: #64748b;
+                background: #f1f5f9;
+                border: none;
+                border-radius: 8px;
+            }
             #infoIcon {
                 color: #ffffff;
                 background: #7c3aed;
@@ -2098,6 +2176,23 @@ VIDEO_OBJECT_DETECTOR_STYLESHEET = """
                 border: 1px solid rgba(51, 65, 85, 0.45);
                 border-radius: 12px;
             }
+            QPushButton#promptActionButton {
+                color: #cbd5e1;
+                background: #1e293b;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                padding: 5px 10px;
+                font-size: 11px;
+            }
+            QPushButton#promptActionButton:hover:enabled {
+                color: #ffffff;
+                background: #334155;
+            }
+            QPushButton#promptActionButton:disabled {
+                color: #64748b;
+                background: #172033;
+                border-color: #273449;
+            }
             QPushButton#viewButton {
                 color: #94a3b8;
                 background: transparent;
@@ -2190,6 +2285,7 @@ VIDEO_OBJECT_DETECTOR_STYLESHEET = """
             #objectCard { background: #f8fafc; border: 1px solid #e2e8f0; }
             #objectCard:hover { border-color: #a5b4fc; }
             #issueScroll { background: #f1f5f9; border: none; }
+            #issueCards { background: #f1f5f9; }
             #warningCard {
                 background: rgba(255, 251, 235, 0.7);
                 border: 1px solid #fde68a;

@@ -99,7 +99,7 @@ class WatermarkDetectSettings(QWidget):
         # Tabs 导航栏
         self.tabs_container = QFrame()
         self.tabs_container.setObjectName("tabsContainer")
-        self.tabs_container.setFixedHeight(50)
+        self.tabs_container.setFixedHeight(46)
         self.tabs_layout = QHBoxLayout(self.tabs_container)
         self.tabs_layout.setContentsMargins(5, 5, 5, 5)
         self.tabs_layout.setSpacing(0)
@@ -120,7 +120,7 @@ class WatermarkDetectSettings(QWidget):
                 btn.setChecked(True)
 
         self.card_layout.addWidget(self.tabs_container)
-        self.card_layout.addSpacing(12)
+        self.card_layout.addSpacing(8)
 
         self.stack = QStackedWidget()
         
@@ -144,7 +144,7 @@ class WatermarkDetectSettings(QWidget):
         c1_2.clicked.connect(lambda: self.watermarkContent.emit("subtitle"))
         grid0_l.addWidget(c1_2, stretch=1)
         p0_l.addWidget(grid0)
-        p0_l.addSpacing(24)
+        p0_l.addSpacing(14)
         
         p0_l.addWidget(self.create_label_group(self.tr("水印形式"), self.tr("选择水印在时间轴上的状态")))
         grid1 = QWidget()
@@ -161,7 +161,7 @@ class WatermarkDetectSettings(QWidget):
         c2_1.clicked.connect(lambda: self._on_auto_dynamic_selected(True))
         grid1_l.addWidget(c2_1)
         p0_l.addWidget(grid1)
-        p0_l.addSpacing(24)
+        p0_l.addSpacing(14)
 
         self.auto_tracking_container = QWidget()
         auto_tracking_container_l = QVBoxLayout(self.auto_tracking_container)
@@ -174,7 +174,7 @@ class WatermarkDetectSettings(QWidget):
         auto_tracking_container_l.addWidget(self.auto_tracking_btn)
         self.auto_tracking_container.setVisible(False)
         p0_l.addWidget(self.auto_tracking_container)
-        p0_l.addSpacing(12)
+        p0_l.addSpacing(8)
 
         p0_l.addWidget(self.create_label_group(self.tr("水印区域选择"), self.tr("可选：框选水印所在区域，辅助识别定位")))
         self.auto_area_btn = QPushButton(self.tr("🖼 水印区域选择"))
@@ -230,7 +230,7 @@ class WatermarkDetectSettings(QWidget):
         
         spa_w = QWidget()
         spa_l = QVBoxLayout(spa_w)
-        spa_l.setContentsMargins(0,10,0,10)
+        spa_l.setContentsMargins(0,6,0,6)
         spa_l.addWidget(self.create_label_group(self.tr("精准框选"), self.tr("在图片区手动框选位置")))
         spa_l.addStretch()
         sec_btn = QPushButton(self.tr("🎯 开始水印框选"))
@@ -239,7 +239,7 @@ class WatermarkDetectSettings(QWidget):
         spa_l.addWidget(sec_btn)
         self.sub_stack.addWidget(spa_w)
         p1_l.addWidget(self.sub_stack)
-        p1_l.addSpacing(20)
+        p1_l.addSpacing(12)
 
         self.interactive_area_container = QWidget()
         area_container_l = QVBoxLayout(self.interactive_area_container)
@@ -250,12 +250,12 @@ class WatermarkDetectSettings(QWidget):
         self.interactive_area_btn.clicked.connect(lambda _: self._watermark_area_selector(image_boxes_only=True))
         area_container_l.addWidget(self.interactive_area_btn)
         p1_l.addWidget(self.interactive_area_container)
-        p1_l.addSpacing(20)
+        p1_l.addSpacing(12)
 
         conf_w = QWidget()
         conf_l = QVBoxLayout(conf_w)
         conf_l.setContentsMargins(0, 0, 0, 0)
-        conf_l.setSpacing(10)
+        conf_l.setSpacing(6)
 
         conf_header = QHBoxLayout()
         conf_info_vbox = QVBoxLayout()
@@ -287,7 +287,7 @@ class WatermarkDetectSettings(QWidget):
         self.conf_slider.valueChanged.connect(self._on_conf_changed)
         conf_l.addWidget(self.conf_slider)
         p1_l.addWidget(conf_w)
-        p1_l.addSpacing(20)
+        p1_l.addSpacing(12)
 
         p1_l.addWidget(self.create_label_group(self.tr("水印形式"), self.tr("选择水印在时间轴上的状态")))
         grid2 = QWidget()
@@ -304,7 +304,7 @@ class WatermarkDetectSettings(QWidget):
         c3_1.clicked.connect(lambda: self._on_interactive_dynamic_selected(True))
         grid2_l.addWidget(c3_1)
         p1_l.addWidget(grid2)
-        p1_l.addSpacing(20)
+        p1_l.addSpacing(12)
         
         self.interactive_tracking_container = QWidget()
         tracking_container_l = QVBoxLayout(self.interactive_tracking_container)
@@ -345,7 +345,7 @@ class WatermarkDetectSettings(QWidget):
         dir_layout.addWidget(self.dir_clear_btn)
         dir_layout.addWidget(self.dir_select_btn)
         p2_l.addLayout(dir_layout)
-        p2_l.addSpacing(10)
+        p2_l.addSpacing(6)
 
         icon = QLabel("🎨")
         icon.setStyleSheet("font-size: 36px;")
@@ -381,7 +381,7 @@ class WatermarkDetectSettings(QWidget):
     def create_label_group(self, title, desc):
         w = QWidget()
         l = QVBoxLayout(w)
-        l.setContentsMargins(0, 0, 0, 12)
+        l.setContentsMargins(0, 0, 0, 6)
         l.setSpacing(2)
         t = QLabel(title)
         t.setObjectName("labelTitle")
@@ -420,7 +420,7 @@ class WatermarkDetectSettings(QWidget):
 
     def update_layout_height(self):
         content_height = self.get_current_page_height(self.current_tab_index)
-        extra_height = 90  # tabs + spacing + margins
+        extra_height = 82  # tabs + spacing + margins
         target_height = content_height + extra_height
         self.animate_height_change(target_height)
 
