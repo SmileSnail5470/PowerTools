@@ -349,7 +349,6 @@ class VideoPreviewViewport(QWidget):
 
 
 class VideoObjectDetectorWidget(QDialog):
-    ISSUE_FRAME = 1
     taskTerminateRequested = Signal()
 
     def __init__(self, file_path: str | None = None, parent=None):
@@ -607,6 +606,7 @@ class VideoObjectDetectorWidget(QDialog):
         self.right_panel = self._build_objects_panel()
         self.right_panel.setFixedWidth(290)
         content.addWidget(self.right_panel)
+        self._update_issue_cards_visibility()
 
     def _update_video_info_pill(self, resolution: tuple | None, fps: float = 0.0, total: int = 0):
         if resolution:
@@ -871,11 +871,11 @@ class VideoObjectDetectorWidget(QDialog):
         setattr(self, end_attr, range_end)
         range_start.valueChanged.connect(lambda frame, end=range_end: self._on_range_start_changed(frame, end))
         range_end.valueChanged.connect(lambda frame, start=range_start: self._on_range_end_changed(frame, start))
-        range_row.addWidget(range_start, 0, Qt.AlignCenter)
+        range_row.addWidget(range_start, 1)
         range_label = QLabel(self.tr("至"))
         range_label.setObjectName("inlineLabel")
         range_row.addWidget(range_label, 0, Qt.AlignCenter)
-        range_row.addWidget(range_end, 0, Qt.AlignCenter)
+        range_row.addWidget(range_end, 1)
         layout.addLayout(range_row)
 
     def _build_settings_panel(self):
@@ -1207,12 +1207,17 @@ class VideoObjectDetectorWidget(QDialog):
         layout.addWidget(divider)
 
         issue_header = QHBoxLayout()
+        issue_icon = QLabel()
+        issue_icon.setObjectName("panelTitleIcon")
+        issue_icon.setFixedSize(16, 16)
+        issue_icon.setPixmap(FluentIcon.FLAG.icon(Theme.LIGHT).pixmap(QSize(16, 16)))
+        issue_header.addWidget(issue_icon, 0, Qt.AlignVCenter)
         issue_title = QLabel(self.tr("需要修复"))
         issue_title.setObjectName("sectionTitle")
         setFont(issue_title, 12, QFont.DemiBold)
         issue_header.addWidget(issue_title)
         issue_header.addStretch()
-        self.issue_count_label = QLabel("1")
+        self.issue_count_label = QLabel("0")
         self.issue_count_label.setObjectName("warningBadge")
         issue_header.addWidget(self.issue_count_label)
         layout.addLayout(issue_header)
@@ -1228,39 +1233,6 @@ class VideoObjectDetectorWidget(QDialog):
         self.issue_cards_layout = QVBoxLayout(issue_cards)
         self.issue_cards_layout.setContentsMargins(0, 0, 0, 0)
         self.issue_cards_layout.setSpacing(10)
-
-        second = QFrame()
-        second.setObjectName("warningCard")
-        second_layout = QVBoxLayout(second)
-        second_layout.setContentsMargins(12, 12, 12, 12)
-        second_layout.setSpacing(10)
-        second_header = QHBoxLayout()
-        second_header.addWidget(self._color_dot("#f59e0b", 12), 0, Qt.AlignVCenter)
-        second_name = QLabel(self.tr("不可靠帧 · 第 {0} 帧").format(self.ISSUE_FRAME))
-        second_name.setObjectName("objectTitle")
-        setFont(second_name, 12, QFont.Bold)
-        second_header.addWidget(second_name)
-        second_header.addStretch()
-        second_state = QLabel(self.tr("需要检查"))
-        second_state.setObjectName("warningBadge")
-        second_header.addWidget(second_state)
-        second_layout.addLayout(second_header)
-        second_layout.addWidget(self._pill_label(self.tr("遮挡导致边界模糊，建议跳转到对应帧进行人工修正或重跑。"), "warningTextPill"))
-        issue_actions = QHBoxLayout()
-        issue_actions.setSpacing(8)
-        jump = QPushButton(self.tr("跳转到修复帧"))
-        jump.setObjectName("smallNeutralButton")
-        self._set_button_icon(jump, FluentIcon.SEARCH)
-        jump.setFixedHeight(36)
-        jump.clicked.connect(self._jump_to_issue_frame)
-        repair = QPushButton(self.tr("修复当前帧"))
-        repair.setObjectName("amberButton")
-        repair.setFixedHeight(36)
-        repair.clicked.connect(self._show_inference_notice)
-        issue_actions.addWidget(jump)
-        issue_actions.addWidget(repair)
-        second_layout.addLayout(issue_actions)
-        self.issue_cards_layout.addWidget(second)
         self.issue_cards_layout.addStretch()
         self.issue_scroll.setWidget(issue_cards)
         layout.addWidget(self.issue_scroll, 1)
@@ -1489,8 +1461,47 @@ class VideoObjectDetectorWidget(QDialog):
         if frame < range_start.value():
             range_start.setValue(frame)
 
-    def _jump_to_issue_frame(self):
-        self.timeline.setValue(min(self.ISSUE_FRAME, self.timeline.maximum()))
+    def _add_issue_card(self, frame: int, description: str | None = None):
+        card = QFrame()
+        card.setObjectName("warningCard")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(12, 12, 12, 12)
+        card_layout.setSpacing(10)
+
+        card_header = QHBoxLayout()
+        card_header.addWidget(self._color_dot("#f59e0b", 12), 0, Qt.AlignVCenter)
+        card_title = QLabel(self.tr("不可靠帧 · 第 {0} 帧").format(frame))
+        card_title.setObjectName("objectTitle")
+        setFont(card_title, 12, QFont.Bold)
+        card_header.addWidget(card_title)
+        card_header.addStretch()
+        card_status = QLabel(self.tr("需要检查"))
+        card_status.setObjectName("warningBadge")
+        card_header.addWidget(card_status)
+        card_layout.addLayout(card_header)
+        card_layout.addWidget(self._pill_label(description or self.tr("遮挡导致边界模糊，建议跳转到对应帧进行人工修正或重跑。"), "warningTextPill",))
+
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+        jump = QPushButton(self.tr("跳转到修复帧"))
+        jump.setObjectName("smallNeutralButton")
+        self._set_button_icon(jump, FluentIcon.SEARCH)
+        jump.setFixedHeight(36)
+        jump.clicked.connect(lambda _checked=False, target_frame=frame: self.timeline.setValue( min(target_frame, self.timeline.maximum())))
+        repair = QPushButton(self.tr("修复当前帧"))
+        repair.setObjectName("amberButton")
+        repair.setFixedHeight(36)
+        repair.clicked.connect(self._show_inference_notice)
+        actions.addWidget(jump)
+        actions.addWidget(repair)
+        card_layout.addLayout(actions)
+
+        self.issue_cards_layout.insertWidget(self.issue_cards_layout.count() - 1, card)
+        self._update_issue_cards_visibility()
+
+    def _update_issue_cards_visibility(self):
+        issue_count = sum(self.issue_cards_layout.itemAt(index).widget() is not None for index in range(self.issue_cards_layout.count()))
+        self.issue_count_label.setText(str(issue_count))
 
     @staticmethod
     def _set_label_status(label: QLabel, text: str, state: str):
