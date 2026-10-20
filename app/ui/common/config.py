@@ -57,6 +57,7 @@ class Config(QConfig):
     autoStartup = ConfigItem("GeneralSettings", "AutoStartup", False, BoolValidator())
     autoUpdate = ConfigItem("GeneralSettings", "AutoUpdate", False, BoolValidator())
     cachePath = ConfigItem("GeneralSettings", "CachePath", os.path.join(pathlib.Path.home(), "PowerToolsCache"), FolderValidator())
+    blindWatermarkCharacters = ConfigItem("BlindWatermark", "Characters", "ABCDEFGHIJKLMNOPQRSTUVWXYZ,1234")
     uiTheme = OptionsConfigItem("GeneralSettings", "UiTheme",  Theme.LIGHT.value, OptionsValidator([Theme.LIGHT.value, Theme.DARK.value]))
     language = OptionsConfigItem("GeneralSettings", "Language", Language.CHINESE_SIMPLIFIED, OptionsValidator(Language), LanguageSerializer())
 

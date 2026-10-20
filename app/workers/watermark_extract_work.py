@@ -147,6 +147,8 @@ class WatermarkExtractWork(BaseWorker):
             raise Exception("Error blind watermark task type, must be extract_blind_watermark")
         if "_feature_name_" in kwargs:
             os.environ["_feature_name_"] = kwargs["_feature_name_"]
+        custom_characters = kwargs["custom_characters"] if "custom_characters" in kwargs else list("ABCDEFGHIJKLMNOPQRSTUVWXYZ,1234")
+        os.environ["BLIND_WATERMARK_CHARSET"] = "".join(custom_characters) + "`"
         if file_type == "image":
             params = {
                 "input_image_path": input_path
