@@ -5,6 +5,7 @@ from PIL import Image, ImageDraw, ImageFont
 import app.utils.ffmpeg as ffmpeg
 from app.ui.common.config import cfg
 from app.workers.work_base import BaseWorker, _resolve_hardware_variant
+from app.algorithms.visible_watermark_addition.watermark_addition import VisibleWatermarkAddition
 from app.utils.logger.decorators import log_exception
 
 from app.algorithms.blind_watermark_addition.blind_watermark_addition_image import ImageBlindWatermarkDetect
@@ -42,6 +43,32 @@ class WatermarkExtractInternal():
 class WatermarkExtractWork(BaseWorker):
     _image_instance = None
     _video_instance = None
+    _font_locator = VisibleWatermarkAddition()
+    _font_candidates = (
+        "Microsoft YaHei",
+        "msyh",
+        "NotoSansCJK",
+        "PingFang",
+        "WenQuanYi",
+        "SimHei",
+    )
+    _font_fallback_candidates = (
+        "Arial",
+        "DejaVuSans",
+    )
+
+    @classmethod
+    def _find_cjk_font_path(cls, font_size):
+        for font_name in cls._font_candidates:
+            font_path = cls._font_locator._get_font_path(font_name, allow_fallback=False)
+            if not font_path:
+                continue
+            try:
+                ImageFont.truetype(font_path, font_size)
+                return font_path
+            except OSError:
+                continue
+        return None
 
     @classmethod
     def _get_image_instance(cls):
@@ -69,9 +96,19 @@ class WatermarkExtractWork(BaseWorker):
         draw = ImageDraw.Draw(img)
 
         font_size = max(48, min(w, h) // 10)
-        try:
-            font = ImageFont.truetype("arial.ttf", font_size)
-        except Exception:
+        font_path = self._find_cjk_font_path(font_size)
+        font = ImageFont.truetype(font_path, font_size) if font_path else None
+        if font is None:
+            for font_name in self._font_fallback_candidates:
+                font_path = self._font_locator._get_font_path(font_name, allow_fallback=False)
+                if not font_path:
+                    continue
+                try:
+                    font = ImageFont.truetype(font_path, font_size)
+                    break
+                except OSError:
+                    continue
+        if font is None:
             font = ImageFont.load_default(font_size)
 
         bbox = draw.textbbox((0, 0), text, font=font)
@@ -105,6 +142,10 @@ class WatermarkExtractWork(BaseWorker):
         width = int(vinfo["width"])
         height = int(vinfo["height"])
         duration = float(vinfo.get("duration", probe["format"]["duration"]))
+        font_size = max(48, min(width, height) // 8)
+        font_path = self._find_cjk_font_path(font_size)
+        if not font_path:
+            raise RuntimeError("No system font supporting Chinese and English was found")
 
         output_dir = os.path.join(self.cache_path, "blind_watermark_extract")
         os.makedirs(output_dir, exist_ok=True)
@@ -119,8 +160,9 @@ class WatermarkExtractWork(BaseWorker):
             )
             .drawtext(
                 text=text,
+                fontfile=font_path,
                 fontcolor='white',
-                fontsize=max(48, min(width, height) // 8),
+                fontsize=font_size,
                 x='(w-text_w)/2',
                 y='(h-text_h)/2'
             )
