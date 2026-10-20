@@ -10,7 +10,6 @@ from app.ui.common.utils import get_file_type
 from app.ui.common.config import cfg
 from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
 from app.ui.widgets.watermark_manual_select_widget import WatermarkMaskTool
-from app.ui.widgets.video_watermark_tracking import VideoWatermarkTrackingDialog
 from app.ui.widgets.video_object_detector_widget import VideoObjectDetectorWidget
 
 
@@ -599,7 +598,7 @@ class WatermarkDetectSettings(QWidget):
         self.interactive_tracking_container.setVisible(should_show)
         self.update_layout_height()
 
-    def _open_tracking_dialog(self):
+    def _open_video_object_detector(self):
         if not self.file_path:
             return
         if not cfg.get(cfg.localWatermarkRemoveEnabled):
@@ -609,11 +608,6 @@ class WatermarkDetectSettings(QWidget):
                 parent=self.window()
             ).exec()
             return
-        dialog = VideoWatermarkTrackingDialog(file_path=self.file_path, parent=self.window())
-        dialog.trackingDataReady.connect(self._on_tracking_data_ready)
-        dialog.exec()
-
-    def _open_video_object_detector(self):
         dialog = VideoObjectDetectorWidget(file_path=self.file_path, parent=self.window())
         dialog.exec()
 
