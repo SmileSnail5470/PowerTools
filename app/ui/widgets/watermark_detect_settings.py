@@ -374,8 +374,15 @@ class WatermarkDetectSettings(QWidget):
         self.card_layout.addWidget(self.stack)
         self.main_layout.addWidget(self.card)
 
-        self.btn_sem.clicked.connect(lambda: [self.btn_spa.setChecked(False), self.sub_stack.setCurrentIndex(0), self.interactive_area_container.setVisible(True)])
-        self.btn_spa.clicked.connect(lambda: [self.btn_sem.setChecked(False), self.sub_stack.setCurrentIndex(1), self.interactive_area_container.setVisible(False)])
+        self.btn_sem.clicked.connect(lambda: self._switch_interactive_mode(0))
+        self.btn_spa.clicked.connect(lambda: self._switch_interactive_mode(1))
+
+    def _switch_interactive_mode(self, index):
+        self.btn_sem.setChecked(index == 0)
+        self.btn_spa.setChecked(index == 1)
+        self.sub_stack.setCurrentIndex(index)
+        self.interactive_area_container.setVisible(index == 0)
+        self.update_layout_height()
 
     def create_label_group(self, title, desc):
         w = QWidget()
@@ -460,7 +467,7 @@ class WatermarkDetectSettings(QWidget):
             #optDesc { color: #94A3B8; }
             
             #inputBox { 
-                padding: 12px; border: 1.5px solid #E2E8F0; border-radius: 12px; 
+                padding: 8px; border: 1.5px solid #E2E8F0; border-radius: 12px; 
                 background: white; color: #0F172A;
             }
             #inputBox:focus { border: 1.5px solid #2563EB; }
