@@ -493,7 +493,6 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         document_model_card_layout.addWidget(document_cards_widget)
         document_outer_layout.addWidget(document_model_card)
 
-        # 参数卡片
         document_params_widget = self._build_restoration_prompt_params()
         document_outer_layout.addWidget(document_params_widget)
 
@@ -521,7 +520,6 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         video_seq_card.set_name("ppt")
         video_flow.addWidget(video_seq_card)
 
-        # 模型卡片区域包裹在浅灰色卡片中
         video_model_card = QFrame()
         video_model_card.setObjectName("videoModelCard")
         video_model_card.setStyleSheet("""
@@ -537,7 +535,6 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         video_model_card_layout.addWidget(video_cards_widget)
         video_outer_layout.addWidget(video_model_card)
 
-        # 参数卡片
         video_params_widget = self._build_mask_dilate_params()
         video_outer_layout.addWidget(video_params_widget)
 

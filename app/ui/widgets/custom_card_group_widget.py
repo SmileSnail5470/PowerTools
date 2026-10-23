@@ -154,11 +154,11 @@ class StyleCard(QFrame):
         """)
         
         main_layout = QVBoxLayout(self) if vertical_layout else QHBoxLayout(self)
-        main_layout.setContentsMargins(12, 8, 12, 8)
-        main_layout.setSpacing(4 if vertical_layout else 12)
+        main_layout.setContentsMargins(8, 8, 8, 8)
+        main_layout.setSpacing(0 if vertical_layout else 12)
         
         self.icon_label = QLabel(self)
-        self.icon_label.setFixedSize(40, 40)
+        self.icon_label.setFixedSize(36 if vertical_layout else 40, 36 if vertical_layout else 40)
         icon = self.ICON_MAP.get(icon_color, "🧩")
         self.icon_label.setText(icon)
             
