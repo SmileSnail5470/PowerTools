@@ -16,7 +16,7 @@ from app.ui.library.qfluentwidgets import(
 from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.file_selector_widget import FileSelectorWidget
 from app.ui.widgets.directory_selector_widget import DirectorySelectorWidget
-from app.ui.widgets.custom_card_group_widget import StyleCard, CardSeparator
+from app.ui.widgets.custom_card_group_widget import StyleCard
 from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget
 from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
@@ -377,7 +377,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         sp.setHeightForWidth(True)
         self.image_cards_widget.setSizePolicy(sp)
         image_layout = FlowLayout(self.image_cards_widget, needAni=True, isTight=True)
-        image_layout.setContentsMargins(0, 0, 0, 0)
+        image_layout.setContentsMargins(0, 0, 0, 4)
         image_layout.setHorizontalSpacing(8)
         image_layout.setVerticalSpacing(8)
 
@@ -555,7 +555,17 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         global_event_bus.watermarkRemove_InputFileUpdate.connect(lambda file_path: self.update_default_models(file_path=file_path))
         global_event_bus.License_update.connect(self.select_first_interactive)
         global_event_bus.watermarkRemove_TaskFinishedByModel.connect(self.update_model_card_info)
-        main_layout.addStretch()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        current_index = self.stacked_widget.currentIndex()
+        page_widget = self.stacked_widget.widget(current_index)
+        if page_widget:
+            available_width = self.stacked_widget.width()
+            if available_width <= 0:
+                available_width = self.width() - 20
+            page_h = self._calc_widget_height(page_widget, available_width)
+            self.stacked_widget.setFixedHeight(page_h)
 
     def _card_pool(self, index: int) -> list:
         return {0: self.image_cards, 1: self.document_cards, 2: self.video_cards}.get(index, self.image_cards)
@@ -731,8 +741,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
         self.image_cards_widget.layout().invalidate()
         self.image_cards_widget.layout().activate()
-        content_height = self.get_current_page_height(0)
-        self.animate_height_change(content_height + 114)
+        self._animate_to_content_height()
 
     def update_model_card_info(self, model_name):
         current_index = self.stacked_widget.currentIndex()
@@ -753,13 +762,73 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         target_pool = self._card_pool(index)
         if target_pool:
             self.on_card_clicked(target_pool[0])
-        content_height = self.get_current_page_height(index)
-        extra_height = 114  # tabs + spacing + margins
-        target_height = content_height + extra_height
+        self._animate_to_content_height()
+
+    def _animate_to_content_height(self):
+        current_index = self.stacked_widget.currentIndex()
+        page_widget = self.stacked_widget.widget(current_index)
+
+        available_width = self.stacked_widget.width()
+        if available_width <= 0:
+            available_width = self.width() - 20
+
+        page_h = self._calc_widget_height(page_widget, available_width)
+        self.stacked_widget.setFixedHeight(page_h)
+
+        self.viewLayout.invalidate()
+        self.viewLayout.activate()
+        target_height = self.sizeHint().height()
         self.animate_height_change(target_height)
 
+    def _calc_widget_height(self, widget: QWidget, width: int) -> int:
+        layout = widget.layout()
+        if layout is None:
+            h = widget.sizeHint().height()
+        else:
+            h = self._calc_layout_height(layout, width)
+        min_h = widget.minimumHeight()
+        max_h = widget.maximumHeight()
+        if min_h > 0:
+            h = max(h, min_h)
+        if max_h < 16777215:
+            h = min(h, max_h)
+        return h
+
+    def _calc_layout_height(self, layout, width: int) -> int:
+        if isinstance(layout, FlowLayout):
+            return layout.heightForWidth(width)
+
+        m = layout.contentsMargins()
+        inner_width = width - m.left() - m.right()
+        total_h = m.top() + m.bottom()
+        item_heights = []
+
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item is None:
+                continue
+            w = item.widget()
+            if w is not None:
+                if not w.isVisible():
+                    continue
+                item_heights.append(self._calc_widget_height(w, inner_width))
+            elif item.layout() is not None:
+                item_heights.append(self._calc_layout_height(item.layout(), inner_width))
+            else:
+                sp = item.spacerItem()
+                if sp is not None:
+                    item_heights.append(sp.sizeHint().height())
+
+        if isinstance(layout, QHBoxLayout):
+            total_h += max(item_heights) if item_heights else 0
+        else:
+            total_h += sum(item_heights)
+            if len(item_heights) > 1:
+                total_h += layout.spacing() * (len(item_heights) - 1)
+
+        return total_h
+
     def on_card_clicked(self, clicked_card):
-        # 如果卡片不可交互，则不响应点击
         if not clicked_card.is_interactive():
             return
         current_index = self.stacked_widget.currentIndex()
@@ -812,54 +881,17 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
     def animate_height_change(self, target_height: int):
         start_height = self.height()
+        self.setMinimumHeight(0)
         self.height_anim = QPropertyAnimation(self, b"maximumHeight")
         self.height_anim.setDuration(250)
         self.height_anim.setStartValue(start_height)
         self.height_anim.setEndValue(target_height)
         self.height_anim.setEasingCurve(QEasingCurve.OutCubic)
+        # 动画结束后解除 maximumHeight 限制，允许父布局自由调整
+        self.height_anim.finished.connect(lambda: self.setMaximumHeight(16777215))
         self.height_anim.start()
 
-    def get_current_page_height(self, index: int):
-        widget = self.stacked_widget.widget(index)
-        layout = widget.layout()
-        layout.activate()
-        width = self.stacked_widget.width()
-        return self._layout_height(layout, width)
-
-    def _layout_height(self, layout, width: int) -> int:
-        if isinstance(layout, FlowLayout):
-            return layout.heightForWidth(width)
-
-        margins = layout.contentsMargins()
-        inner_width = width - margins.left() - margins.right()
-        total = margins.top() + margins.bottom()
-        visible_count = 0
-        for i in range(layout.count()):
-            item = layout.itemAt(i)
-            if item is None:
-                continue
-            child_widget = item.widget()
-            if child_widget is not None:
-                if child_widget.isHidden():
-                    continue
-                child_layout = child_widget.layout()
-                if child_layout is not None:
-                    h = self._layout_height(child_layout, inner_width)
-                    child_margins = child_layout.contentsMargins()
-                    h += child_margins.top() + child_margins.bottom()
-                    total += h
-                else:
-                    total += child_widget.sizeHint().height()
-                visible_count += 1
-            elif item.layout() is not None:
-                total += self._layout_height(item.layout(), inner_width)
-                visible_count += 1
-
-        if visible_count > 1:
-            total += layout.spacing() * (visible_count - 1)
-        return total
-
-    
+        
 class OutputSettingsCard(HeaderCardWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
