@@ -132,69 +132,6 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
         main_layout.addWidget(watermark_detect_settings)
 
 
-class WatermarkMaskDilate(HeaderCardWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setTitle(self.tr("⬆️ 水印 Mask"))
-        self.setBorderRadius(8)
-
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(10)
-
-        self.viewLayout.setContentsMargins(10, 10, 10, 10)
-        self.viewLayout.addLayout(main_layout)
-
-        slider_layout = QHBoxLayout()
-        slider_layout.setContentsMargins(0, 0, 0, 0)
-        slider_layout.setSpacing(10)
-
-        self.label = QLabel("2")
-        self.label.setFixedWidth(25)
-        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.label.setStyleSheet("color: #666666;")
-
-        # 滑块
-        self.slider = QSlider(Qt.Orientation.Horizontal)
-        self.slider.setMinimum(0)
-        self.slider.setMaximum(8)
-        self.slider.setValue(2)
-        self.slider.setTickInterval(1)
-        self.slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.slider.setSingleStep(1)
-        self.slider.setStyleSheet("""
-            QSlider::groove:horizontal {
-                height: 6px;
-                background: #ddd;
-                border-radius: 3px;
-            }
-            QSlider::handle:horizontal {
-                background: #2196F3;
-                border: none;
-                width: 16px;
-                height: 16px;
-                margin: -5px 0;
-                border-radius: 8px;
-            }
-            QSlider::sub-page:horizontal {
-                background: #2196F3;
-                border-radius: 3px;
-            }
-        """)
-        label = QLabel(self.tr("扩张系数"))
-        label.setStyleSheet("color: #666666;")
-        slider_layout.addWidget(label)
-        slider_layout.addWidget(self.slider)
-        slider_layout.addWidget(self.label)
-        bind_widget_to_param(self.slider, "valueChanged", watermark_remove_params, "mask_dilate", transform=None)
-        self.slider.valueChanged.connect(self.on_value_changed)
-        self.slider.valueChanged.emit(2)
-        main_layout.addLayout(slider_layout)
-
-    def on_value_changed(self, value):
-        self.label.setText(str(value))
-
-
 class WatermarkTypeCardItem(QFrame):
     clicked = Signal(str)
 
@@ -616,7 +553,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         setFont(name_label, 13, QFont.DemiBold)
         name_label.setStyleSheet("color: #2c3e50; background: transparent;")
         hint_label = QLabel(self.tr("让遮罩稍外扩，盖住水印边缘"))
-        setFont(hint_label, 11)
+        setFont(hint_label, 10)
         hint_label.setStyleSheet("color: #888888; background: transparent;")
         value_label = QLabel("2")
         value_label.setFixedWidth(20)
@@ -653,6 +590,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
                 border-radius: 3px;
             }
         """)
+        slider.setFixedHeight(22)
         slider.valueChanged.connect(lambda v: value_label.setText(str(v)))
         bind_widget_to_param(slider, "valueChanged", watermark_remove_params, "mask_dilate", transform=None)
         slider.valueChanged.emit(2)
@@ -978,10 +916,6 @@ class ControlPanelWidget(ScrollArea):
         watermarkDetectionTypeCard = WatermarkDetectionTypeCard(self)
         main_layout.addWidget(watermarkDetectionTypeCard)
         self.output_mask_cards.append(watermarkDetectionTypeCard)
-
-        watermarkMaskDilate = WatermarkMaskDilate(self)
-        main_layout.addWidget(watermarkMaskDilate)
-        self.output_mask_cards.append(watermarkMaskDilate)
 
         outputSettingsCard = OutputSettingsCard(self)
         main_layout.addWidget(outputSettingsCard)
