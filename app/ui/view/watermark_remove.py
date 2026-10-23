@@ -437,8 +437,26 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
             }
         """)
         self.image_more_button.clicked.connect(self.toggle_image_models)
-        image_outer_layout.addWidget(self.image_cards_widget)
-        image_outer_layout.addWidget(self.image_more_button)
+
+        image_model_card = QFrame()
+        image_model_card.setObjectName("modelCard")
+        image_model_card.setStyleSheet("""
+            QFrame#modelCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        image_model_card_layout = QVBoxLayout(image_model_card)
+        image_model_card_layout.setContentsMargins(12, 10, 12, 12)
+        image_model_card_layout.setSpacing(8)
+        image_model_card_layout.addWidget(self.image_cards_widget)
+        image_model_card_layout.addWidget(self.image_more_button)
+        image_outer_layout.addWidget(image_model_card)
+
+        self.image_params_widget = self._build_mask_dilate_params()
+        image_outer_layout.addWidget(self.image_params_widget)
+
         self.stacked_widget.addWidget(self.image_container)
 
         self._set_extra_image_models_visible(False)
@@ -446,14 +464,38 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         self.all_cards.extend(self.image_cards)
 
         document_container = QWidget()
-        document_layout = FlowLayout(document_container, isTight=True)
-        document_layout.setContentsMargins(0, 6, 0, 6)
-        document_layout.setHorizontalSpacing(8)
-        document_layout.setVerticalSpacing(8)
+        document_outer_layout = QVBoxLayout(document_container)
+        document_outer_layout.setContentsMargins(0, 6, 0, 6)
+        document_outer_layout.setSpacing(8)
+
+        document_cards_widget = QWidget()
+        document_flow = FlowLayout(document_cards_widget, isTight=True)
+        document_flow.setContentsMargins(0, 0, 0, 4)
+        document_flow.setHorizontalSpacing(8)
+        document_flow.setVerticalSpacing(8)
 
         image_restoration_card = StyleCard("#f093fb", self.tr("智能修补"), self.tr("文档截图，精细修复"), vertical_layout=True)
         image_restoration_card.set_name("image_restoration")
-        document_layout.addWidget(image_restoration_card)
+        document_flow.addWidget(image_restoration_card)
+
+        document_model_card = QFrame()
+        document_model_card.setObjectName("docModelCard")
+        document_model_card.setStyleSheet("""
+            QFrame#docModelCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        document_model_card_layout = QVBoxLayout(document_model_card)
+        document_model_card_layout.setContentsMargins(12, 10, 12, 12)
+        document_model_card_layout.setSpacing(8)
+        document_model_card_layout.addWidget(document_cards_widget)
+        document_outer_layout.addWidget(document_model_card)
+
+        # 参数卡片
+        document_params_widget = self._build_restoration_prompt_params()
+        document_outer_layout.addWidget(document_params_widget)
 
         self.stacked_widget.addWidget(document_container)
 
@@ -461,18 +503,43 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         self.all_cards.extend(self.document_cards)
 
         video_container = QWidget()
-        video_layout = FlowLayout(video_container, isTight=True)
-        video_layout.setContentsMargins(0, 6, 0, 6)
-        video_layout.setHorizontalSpacing(8)
-        video_layout.setVerticalSpacing(8)
+        video_outer_layout = QVBoxLayout(video_container)
+        video_outer_layout.setContentsMargins(0, 6, 0, 6)
+        video_outer_layout.setSpacing(8)
+
+        video_cards_widget = QWidget()
+        video_flow = FlowLayout(video_cards_widget, isTight=True)
+        video_flow.setContentsMargins(0, 0, 0, 4)
+        video_flow.setHorizontalSpacing(8)
+        video_flow.setVerticalSpacing(8)
 
         video_engine_card = StyleCard("#2980b9", self.tr("关键帧擦除"), self.tr("智能传播，速度适中"), vertical_layout=True)
         video_engine_card.set_name("video_engine")
-        video_layout.addWidget(video_engine_card)
+        video_flow.addWidget(video_engine_card)
 
         video_seq_card = StyleCard("#9b59b6", self.tr("时序擦除"), self.tr("跨帧追踪，减少闪烁"), vertical_layout=True)
         video_seq_card.set_name("ppt")
-        video_layout.addWidget(video_seq_card)
+        video_flow.addWidget(video_seq_card)
+
+        # 模型卡片区域包裹在浅灰色卡片中
+        video_model_card = QFrame()
+        video_model_card.setObjectName("videoModelCard")
+        video_model_card.setStyleSheet("""
+            QFrame#videoModelCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        video_model_card_layout = QVBoxLayout(video_model_card)
+        video_model_card_layout.setContentsMargins(12, 10, 12, 12)
+        video_model_card_layout.setSpacing(8)
+        video_model_card_layout.addWidget(video_cards_widget)
+        video_outer_layout.addWidget(video_model_card)
+
+        # 参数卡片
+        video_params_widget = self._build_mask_dilate_params()
+        video_outer_layout.addWidget(video_params_widget)
 
         self.stacked_widget.addWidget(video_container)
         
@@ -495,6 +562,164 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
     def _card_pool(self, index: int) -> list:
         return {0: self.image_cards, 1: self.document_cards, 2: self.video_cards}.get(index, self.image_cards)
+
+    def _build_params_section_header(self) -> QWidget:
+        header = QWidget()
+        header.setStyleSheet("QWidget { background: transparent; }")
+        h_layout = QHBoxLayout(header)
+        h_layout.setContentsMargins(0, 4, 0, 0)
+        h_layout.setSpacing(8)
+
+        icon_label = QLabel("⚙️")
+        setFont(icon_label, 13)
+        icon_label.setStyleSheet("color: #555555; background: transparent;")
+
+        title_label = QLabel(self.tr("参数设置"))
+        setFont(title_label, 13, QFont.DemiBold)
+        title_label.setStyleSheet("color: #555555; background: transparent;")
+
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setStyleSheet("color: #e2e8f0;")
+
+        h_layout.addWidget(icon_label)
+        h_layout.addWidget(title_label)
+        h_layout.addWidget(line, 1)
+        return header
+
+    def _build_mask_dilate_params(self) -> QWidget:
+        container = QFrame()
+        container.setObjectName("paramsCard")
+        container.setStyleSheet("""
+            QFrame#paramsCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(10)
+        layout.addWidget(self._build_params_section_header())
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+        name_label = QLabel(self.tr("水印 Mask 扩张系数"))
+        setFont(name_label, 13, QFont.DemiBold)
+        name_label.setStyleSheet("color: #2c3e50; background: transparent;")
+        hint_label = QLabel(self.tr("让遮罩稍外扩，盖住水印边缘"))
+        setFont(hint_label, 11)
+        hint_label.setStyleSheet("color: #888888; background: transparent;")
+        value_label = QLabel("2")
+        value_label.setFixedWidth(20)
+        value_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        setFont(value_label, 13, QFont.DemiBold)
+        value_label.setStyleSheet("color: #3498db; background: transparent;")
+        row.addWidget(name_label)
+        row.addWidget(hint_label, 1)
+        row.addWidget(value_label)
+        layout.addLayout(row)
+
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setMinimum(0)
+        slider.setMaximum(8)
+        slider.setValue(2)
+        slider.setTickInterval(1)
+        slider.setSingleStep(1)
+        slider.setStyleSheet("""
+            QSlider::groove:horizontal {
+                height: 6px;
+                background: #e2e8f0;
+                border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: #3498db;
+                border: none;
+                width: 18px;
+                height: 18px;
+                margin: -6px 0;
+                border-radius: 9px;
+            }
+            QSlider::sub-page:horizontal {
+                background: #3498db;
+                border-radius: 3px;
+            }
+        """)
+        slider.valueChanged.connect(lambda v: value_label.setText(str(v)))
+        bind_widget_to_param(slider, "valueChanged", watermark_remove_params, "mask_dilate", transform=None)
+        slider.valueChanged.emit(2)
+        layout.addWidget(slider)
+        return container
+
+    def _build_restoration_prompt_params(self) -> QWidget:
+        PRESETS = (
+            ("general",    "💧", self.tr("通用水印"),   "#38bdf8"),
+            ("horizontal", "↔️", self.tr("半透明水平"), "#22c55e"),
+            ("vertical",   "↕️", self.tr("半透明垂直"), "#f59e0b"),
+            ("diagonal",   "📐", self.tr("半透明斜向"), "#f472b6"),
+            ("logo",       "©️", self.tr("图片/Logo"),  "#0ea5e9"),
+        )
+        container = QFrame()
+        container.setObjectName("restorationParamsCard")
+        container.setStyleSheet("""
+            QFrame#restorationParamsCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(10)
+        layout.addWidget(self._build_params_section_header())
+
+        type_label = QLabel(self.tr("水印类型"))
+        setFont(type_label, 13, QFont.DemiBold)
+        type_label.setStyleSheet("color: #2c3e50; background: transparent;")
+        layout.addWidget(type_label)
+
+        type_cards: list[WatermarkTypeCardItem] = []
+        flow_widget = QWidget()
+        flow_widget.setStyleSheet("QWidget { background: transparent; }")
+        flow_layout = FlowLayout(flow_widget, needAni=True)
+        flow_layout.setContentsMargins(0, 0, 0, 0)
+        flow_layout.setHorizontalSpacing(8)
+        flow_layout.setVerticalSpacing(8)
+
+        def _on_type_selected(selected_key):
+            for tc in type_cards:
+                tc.set_selected(tc.key == selected_key)
+            watermark_remove_params.set_param("restoration_watermark_type", selected_key)
+
+        for key, icon, name, color in PRESETS:
+            tc = WatermarkTypeCardItem(key, icon, name, name, color, container)
+            tc.clicked.connect(_on_type_selected)
+            flow_layout.addWidget(tc)
+            type_cards.append(tc)
+        layout.addWidget(flow_widget)
+
+        prompt_label = QLabel(self.tr("自定义水印类型（可选）"))
+        setFont(prompt_label, 13, QFont.DemiBold)
+        prompt_label.setStyleSheet("color: #2c3e50; background: transparent;")
+        layout.addWidget(prompt_label)
+
+        prompt_edit = QTextEdit(container)
+        prompt_edit.setMaximumHeight(72)
+        prompt_edit.setPlaceholderText(self.tr("描述什么类型水印；留空则使用上方预设（建议使用英文）"))
+        prompt_edit.setStyleSheet("""
+            QTextEdit { border: 1px solid #e0e0e0; border-radius: 8px; padding: 6px;
+                        background-color: #fafafa; color: #1a1a1a; }
+            QTextEdit:focus { border: 1px solid #667eea; background-color: #ffffff; }
+        """)
+        setFont(prompt_edit, 13)
+        prompt_edit.textChanged.connect(
+            lambda: watermark_remove_params.set_param("restoration_prompt", prompt_edit.toPlainText())
+        )
+        layout.addWidget(prompt_edit)
+
+        _on_type_selected(PRESETS[0][0])
+        return container
 
     def _set_extra_image_models_visible(self, visible: bool):
         for card in self.image_cards[self.image_model_visible_count:]:
@@ -602,12 +827,16 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         layout = widget.layout()
         layout.activate()
         width = self.stacked_widget.width()
+        return self._layout_height(layout, width)
+
+    def _layout_height(self, layout, width: int) -> int:
         if isinstance(layout, FlowLayout):
             return layout.heightForWidth(width)
-        
+
         margins = layout.contentsMargins()
         inner_width = width - margins.left() - margins.right()
         total = margins.top() + margins.bottom()
+        visible_count = 0
         for i in range(layout.count()):
             item = layout.itemAt(i)
             if item is None:
@@ -617,14 +846,20 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
                 if child_widget.isHidden():
                     continue
                 child_layout = child_widget.layout()
-                if isinstance(child_layout, FlowLayout):
-                    total += child_layout.heightForWidth(inner_width)
+                if child_layout is not None:
+                    h = self._layout_height(child_layout, inner_width)
+                    child_margins = child_layout.contentsMargins()
+                    h += child_margins.top() + child_margins.bottom()
+                    total += h
                 else:
                     total += child_widget.sizeHint().height()
+                visible_count += 1
             elif item.layout() is not None:
-                total += item.layout().sizeHint().height()
-            if i < layout.count() - 1:
-                total += layout.spacing()
+                total += self._layout_height(item.layout(), inner_width)
+                visible_count += 1
+
+        if visible_count > 1:
+            total += layout.spacing() * (visible_count - 1)
         return total
 
     
