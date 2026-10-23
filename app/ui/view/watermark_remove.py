@@ -368,47 +368,44 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         self.all_cards: list[StyleCard] = []
 
         self.image_container = QWidget()
-        image_layout = QVBoxLayout(self.image_container)
-        image_layout.setContentsMargins(0, 6, 0, 6)
-        image_layout.setSpacing(0)
+        image_outer_layout = QVBoxLayout(self.image_container)
+        image_outer_layout.setContentsMargins(0, 6, 0, 6)
+        image_outer_layout.setSpacing(8)
 
-        general_edit_card = StyleCard("#667eea", self.tr("智能重绘"), self.tr("语义理解强，细节丰富，复杂场景效果佳，速度较慢"))
+        self.image_cards_widget = QWidget()
+        sp = self.image_cards_widget.sizePolicy()
+        sp.setHeightForWidth(True)
+        self.image_cards_widget.setSizePolicy(sp)
+        image_layout = FlowLayout(self.image_cards_widget, needAni=True, isTight=True)
+        image_layout.setContentsMargins(0, 0, 0, 0)
+        image_layout.setHorizontalSpacing(8)
+        image_layout.setVerticalSpacing(8)
+
+        general_edit_card = StyleCard("#667eea", self.tr("智能重绘"), self.tr("复杂场景，效果好"), vertical_layout=True)
         general_edit_card.set_name("general_edit")
         image_layout.addWidget(general_edit_card)
-        general_edit_separator = CardSeparator(self)
-        image_layout.addWidget(general_edit_separator)
 
-        object_removal_card = StyleCard("#e3fb93", self.tr("智能消除"), self.tr("精准消除多余物体，自然填补背景，速度很快"))
+        object_removal_card = StyleCard("#e3fb93", self.tr("智能消除"), self.tr("精准消除，速度快"), vertical_layout=True)
         object_removal_card.set_name("object_removal")
         image_layout.addWidget(object_removal_card)
-        object_removal_separator = CardSeparator(self)
-        image_layout.addWidget(object_removal_separator)
 
-        patchwiper_card = StyleCard("#4facfe", self.tr("细节增强"), self.tr("智能重建细节，提升清晰度，速度快 (不适合字幕)"))
+        patchwiper_card = StyleCard("#4facfe", self.tr("细节增强"), self.tr("细节重建，不适合字幕"), vertical_layout=True)
         patchwiper_card.set_name("patchwiper")
         image_layout.addWidget(patchwiper_card)
-        patchwiper_separator = CardSeparator(self)
-        image_layout.addWidget(patchwiper_separator)
 
-        coordfill_card = StyleCard("#fbc2eb", self.tr("快速填充"), self.tr("细节表现一般，适合简单背景，速度极快"))
+        coordfill_card = StyleCard("#fbc2eb", self.tr("快速填充"), self.tr("简单背景，极速处理"), vertical_layout=True)
         coordfill_card.set_name("coordfill")
         image_layout.addWidget(coordfill_card)
-        coordfill_separator = CardSeparator(self)
-        image_layout.addWidget(coordfill_separator)
-        
-        lama_card = StyleCard("#84fab0", self.tr("自然保守"), self.tr("画面衔接自然，可能丢失细节，速度适中"))
+
+        lama_card = StyleCard("#84fab0", self.tr("自然保守"), self.tr("自然衔接，保留不足"), vertical_layout=True)
         lama_card.set_name("lama")
         image_layout.addWidget(lama_card)
-        lama_separator = CardSeparator(self)
-        image_layout.addWidget(lama_separator)
 
-        emdf_card = StyleCard("#f093fb", self.tr("自适应修补"), self.tr("效果稳定，可能丢失细节，速度稍慢"))
+        emdf_card = StyleCard("#f093fb", self.tr("自适应修补"), self.tr("稳定修补，细节易失"), vertical_layout=True)
         emdf_card.set_name("emdf")
         image_layout.addWidget(emdf_card)
-        emdf_separator = CardSeparator(self)
-        image_layout.addWidget(emdf_separator)
 
-        grig_card = StyleCard("#a18cd1", self.tr("平衡修复"), self.tr("结构保持好，可能丢失细节，速度快"))
+        grig_card = StyleCard("#a18cd1", self.tr("平衡修复"), self.tr("结构稳定，处理快"), vertical_layout=True)
         grig_card.set_name("grig")
         image_layout.addWidget(grig_card)
 
@@ -420,14 +417,6 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
             lama_card,  
             emdf_card, 
             grig_card
-        ]
-        self.image_card_separators = [
-            general_edit_separator, 
-            object_removal_separator, 
-            patchwiper_separator,
-            coordfill_separator,
-            lama_separator, 
-            emdf_separator
         ]
         self.image_model_visible_count = 4
         self.image_models_expanded = False
@@ -448,8 +437,8 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
             }
         """)
         self.image_more_button.clicked.connect(self.toggle_image_models)
-        image_layout.addWidget(self.image_more_button)
-        image_layout.addStretch()
+        image_outer_layout.addWidget(self.image_cards_widget)
+        image_outer_layout.addWidget(self.image_more_button)
         self.stacked_widget.addWidget(self.image_container)
 
         self._set_extra_image_models_visible(False)
@@ -457,36 +446,34 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         self.all_cards.extend(self.image_cards)
 
         document_container = QWidget()
-        document_layout = QVBoxLayout(document_container)
+        document_layout = FlowLayout(document_container, isTight=True)
         document_layout.setContentsMargins(0, 6, 0, 6)
-        document_layout.setSpacing(0)
+        document_layout.setHorizontalSpacing(8)
+        document_layout.setVerticalSpacing(8)
 
-        image_restoration_card = StyleCard("#f093fb", self.tr("智能修补"), self.tr("专为文档/截图设计，文字排版还原准确，速度较慢"))
+        image_restoration_card = StyleCard("#f093fb", self.tr("智能修补"), self.tr("文档截图，精细修复"), vertical_layout=True)
         image_restoration_card.set_name("image_restoration")
         document_layout.addWidget(image_restoration_card)
 
-        document_layout.addStretch()
         self.stacked_widget.addWidget(document_container)
 
         self.document_cards = [image_restoration_card]
         self.all_cards.extend(self.document_cards)
 
         video_container = QWidget()
-        video_layout = QVBoxLayout(video_container)
+        video_layout = FlowLayout(video_container, isTight=True)
         video_layout.setContentsMargins(0, 6, 0, 6)
-        video_layout.setSpacing(0)
+        video_layout.setHorizontalSpacing(8)
+        video_layout.setVerticalSpacing(8)
 
-        video_engine_card = StyleCard("#2980b9", self.tr("关键帧级擦除"), self.tr("图片模型处理关键帧，智能传播至连续帧，兼顾效果与时序一致性，速度适中"))
+        video_engine_card = StyleCard("#2980b9", self.tr("关键帧擦除"), self.tr("智能传播，速度适中"), vertical_layout=True)
         video_engine_card.set_name("video_engine")
         video_layout.addWidget(video_engine_card)
-        video_seq_separator = CardSeparator(self)
-        video_layout.addWidget(video_seq_separator)
 
-        video_seq_card = StyleCard("#9b59b6", self.tr("视频时序级擦除"), self.tr("跨帧追踪锁定，无闪烁，适合复杂动态视频，速度较慢"))
+        video_seq_card = StyleCard("#9b59b6", self.tr("时序擦除"), self.tr("跨帧追踪，减少闪烁"), vertical_layout=True)
         video_seq_card.set_name("ppt")
         video_layout.addWidget(video_seq_card)
-        
-        video_layout.addStretch()
+
         self.stacked_widget.addWidget(video_container)
         
         self.video_cards = [video_engine_card, video_seq_card]
@@ -512,8 +499,6 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
     def _set_extra_image_models_visible(self, visible: bool):
         for card in self.image_cards[self.image_model_visible_count:]:
             card.setVisible(visible)
-        for separator in self.image_card_separators[self.image_model_visible_count:]:
-            separator.setVisible(visible)
 
     def toggle_image_models(self):
         self.image_models_expanded = not self.image_models_expanded
@@ -522,8 +507,8 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
         self.image_more_button.setText(self.tr("收起模型 ▴") if is_expanded else self.tr("展开更多模型 ▾"))
 
-        self.image_container.layout().invalidate()
-        self.image_container.layout().activate()
+        self.image_cards_widget.layout().invalidate()
+        self.image_cards_widget.layout().activate()
         content_height = self.get_current_page_height(0)
         self.animate_height_change(content_height + 114)
 
@@ -614,8 +599,33 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
     def get_current_page_height(self, index: int):
         widget = self.stacked_widget.widget(index)
-        widget.layout().activate()
-        return widget.layout().sizeHint().height()
+        layout = widget.layout()
+        layout.activate()
+        width = self.stacked_widget.width()
+        if isinstance(layout, FlowLayout):
+            return layout.heightForWidth(width)
+        
+        margins = layout.contentsMargins()
+        inner_width = width - margins.left() - margins.right()
+        total = margins.top() + margins.bottom()
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item is None:
+                continue
+            child_widget = item.widget()
+            if child_widget is not None:
+                if child_widget.isHidden():
+                    continue
+                child_layout = child_widget.layout()
+                if isinstance(child_layout, FlowLayout):
+                    total += child_layout.heightForWidth(inner_width)
+                else:
+                    total += child_widget.sizeHint().height()
+            elif item.layout() is not None:
+                total += item.layout().sizeHint().height()
+            if i < layout.count() - 1:
+                total += layout.spacing()
+        return total
 
     
 class OutputSettingsCard(HeaderCardWidget):
