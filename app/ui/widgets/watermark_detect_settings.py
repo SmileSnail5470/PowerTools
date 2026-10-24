@@ -265,7 +265,7 @@ class WatermarkDetectSettings(QWidget):
                 self.input_box = QLineEdit()
                 self.input_box.setObjectName("inputBox")
                 setFont(self.input_box, 12)
-                self.input_box.setPlaceholderText(self.tr("文本描述（请输入英文）..."))
+                self.input_box.setPlaceholderText(self.tr("文本描述（建议英文，可点击下方快捷按钮）..."))
                 self.input_box.textChanged.connect(lambda text: self.watermarkDetectPrompt.emit(text))
                 page_layout.addWidget(self.input_box)
                 chip_layout = QHBoxLayout()

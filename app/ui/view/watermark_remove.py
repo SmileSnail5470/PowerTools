@@ -938,8 +938,12 @@ class ControlPanelWidget(ScrollArea):
     def _on_param_changed(self, key, value):
         if key != "model_name":
             return
-        for card in self.output_mask_cards:
-            card.setVisible(True)
+        if value == "image_restoration":
+            for card in self.output_mask_cards:
+                card.hide()
+        else:
+            for card in self.output_mask_cards:
+                card.setVisible(True)
 
 
 
