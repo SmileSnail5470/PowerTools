@@ -85,7 +85,7 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setTitle(self.tr("🔍 水印检测方式"))
+        self.setTitle(self.tr("🔍 水印检测设置"))
         self.setBorderRadius(8)
 
         main_layout = QVBoxLayout()
@@ -139,11 +139,11 @@ class WatermarkTypeCardItem(QFrame):
         super().__init__(parent)
         self.key = key
         self.is_selected = False
-        self.setFixedSize(105, 45)
+        self.setFixedSize(95, 40)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setToolTip(description)
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(6)
 
         icon_label = QLabel(icon, self)
@@ -154,7 +154,7 @@ class WatermarkTypeCardItem(QFrame):
         )
         layout.addWidget(icon_label)
         name_label = QLabel(name, self)
-        setFont(name_label, 12)
+        setFont(name_label, 11)
         name_label.setStyleSheet("color: #1f2937; background: transparent;")
         layout.addWidget(name_label)
         self.set_selected(False)
@@ -244,7 +244,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setTitle(self.tr("🎨 水印去除模型"))
+        self.setTitle(self.tr("🎨 水印去除设置"))
         self.setBorderRadius(8)
 
         main_layout = QVBoxLayout()
