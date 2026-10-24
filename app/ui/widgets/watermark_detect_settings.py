@@ -206,17 +206,24 @@ class WatermarkDetectSettings(QWidget):
         strategy_layout = QHBoxLayout()
         strategy_layout.setContentsMargins(0, 0, 0, 0)
         self.frame_by_frame_card = OptionCard(self.tr("逐帧检测"), self.tr("逐帧识别水印"))
-        self.frame_by_frame_card.selected = True
-        self.frame_by_frame_card.update_style()
         self.frame_by_frame_card.clicked.connect(lambda: self._select_video_detection_strategy("frame_by_frame"))
         self.tracking_detection_card = OptionCard(self.tr("跟踪检测"), self.tr("跟踪关键帧水印"), icon="🎯", icon_color="#DBEAFE", recommended=True)
         self.tracking_detection_card.clicked.connect(lambda: self._select_video_detection_strategy("tracking"))
-        strategy_layout.addWidget(self.frame_by_frame_card, 1)
         strategy_layout.addWidget(self.tracking_detection_card, 1)
+        strategy_layout.addWidget(self.frame_by_frame_card, 1)
         video_strategy_layout.addLayout(strategy_layout)
 
         self.anchor_frame_container, self.anchor_frame_spin = (self._create_anchor_frame_control())
         self.frame_range_container, self.frame_range_start, self.frame_range_end = (self._create_frame_range_controls())
+
+        self.tracking_container = QWidget()
+        tracking_layout = QVBoxLayout(self.tracking_container)
+        tracking_layout.setContentsMargins(0, 0, 0, 0)
+        self.tracking_btn = QPushButton(self.tr("🎯 启用跟踪(可选)"))
+        self.tracking_btn.setObjectName("secondaryBtn")
+        self.tracking_btn.setCursor(Qt.PointingHandCursor)
+        self.tracking_btn.clicked.connect(self._open_video_object_detector)
+        tracking_layout.addWidget(self.tracking_btn)
 
         self.video_options_card = QFrame()
         self.video_options_card.setObjectName("sectionCard")
@@ -226,8 +233,9 @@ class WatermarkDetectSettings(QWidget):
         video_options_layout.addWidget(self.create_section_header(self.tr("视频检测设置"), "🎞️"))
         video_options_layout.addWidget(self.video_format_container)
         video_options_layout.addWidget(self.anchor_frame_container)
-        video_options_layout.addWidget(self.frame_range_container)
         video_options_layout.addWidget(self.video_strategy_container)
+        video_options_layout.addWidget(self.tracking_container)
+        video_options_layout.addWidget(self.frame_range_container)
         self.video_options_card.setVisible(False)
         ai_layout.insertWidget(0, self.video_options_card)
 
@@ -284,16 +292,6 @@ class WatermarkDetectSettings(QWidget):
         detection_settings_layout.addWidget(self.confidence_container)
         parameters_layout.addWidget(self.detection_settings_container)
 
-        self.tracking_container = QWidget()
-        tracking_layout = QVBoxLayout(self.tracking_container)
-        tracking_layout.setContentsMargins(0, 0, 0, 0)
-        self.tracking_btn = QPushButton(self.tr("🎯 启用跟踪(可选)"))
-        self.tracking_btn.setObjectName("secondaryBtn")
-        self.tracking_btn.setCursor(Qt.PointingHandCursor)
-        self.tracking_btn.clicked.connect(self._open_video_object_detector)
-        tracking_layout.addWidget(self.tracking_btn)
-        self.tracking_container.setVisible(False)
-        parameters_layout.addWidget(self.tracking_container)
         self.video_format_container.setVisible(False)
         self.video_strategy_container.setVisible(False)
         ai_layout.addWidget(self.parameters_card)
@@ -354,6 +352,7 @@ class WatermarkDetectSettings(QWidget):
         self.main_layout.addWidget(self.card)
 
         self._select_detection_mode("semantic_detect", update_height=False)
+        self._select_video_detection_strategy("tracking")
 
     def _create_area_button(self):
         button = QPushButton(self.tr("🖼 水印区域选择"))
@@ -370,10 +369,10 @@ class WatermarkDetectSettings(QWidget):
         header = QHBoxLayout()
         info_layout = QVBoxLayout()
         info_layout.setSpacing(2)
-        title = QLabel(self.tr("水印置信度"))
+        title = QLabel(self.tr("检测灵敏度"))
         title.setObjectName("labelTitle")
         setFont(title, 13, QFont.DemiBold)
-        description = QLabel(self.tr("设置检测算法的灵敏度阈值"))
+        description = QLabel(self.tr("越高越严格，可能漏检；越低越宽松，可能误检"))
         description.setObjectName("labelDesc")
         setFont(description, 11)
         info_layout.addWidget(title)
@@ -815,6 +814,8 @@ class WatermarkDetectSettings(QWidget):
         self.frame_range_container.setVisible(is_fixed or is_frame_by_frame)
         self.detection_settings_container.setVisible(not self.is_video_file or is_fixed or is_frame_by_frame)
         self.tracking_container.setVisible(is_tracking)
+        self.detection_types_card.setVisible(not is_tracking)
+        self.parameters_card.setVisible(not is_tracking)
         if update_height:
             self.update_layout_height()
 
