@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSlider, QFile
                              QFrame, QGraphicsDropShadowEffect)
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal
 from PySide6.QtGui import QColor, QFont
-from app.ui.library.qfluentwidgets import setFont, MessageBox
+from app.ui.library.qfluentwidgets import setFont, MessageBox, FlowLayout
 from app.ui.common.utils import get_file_type
 from app.ui.common.config import cfg
 from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
@@ -16,7 +16,7 @@ from app.ui.widgets.video_object_detector_widget import VideoObjectDetectorWidge
 class OptionCard(QFrame):
     clicked = Signal()
 
-    def __init__(self, title, desc, parent=None):
+    def __init__(self, title, desc, parent=None, icon=None, icon_color="#DBEAFE", recommended=False):
         super().__init__(parent)
         self.setCursor(Qt.PointingHandCursor)
         self.selected = False
@@ -24,18 +24,33 @@ class OptionCard(QFrame):
         layout = QVBoxLayout(self)
         self.title_label = QLabel(title)
         self.title_label.setObjectName("optTitle")
-        setFont(self.title_label, 13, QFont.Medium)
+        setFont(self.title_label, 11 if icon else 13, QFont.Medium)
+        if icon:
+            header = QHBoxLayout()
+            header.setSpacing(4)
+            self.icon_label = QLabel(icon)
+            self.icon_label.setFixedSize(20, 20)
+            self.icon_label.setAlignment(Qt.AlignCenter)
+            self.icon_label.setStyleSheet(f"background-color: {icon_color}; border-radius: 7px; font-size: 13px;")
+            header.addWidget(self.icon_label)
+            header.addStretch()
+            if recommended:
+                self.recommended_label = QLabel(self.tr("推荐"))
+                self.recommended_label.setObjectName("recommendBadge")
+                setFont(self.recommended_label, 8, QFont.DemiBold)
+                header.addWidget(self.recommended_label)
+            layout.addLayout(header)
+            layout.addWidget(self.title_label)
+        else:
+            layout.addWidget(self.title_label)
         self.desc_label = QLabel(desc)
         self.desc_label.setObjectName("optDesc")
         self.desc_label.setWordWrap(True)
-        setFont(self.desc_label, 11)
-        
-        layout.addWidget(self.title_label)
+        setFont(self.desc_label, 9 if icon else 11)
         if desc:
             layout.addWidget(self.desc_label)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(2)
-        
+        layout.setContentsMargins(7 if icon else 14, 6 if icon else 14, 7 if icon else 14, 6 if icon else 14)
+        layout.setSpacing(2 if icon else 2)
         self.update_style()
 
     def update_style(self):
@@ -46,16 +61,12 @@ class OptionCard(QFrame):
         self.title_label.style().polish(self.title_label)
 
     def mousePressEvent(self, event):
-        if self.parent():
-            for child in self.parent().findChildren(OptionCard):
-                child.selected = False
-                child.update_style()
-        self.selected = True
-        self.update_style()
-        self.clicked.emit()
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+            event.accept()
 
 class WatermarkDetectSettings(QWidget):
-    watermarkDetectType = Signal(str)         # AI交互/AI自动/人工检测
+    watermarkDetectType = Signal(str)         # AI检测/人工检测
     watermarkFormat = Signal(str)             # 静态水印/动态水印
     manualWatermarktMaskPath = Signal(str)    # 手动标注 Mask 路径
     maskDirectoryChanged = Signal(str)        # 人工指定 Mask 路径
@@ -95,7 +106,6 @@ class WatermarkDetectSettings(QWidget):
         self.card_layout.setContentsMargins(0, 0, 0, 0)
         self.card_layout.setSpacing(0)
 
-        # Tabs 导航栏
         self.tabs_container = QFrame()
         self.tabs_container.setObjectName("tabsContainer")
         self.tabs_container.setFixedHeight(46)
@@ -104,15 +114,13 @@ class WatermarkDetectSettings(QWidget):
         self.tabs_layout.setSpacing(0)
         
         self.tab_btns = []
-        for i, items in enumerate([(self.tr("AI 交互"), "ai_interactive_detect"), (self.tr("AI 全自动"), "ai_auto_detect"), (self.tr("手工标注"), "manual_detect")]):
-            text, signal_value = items
+        for i, text in enumerate((self.tr("AI检测"), self.tr("手工标注"))):
             btn = QPushButton(text)
             btn.setObjectName("tabItem")
             btn.setCheckable(True)
             btn.setCursor(Qt.PointingHandCursor)
             setFont(btn, 13, QFont.DemiBold)
             btn.clicked.connect(lambda _, idx=i: self.switch_tab(idx))
-            btn.clicked.connect(lambda _, signal_value=signal_value: self.watermarkDetectType.emit(signal_value))
             self.tabs_layout.addWidget(btn)
             self.tab_btns.append(btn)
             if i == 0:
@@ -122,207 +130,145 @@ class WatermarkDetectSettings(QWidget):
         self.card_layout.addSpacing(8)
 
         self.stack = QStackedWidget()
-        
-        # AI 全自动 ---
-        p0 = QWidget()
-        p0_l = QVBoxLayout(p0)
-        p0_l.setContentsMargins(0, 0, 0, 0)
-        p0_l.addWidget(self.create_label_group(self.tr("水印类型识别"), self.tr("系统将自动分析画面中的元素")))
-        grid0 = QWidget()
-        grid0_l = QHBoxLayout(grid0)
-        grid0_l.setContentsMargins(0,0,0,0)
-        c1 = OptionCard(self.tr("通用水印"), self.tr("Logo、文字、日期"))
-        c1.clicked.connect(lambda: self.watermarkContent.emit("general_watermark"))
-        c1.selected = True
-        c1.update_style()
-        grid0_l.addWidget(c1, stretch=1)
-        c1_1 = OptionCard(self.tr("文字水印"), self.tr("纯文本"))
-        c1_1.clicked.connect(lambda: self.watermarkContent.emit("text_watermark"))
-        grid0_l.addWidget(c1_1, stretch=1)
-        c1_2 = OptionCard(self.tr("字幕"), self.tr("字幕"))
-        c1_2.clicked.connect(lambda: self.watermarkContent.emit("subtitle"))
-        grid0_l.addWidget(c1_2, stretch=1)
-        p0_l.addWidget(grid0)
-        p0_l.addSpacing(14)
-        
-        p0_l.addWidget(self.create_label_group(self.tr("水印形式"), self.tr("选择水印在时间轴上的状态")))
-        grid1 = QWidget()
-        grid1_l = QHBoxLayout(grid1)
-        grid1_l.setContentsMargins(0,0,0,0)
-        c2 = OptionCard(self.tr("静态水印"), self.tr("固定位置不移动"))
-        c2.clicked.connect(lambda: self.watermarkFormat.emit("static_watermark"))
-        c2.clicked.connect(lambda: self._on_auto_dynamic_selected(False))
-        c2.selected = True
-        c2.update_style()
-        grid1_l.addWidget(c2)
-        c2_1 = OptionCard(self.tr("动态水印"), self.tr("移动、缩放、淡入淡出"))
-        c2_1.clicked.connect(lambda: self.watermarkFormat.emit("dynamic_watermark"))
-        c2_1.clicked.connect(lambda: self._on_auto_dynamic_selected(True))
-        grid1_l.addWidget(c2_1)
-        p0_l.addWidget(grid1)
-        p0_l.addSpacing(14)
+        ai_page = QWidget()
+        ai_layout = QVBoxLayout(ai_page)
+        ai_layout.setContentsMargins(0, 0, 0, 0)
+        ai_layout.setSpacing(12)
 
-        self.auto_tracking_container = QWidget()
-        auto_tracking_container_l = QVBoxLayout(self.auto_tracking_container)
-        auto_tracking_container_l.setContentsMargins(0, 0, 0, 0)
-        auto_tracking_container_l.addWidget(self.create_label_group(self.tr("视频水印跟踪"), self.tr("可选：跟踪指定关键帧水印，极大提高水印检测速度")))
-        self.auto_tracking_btn = QPushButton(self.tr("🎯 启用跟踪(可选)"))
-        self.auto_tracking_btn.setObjectName("secondaryBtn")
-        self.auto_tracking_btn.setCursor(Qt.PointingHandCursor)
-        self.auto_tracking_btn.clicked.connect(self._open_video_object_detector)
-        auto_tracking_container_l.addWidget(self.auto_tracking_btn)
-        self.auto_tracking_container.setVisible(False)
-        p0_l.addWidget(self.auto_tracking_container)
-        p0_l.addSpacing(8)
+        self.detection_types_card = QFrame()
+        self.detection_types_card.setObjectName("sectionCard")
+        detection_types_layout = QVBoxLayout(self.detection_types_card)
+        detection_types_layout.setContentsMargins(14, 14, 14, 14)
+        detection_types_layout.setSpacing(8)
+        detection_types_layout.addWidget(self.create_section_header(self.tr("检测方式"), "🔍"))
+        detection_types_flow = FlowLayout(needAni=True)
+        detection_types_flow.setContentsMargins(0, 0, 0, 0)
+        detection_types_flow.setHorizontalSpacing(8)
+        detection_types_flow.setVerticalSpacing(8)
+        self.detection_mode_cards = {}
+        detection_modes = (
+            ("semantic_detect", self.tr("语意识别"), self.tr("按文本描述识别"), "🧠", "#EDE9FE"),
+            ("space_detect", self.tr("框选区域"), self.tr("手动框选水印"), "🎯", "#DBEAFE"),
+            ("subtitle", self.tr("字幕"), self.tr("识别字幕"), "💬", "#FCE7F3"),
+            ("text_watermark", self.tr("文字水印"), self.tr("识别文字水印"), "🔤", "#DCFCE7"),
+            ("general_watermark", self.tr("通用检测"), self.tr("检测 Logo 等内容"), "✨", "#FEF3C7"),
+        )
+        for mode, title, description, icon, icon_color in detection_modes:
+            mode_card = OptionCard(
+                title,
+                description,
+                icon=icon,
+                icon_color=icon_color,
+                recommended=mode in ("semantic_detect", "space_detect"),
+            )
+            mode_card.setMinimumWidth(95)
+            mode_card.clicked.connect(lambda mode=mode: self._select_detection_mode(mode))
+            detection_types_flow.addWidget(mode_card)
+            self.detection_mode_cards[mode] = mode_card
+        detection_types_layout.addLayout(detection_types_flow)
+        ai_layout.addWidget(self.detection_types_card)
 
-        p0_l.addWidget(self.create_label_group(self.tr("水印区域选择"), self.tr("可选：框选水印所在区域，辅助识别定位")))
-        self.auto_area_btn = QPushButton(self.tr("🖼 水印区域选择"))
-        self.auto_area_btn.setObjectName("secondaryBtn")
-        self.auto_area_btn.clicked.connect(lambda _: self._watermark_area_selector(image_boxes_only=True))
-        p0_l.addWidget(self.auto_area_btn)
+        self.parameters_card = QFrame()
+        self.parameters_card.setObjectName("sectionCard")
+        self.parameters_card.setProperty("parameterSection", True)
+        parameters_layout = QVBoxLayout(self.parameters_card)
+        parameters_layout.setContentsMargins(14, 14, 14, 14)
+        parameters_layout.setSpacing(6)
+        parameters_layout.addWidget(self.create_section_header(self.tr("检测参数"), "⚙️"))
 
-        # AI 交互 ---
-        p1 = QWidget()
-        p1_l = QVBoxLayout(p1)
-        p1_l.setContentsMargins(0,0,0,0)
-        self.mode_switch = QFrame()
-        self.mode_switch.setObjectName("modeSwitch")
-        ms_l = QHBoxLayout(self.mode_switch)
-        ms_l.setContentsMargins(4,4,4,4)
-        self.btn_sem = QPushButton(self.tr("语义识别"))
-        self.btn_sem.clicked.connect(lambda _: self.watermarkAIInteractiveType.emit("semantic_detect"))
-        self.btn_spa = QPushButton(self.tr("空间范围识别"))
-        self.btn_spa.clicked.connect(lambda _: self.watermarkAIInteractiveType.emit("space_detect"))
-        for b in [self.btn_sem, self.btn_spa]:
-            b.setObjectName("modeBtn")
-            b.setCheckable(True)
-            ms_l.addWidget(b)
-        self.btn_sem.setChecked(True)
-        p1_l.addWidget(self.mode_switch)
+        self.mode_parameters_stack = QStackedWidget()
+        self.mode_parameters = {}
+        for mode, _, _, _, _ in detection_modes:
+            page = QWidget()
+            page_layout = QVBoxLayout(page)
+            page_layout.setContentsMargins(0, 0, 0, 0)
+            page_layout.setSpacing(4)
+            if mode == "semantic_detect":
+                page_layout.addWidget(self.create_label_group(self.tr("描述要识别的水印"), self.tr("英文效果更佳")))
+                self.input_box = QLineEdit()
+                self.input_box.setObjectName("inputBox")
+                setFont(self.input_box, 12)
+                self.input_box.setPlaceholderText(self.tr("文本描述（请输入英文）..."))
+                self.input_box.textChanged.connect(lambda text: self.watermarkDetectPrompt.emit(text))
+                page_layout.addWidget(self.input_box)
+                chip_layout = QHBoxLayout()
+                chip_layout.setSpacing(12)
+                text_map = (
+                    (self.tr("水印"), "watermark"),
+                    (self.tr("字幕"), "subtitle"),
+                    (self.tr("水印和字幕"), "watermark,subtitle"),
+                )
+                for label, prompt in text_map:
+                    chip = QPushButton(label)
+                    chip.setObjectName("chip")
+                    setFont(chip, 12)
+                    chip.clicked.connect(lambda _, prompt=prompt: self.input_box.setText(prompt))
+                    chip_layout.addWidget(chip)
+                chip_layout.addStretch()
+                page_layout.addLayout(chip_layout)
+                page_layout.addWidget(self.create_label_group(self.tr("水印区域选择 (可选)"), self.tr("限定检测区域，不选择则检测整张图片")))
+                self.semantic_area_btn = self._create_area_button()
+                page_layout.addWidget(self.semantic_area_btn)
+            elif mode == "space_detect":
+                page_layout.addWidget(self.create_label_group(self.tr("精准框选"), self.tr("在图片区手动框选检测区域")))
+                self.precise_select_btn = QPushButton(self.tr("🎯 开始框选"))
+                self.precise_select_btn.setObjectName("secondaryBtn")
+                self.precise_select_btn.clicked.connect(lambda _: self._watermark_area_selector())
+                page_layout.addWidget(self.precise_select_btn)
+            else:
+                page_layout.addWidget(self.create_label_group(self.tr("水印区域选择 (可选)"), self.tr("限定检测区域，不选择则检测整张图片")))
+                page_layout.addWidget(self._create_area_button())
+            self.mode_parameters_stack.addWidget(page)
+            self.mode_parameters[mode] = page
+        parameters_layout.addWidget(self.mode_parameters_stack)
 
-        self.sub_stack = QStackedWidget()
-        sem_w = QWidget()
-        sem_l = QVBoxLayout(sem_w)
-        sem_l.setContentsMargins(0,0,0,0)
-        sem_l.addWidget(self.create_label_group(self.tr("文本语义描述"), self.tr("输入想识别的特定元素描述")))
-        self.input_box = QLineEdit()
-        self.input_box.setObjectName("inputBox")
-        setFont(self.input_box, 13)
-        self.input_box.setPlaceholderText(self.tr("文本描述（请输入英文）..."))
-        self.input_box.textChanged.connect(lambda text: self.watermarkDetectPrompt.emit(text))
-        sem_l.addWidget(self.input_box)
-        chip_l = QHBoxLayout()
-        chip_l.setSpacing(8)
-        text_map = {
-            "水印": "watermark",
-            "字幕": "subtitle",
-            "水印和字幕": "watermark,subtitle"
-        }
-        for t in [self.tr("水印"), self.tr("字幕"), self.tr("水印和字幕")]:
-            cp = QPushButton(t)
-            cp.setObjectName("chip")
-            setFont(cp, 12)
-            cp.clicked.connect(lambda _, text=t: self.input_box.setText(text_map[text]))
-            chip_l.addWidget(cp)
-        sem_l.addLayout(chip_l)
-        self.sub_stack.addWidget(sem_w)
-        
-        spa_w = QWidget()
-        spa_l = QVBoxLayout(spa_w)
-        spa_l.setContentsMargins(0,6,0,6)
-        spa_l.addWidget(self.create_label_group(self.tr("精准框选"), self.tr("在图片区手动框选位置")))
-        spa_l.addStretch()
-        sec_btn = QPushButton(self.tr("🎯 开始水印框选"))
-        sec_btn.setObjectName("secondaryBtn")
-        sec_btn.clicked.connect(lambda _: self._watermark_area_selector())
-        spa_l.addWidget(sec_btn)
-        self.sub_stack.addWidget(spa_w)
-        p1_l.addWidget(self.sub_stack)
-        p1_l.addSpacing(12)
+        self.confidence_container = self._create_confidence_widget()
+        parameters_layout.addWidget(self.confidence_container)
 
-        self.interactive_area_container = QWidget()
-        area_container_l = QVBoxLayout(self.interactive_area_container)
-        area_container_l.setContentsMargins(0, 0, 0, 0)
-        area_container_l.addWidget(self.create_label_group(self.tr("水印区域选择"), self.tr("可选：框选水印所在区域，辅助识别定位")))
-        self.interactive_area_btn = QPushButton(self.tr("🖼 水印区域选择"))
-        self.interactive_area_btn.setObjectName("secondaryBtn")
-        self.interactive_area_btn.clicked.connect(lambda _: self._watermark_area_selector(image_boxes_only=True))
-        area_container_l.addWidget(self.interactive_area_btn)
-        p1_l.addWidget(self.interactive_area_container)
-        p1_l.addSpacing(12)
+        parameters_layout.addWidget(self.create_label_group(
+            self.tr("水印形式"), self.tr("选择水印在时间轴上的状态")
+        ))
+        format_layout = QHBoxLayout()
+        format_layout.setContentsMargins(0, 0, 0, 0)
+        self.static_format_card = OptionCard(
+            self.tr("静态水印"), self.tr("固定位置不移动")
+        )
+        self.static_format_card.selected = True
+        self.static_format_card.update_style()
+        self.static_format_card.clicked.connect(
+            lambda: self._select_watermark_format("static_watermark", False)
+        )
+        self.dynamic_format_card = OptionCard(
+            self.tr("动态水印"), self.tr("移动、缩放、淡入淡出")
+        )
+        self.dynamic_format_card.clicked.connect(
+            lambda: self._select_watermark_format("dynamic_watermark", True)
+        )
+        format_layout.addWidget(self.static_format_card)
+        format_layout.addWidget(self.dynamic_format_card)
+        parameters_layout.addLayout(format_layout)
 
-        conf_w = QWidget()
-        conf_l = QVBoxLayout(conf_w)
-        conf_l.setContentsMargins(0, 0, 0, 0)
-        conf_l.setSpacing(6)
+        self.tracking_container = QWidget()
+        tracking_layout = QVBoxLayout(self.tracking_container)
+        tracking_layout.setContentsMargins(0, 0, 0, 0)
+        tracking_layout.addWidget(self.create_label_group(
+            self.tr("视频水印跟踪"),
+            self.tr("可选：跟踪指定关键帧水印，极大提高水印检测速度")
+        ))
+        self.tracking_btn = QPushButton(self.tr("🎯 启用跟踪(可选)"))
+        self.tracking_btn.setObjectName("secondaryBtn")
+        self.tracking_btn.setCursor(Qt.PointingHandCursor)
+        self.tracking_btn.clicked.connect(self._open_video_object_detector)
+        tracking_layout.addWidget(self.tracking_btn)
+        self.tracking_container.setVisible(False)
+        parameters_layout.addWidget(self.tracking_container)
+        ai_layout.addWidget(self.parameters_card)
 
-        conf_header = QHBoxLayout()
-        conf_info_vbox = QVBoxLayout()
-        conf_info_vbox.setSpacing(2)
-        ct = QLabel(self.tr("水印置信度"))
-        ct.setObjectName("labelTitle")
-        setFont(ct, 13, QFont.DemiBold)
-        cd = QLabel(self.tr("设置检测算法的灵敏度阈值"))
-        cd.setObjectName("labelDesc")
-        setFont(cd, 11)
-        conf_info_vbox.addWidget(ct)
-        conf_info_vbox.addWidget(cd)
-        
-        self.conf_val_label = QLabel("0.30")
-        self.conf_val_label.setObjectName("confValBadge")
-        setFont(self.conf_val_label, 12, QFont.Bold)
-        
-        conf_header.addLayout(conf_info_vbox)
-        conf_header.addStretch()
-        conf_header.addWidget(self.conf_val_label)
-        conf_l.addLayout(conf_header)
+        manual_page = QWidget()
+        manual_layout = QVBoxLayout(manual_page)
+        manual_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.conf_slider = QSlider(Qt.Horizontal)
-        self.conf_slider.setObjectName("confSlider")
-        self.conf_slider.setRange(0, 100)
-        self.conf_slider.setValue(30)
-        self.conf_slider.setFixedHeight(24)
-        self.conf_slider.setCursor(Qt.PointingHandCursor)
-        self.conf_slider.valueChanged.connect(self._on_conf_changed)
-        conf_l.addWidget(self.conf_slider)
-        p1_l.addWidget(conf_w)
-        p1_l.addSpacing(12)
-
-        p1_l.addWidget(self.create_label_group(self.tr("水印形式"), self.tr("选择水印在时间轴上的状态")))
-        grid2 = QWidget()
-        grid2_l = QHBoxLayout(grid2)
-        grid2_l.setContentsMargins(0,0,0,0)
-        c3 = OptionCard(self.tr("静态水印"), self.tr("固定位置不移动"))
-        c3.clicked.connect(lambda: self.watermarkFormat.emit("static_watermark"))
-        c3.clicked.connect(lambda: self._on_interactive_dynamic_selected(False))
-        c3.selected = True
-        c3.update_style()
-        grid2_l.addWidget(c3)
-        c3_1 = OptionCard(self.tr("动态水印"), self.tr("移动、缩放、淡入淡出"))
-        c3_1.clicked.connect(lambda: self.watermarkFormat.emit("dynamic_watermark"))
-        c3_1.clicked.connect(lambda: self._on_interactive_dynamic_selected(True))
-        grid2_l.addWidget(c3_1)
-        p1_l.addWidget(grid2)
-        p1_l.addSpacing(12)
-        
-        self.interactive_tracking_container = QWidget()
-        tracking_container_l = QVBoxLayout(self.interactive_tracking_container)
-        tracking_container_l.setContentsMargins(0, 0, 0, 0)
-        tracking_container_l.addWidget(self.create_label_group(self.tr("视频水印跟踪"), self.tr("可选：跟踪指定关键帧水印，极大提高水印检测速度")))
-        self.interactive_tracking_btn = QPushButton(self.tr("🎯 启用跟踪(可选)"))
-        self.interactive_tracking_btn.setObjectName("secondaryBtn")
-        self.interactive_tracking_btn.setCursor(Qt.PointingHandCursor)
-        self.interactive_tracking_btn.clicked.connect(self._open_video_object_detector)
-        self.interactive_tracking_container.setVisible(False)
-        tracking_container_l.addWidget(self.interactive_tracking_btn)
-        p1_l.addWidget(self.interactive_tracking_container)
-
-        # 手工标注 ---
-        p2 = QWidget()
-        p2_l = QVBoxLayout(p2)
-        p2_l.setContentsMargins(0,0,0,0)
-
-        p2_l.addWidget(self.create_label_group(self.tr("导入已有水印标注"), self.tr("若选择 Mask 目录，将跳过手动标注")))
+        manual_layout.addWidget(self.create_label_group(self.tr("导入已有水印标注"), self.tr("若选择 Mask 目录，将跳过手动标注")))
         dir_layout = QHBoxLayout()
         dir_layout.setSpacing(8)
         self.dir_input = QLineEdit()
@@ -343,8 +289,8 @@ class WatermarkDetectSettings(QWidget):
         dir_layout.addWidget(self.dir_input)
         dir_layout.addWidget(self.dir_clear_btn)
         dir_layout.addWidget(self.dir_select_btn)
-        p2_l.addLayout(dir_layout)
-        p2_l.addSpacing(6)
+        manual_layout.addLayout(dir_layout)
+        manual_layout.addSpacing(6)
 
         icon = QLabel("🎨")
         icon.setStyleSheet("font-size: 36px;")
@@ -357,37 +303,72 @@ class WatermarkDetectSettings(QWidget):
         d2.setObjectName("labelDesc")
         setFont(d2, 11)
         d2.setAlignment(Qt.AlignCenter)
-        p2_l.addWidget(icon)
-        p2_l.addWidget(t2)
-        p2_l.addWidget(d2) 
+        manual_layout.addWidget(icon)
+        manual_layout.addWidget(t2)
+        manual_layout.addWidget(d2)
         
         self.primary_btn = QPushButton(self.tr("开始标注水印"))
         self.primary_btn.setObjectName("primaryBtn")
         self.primary_btn.clicked.connect(lambda _: self._process_manual_detect())
         setFont(self.primary_btn, 13, QFont.DemiBold)
-        p2_l.addWidget(self.primary_btn)
-        
-        self.stack.addWidget(p1)
-        self.stack.addWidget(p0)
-        self.stack.addWidget(p2)
+        manual_layout.addWidget(self.primary_btn)
+
+        self.stack.addWidget(ai_page)
+        self.stack.addWidget(manual_page)
 
         self.card_layout.addWidget(self.stack)
         self.main_layout.addWidget(self.card)
 
-        self.btn_sem.clicked.connect(lambda: self._switch_interactive_mode(0))
-        self.btn_spa.clicked.connect(lambda: self._switch_interactive_mode(1))
+        self._select_detection_mode("semantic_detect", update_height=False)
 
-    def _switch_interactive_mode(self, index):
-        self.btn_sem.setChecked(index == 0)
-        self.btn_spa.setChecked(index == 1)
-        self.sub_stack.setCurrentIndex(index)
-        self.interactive_area_container.setVisible(index == 0)
-        self.update_layout_height()
+    def _create_area_button(self):
+        button = QPushButton(self.tr("🖼 水印区域选择"))
+        button.setObjectName("secondaryBtn")
+        button.clicked.connect(
+            lambda _: self._watermark_area_selector(image_boxes_only=True)
+        )
+        return button
+
+    def _create_confidence_widget(self):
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        header = QHBoxLayout()
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(2)
+        title = QLabel(self.tr("水印置信度"))
+        title.setObjectName("labelTitle")
+        setFont(title, 13, QFont.DemiBold)
+        description = QLabel(self.tr("设置检测算法的灵敏度阈值"))
+        description.setObjectName("labelDesc")
+        setFont(description, 11)
+        info_layout.addWidget(title)
+        info_layout.addWidget(description)
+
+        self.conf_val_label = QLabel("0.30")
+        self.conf_val_label.setObjectName("confValBadge")
+        setFont(self.conf_val_label, 12, QFont.Bold)
+        header.addLayout(info_layout)
+        header.addStretch()
+        header.addWidget(self.conf_val_label)
+        layout.addLayout(header)
+
+        self.conf_slider = QSlider(Qt.Horizontal)
+        self.conf_slider.setObjectName("confSlider")
+        self.conf_slider.setRange(0, 100)
+        self.conf_slider.setValue(30)
+        self.conf_slider.setFixedHeight(24)
+        self.conf_slider.setCursor(Qt.PointingHandCursor)
+        self.conf_slider.valueChanged.connect(self._on_conf_changed)
+        layout.addWidget(self.conf_slider)
+        return container
 
     def create_label_group(self, title, desc):
         w = QWidget()
         l = QVBoxLayout(w)
-        l.setContentsMargins(0, 0, 0, 6)
+        l.setContentsMargins(0, 2, 0, 2)
         l.setSpacing(2)
         t = QLabel(title)
         t.setObjectName("labelTitle")
@@ -399,6 +380,30 @@ class WatermarkDetectSettings(QWidget):
             setFont(d, 12)
             l.addWidget(d)
         return w
+
+    def create_section_header(self, title, icon):
+        header = QWidget()
+        header.setStyleSheet("QWidget { background: transparent; }")
+        layout = QHBoxLayout(header)
+        layout.setContentsMargins(0, 4, 0, 0)
+        layout.setSpacing(8)
+
+        icon_label = QLabel(icon)
+        setFont(icon_label, 13)
+        icon_label.setStyleSheet("color: #555555; background: transparent;")
+
+        title_label = QLabel(title)
+        setFont(title_label, 13, QFont.DemiBold)
+        title_label.setStyleSheet("color: #555555; background: transparent;")
+
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setStyleSheet("color: #e2e8f0;")
+
+        layout.addWidget(icon_label)
+        layout.addWidget(title_label)
+        layout.addWidget(divider, 1)
+        return header
     
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -435,7 +440,41 @@ class WatermarkDetectSettings(QWidget):
         self.stack.setCurrentIndex(index)
         for i, btn in enumerate(self.tab_btns):
             btn.setChecked(i == index)
+        if index == 0:
+            self._select_detection_mode(self.current_detection_mode, update_height=False)
+        else:
+            self.watermarkDetectType.emit("manual_detect")
         self.update_layout_height()
+
+    def _select_detection_mode(self, mode, update_height=True):
+        self.current_detection_mode = mode
+        for key, card in self.detection_mode_cards.items():
+            card.selected = key == mode
+            card.update_style()
+
+        self.mode_parameters_stack.setCurrentWidget(self.mode_parameters[mode])
+        self.confidence_container.setVisible(
+            mode in ("semantic_detect", "space_detect")
+        )
+        if mode in ("semantic_detect", "space_detect"):
+            self.watermarkDetectType.emit("ai_interactive_detect")
+            self.watermarkAIInteractiveType.emit(mode)
+        else:
+            self.watermarkDetectType.emit("ai_auto_detect")
+            self.watermarkContent.emit(mode)
+
+        self._update_tracking_visibility(update_height=False)
+        if update_height:
+            self.update_layout_height()
+
+    def _select_watermark_format(self, watermark_format, is_dynamic):
+        self.static_format_card.selected = not is_dynamic
+        self.static_format_card.update_style()
+        self.dynamic_format_card.selected = is_dynamic
+        self.dynamic_format_card.update_style()
+        self.watermarkFormat.emit(watermark_format)
+        self.is_dynamic_watermark = is_dynamic
+        self._update_tracking_visibility()
 
     def apply_styles(self):
         shadow = QGraphicsDropShadowEffect()
@@ -447,6 +486,7 @@ class WatermarkDetectSettings(QWidget):
         self.setStyleSheet("""
             #mainWin { background-color: #F0F2F5; }
             #panelCard { background: white; border-radius: 24px; }
+            #sectionCard { background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; }
             #titleIndicator { background: #2563EB; border-radius: 2px; }
             #h2 { color: #0F172A; }
             
@@ -459,12 +499,23 @@ class WatermarkDetectSettings(QWidget):
             
             #labelTitle { color: #0F172A; }
             #labelDesc { color: #94A3B8; }
+            QFrame[parameterSection="true"] QLabel#labelTitle {
+                color: #0F172A;
+                font-size: 13px;
+            }
             
             OptionCard { background: #FAFBFC; border: 1.5px solid #E2E8F0; border-radius: 12px; }
+            OptionCard:hover { border-color: #93C5FD; }
             OptionCard[selected="true"] { background: #EFF6FF; border-color: #2563EB; }
             #optTitle { color: #0F172A; }
             OptionCard[selected="true"] #optTitle { color: #2563EB; }
             #optDesc { color: #94A3B8; }
+            #recommendBadge {
+                color: #B45309;
+                background-color: #FEF3C7;
+                border-radius: 6px;
+                padding: 2px 5px;
+            }
             
             #inputBox { 
                 padding: 8px; border: 1.5px solid #E2E8F0; border-radius: 12px; 
@@ -477,10 +528,6 @@ class WatermarkDetectSettings(QWidget):
                 padding: 5px 10px; color: #64748B; 
             }
             #chip:hover { background: #2563EB; color: white; }
-            
-            #modeSwitch { background: #F1F5F9; border-radius: 10px; }
-            #modeBtn { border: none; background: transparent; padding: 8px; border-radius: 8px; font-weight: 600; color: #64748B; }
-            #modeBtn:checked { background: white; color: #2563EB; }
             
             #secondaryBtn { 
                 background: #F1F5F9; 
@@ -591,19 +638,11 @@ class WatermarkDetectSettings(QWidget):
         mask_path = watermarkMaskTool.get_mask_path()
         self.manualWatermarktMaskPath.emit(mask_path)
 
-    def _on_auto_dynamic_selected(self, is_dynamic):
-        self.is_dynamic_watermark = is_dynamic
-        self._update_tracking_visibility()
-
-    def _on_interactive_dynamic_selected(self, is_dynamic):
-        self.is_dynamic_watermark = is_dynamic
-        self._update_tracking_visibility()
-
-    def _update_tracking_visibility(self):
+    def _update_tracking_visibility(self, update_height=True):
         should_show = self.is_video_file and self.is_dynamic_watermark
-        self.auto_tracking_container.setVisible(should_show)
-        self.interactive_tracking_container.setVisible(should_show)
-        self.update_layout_height()
+        self.tracking_container.setVisible(should_show)
+        if update_height:
+            self.update_layout_height()
 
     def _open_video_object_detector(self):
         if not self.file_path:
