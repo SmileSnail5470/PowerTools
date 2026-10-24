@@ -144,7 +144,7 @@ class WatermarkTypeCardItem(QFrame):
         self.setToolTip(description)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
-        layout.setSpacing(6)
+        layout.setSpacing(4)
 
         icon_label = QLabel(icon, self)
         icon_label.setFixedSize(20, 20)
@@ -495,6 +495,13 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._update_stacked_height()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_stacked_height()
+
+    def _update_stacked_height(self):
         current_index = self.stacked_widget.currentIndex()
         page_widget = self.stacked_widget.widget(current_index)
         if page_widget:
@@ -910,9 +917,6 @@ class ControlPanelWidget(ScrollArea):
         watermarkRemoveStyleCard = WatermarkRemoveStyleCard(self)
         main_layout.addWidget(watermarkRemoveStyleCard)
 
-        self.restoration_prompt_card = RestorationWatermarkPromptCard(self)
-        main_layout.addWidget(self.restoration_prompt_card)
-
         watermarkDetectionTypeCard = WatermarkDetectionTypeCard(self)
         main_layout.addWidget(watermarkDetectionTypeCard)
         self.output_mask_cards.append(watermarkDetectionTypeCard)
@@ -934,13 +938,8 @@ class ControlPanelWidget(ScrollArea):
     def _on_param_changed(self, key, value):
         if key != "model_name":
             return
-        self.restoration_prompt_card.setVisible(value == "image_restoration")
-        if value == "image_restoration":
-            for card in self.output_mask_cards:
-                card.hide()
-        else:
-            for card in self.output_mask_cards:
-                card.setVisible(True)
+        for card in self.output_mask_cards:
+            card.setVisible(True)
 
 
 
