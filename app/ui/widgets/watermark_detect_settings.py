@@ -1,8 +1,10 @@
 import os
 import sys
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSlider, QFileDialog,
-                             QLabel, QPushButton, QLineEdit, QStackedWidget, 
-                             QFrame, QGraphicsDropShadowEffect)
+import cv2
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QSlider, QFileDialog, QLabel, QPushButton, QLineEdit, 
+    QStackedWidget,  QSpinBox, QFrame, QGraphicsDropShadowEffect
+)
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal
 from PySide6.QtGui import QColor, QFont
 from app.ui.library.qfluentwidgets import setFont, MessageBox, FlowLayout
@@ -11,6 +13,7 @@ from app.ui.common.config import cfg
 from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
 from app.ui.widgets.watermark_manual_select_widget import WatermarkMaskTool
 from app.ui.widgets.video_object_detector_widget import VideoObjectDetectorWidget
+from app.utils.image_io import open_video_capture
 
 
 class OptionCard(QFrame):
@@ -90,6 +93,8 @@ class WatermarkDetectSettings(QWidget):
         self.mask_dir_path = ""
         self.is_video_file = False
         self.is_dynamic_watermark = False
+        self.video_detection_strategy = "frame_by_frame"
+        self.total_video_frames = 1
 
         self.setObjectName("WatermarkDetectSettings")
         self.init_ui()
@@ -176,6 +181,56 @@ class WatermarkDetectSettings(QWidget):
         parameters_layout.setSpacing(6)
         parameters_layout.addWidget(self.create_section_header(self.tr("检测参数"), "⚙️"))
 
+        self.video_format_container = QWidget()
+        video_format_layout = QVBoxLayout(self.video_format_container)
+        video_format_layout.setContentsMargins(0, 0, 0, 0)
+        video_format_layout.setSpacing(6)
+        video_format_layout.addWidget(self.create_label_group(self.tr("水印形式"), desc=None))
+        format_layout = QHBoxLayout()
+        format_layout.setContentsMargins(0, 0, 0, 0)
+        self.static_format_card = OptionCard(self.tr("固定位置水印"), self.tr("水印位置及外观不变"))
+        self.static_format_card.selected = True
+        self.static_format_card.update_style()
+        self.static_format_card.clicked.connect(lambda: self._select_watermark_format("static_watermark", False))
+        self.dynamic_format_card = OptionCard(self.tr("动态变化水印"), self.tr("水印位置或外观变化"))
+        self.dynamic_format_card.clicked.connect(lambda: self._select_watermark_format("dynamic_watermark", True))
+        format_layout.addWidget(self.static_format_card)
+        format_layout.addWidget(self.dynamic_format_card)
+        video_format_layout.addLayout(format_layout)
+
+        self.video_strategy_container = QWidget()
+        video_strategy_layout = QVBoxLayout(self.video_strategy_container)
+        video_strategy_layout.setContentsMargins(0, 0, 0, 0)
+        video_strategy_layout.setSpacing(6)
+        video_strategy_layout.addWidget(self.create_label_group(self.tr("动态水印检测方式"), None))
+        strategy_layout = QHBoxLayout()
+        strategy_layout.setContentsMargins(0, 0, 0, 0)
+        self.frame_by_frame_card = OptionCard(self.tr("逐帧检测"), self.tr("逐帧识别水印"))
+        self.frame_by_frame_card.selected = True
+        self.frame_by_frame_card.update_style()
+        self.frame_by_frame_card.clicked.connect(lambda: self._select_video_detection_strategy("frame_by_frame"))
+        self.tracking_detection_card = OptionCard(self.tr("跟踪检测"), self.tr("跟踪关键帧水印"), icon="🎯", icon_color="#DBEAFE", recommended=True)
+        self.tracking_detection_card.clicked.connect(lambda: self._select_video_detection_strategy("tracking"))
+        strategy_layout.addWidget(self.frame_by_frame_card, 1)
+        strategy_layout.addWidget(self.tracking_detection_card, 1)
+        video_strategy_layout.addLayout(strategy_layout)
+
+        self.anchor_frame_container, self.anchor_frame_spin = (self._create_anchor_frame_control())
+        self.frame_range_container, self.frame_range_start, self.frame_range_end = (self._create_frame_range_controls())
+
+        self.video_options_card = QFrame()
+        self.video_options_card.setObjectName("sectionCard")
+        video_options_layout = QVBoxLayout(self.video_options_card)
+        video_options_layout.setContentsMargins(14, 14, 14, 14)
+        video_options_layout.setSpacing(8)
+        video_options_layout.addWidget(self.create_section_header(self.tr("视频检测设置"), "🎞️"))
+        video_options_layout.addWidget(self.video_format_container)
+        video_options_layout.addWidget(self.anchor_frame_container)
+        video_options_layout.addWidget(self.frame_range_container)
+        video_options_layout.addWidget(self.video_strategy_container)
+        self.video_options_card.setVisible(False)
+        ai_layout.insertWidget(0, self.video_options_card)
+
         self.mode_parameters_stack = QStackedWidget()
         self.mode_parameters = {}
         for mode, _, _, _, _ in detection_modes:
@@ -220,41 +275,18 @@ class WatermarkDetectSettings(QWidget):
                 page_layout.addWidget(self._create_area_button())
             self.mode_parameters_stack.addWidget(page)
             self.mode_parameters[mode] = page
-        parameters_layout.addWidget(self.mode_parameters_stack)
-
         self.confidence_container = self._create_confidence_widget()
-        parameters_layout.addWidget(self.confidence_container)
-
-        parameters_layout.addWidget(self.create_label_group(
-            self.tr("水印形式"), self.tr("选择水印在时间轴上的状态")
-        ))
-        format_layout = QHBoxLayout()
-        format_layout.setContentsMargins(0, 0, 0, 0)
-        self.static_format_card = OptionCard(
-            self.tr("静态水印"), self.tr("固定位置不移动")
-        )
-        self.static_format_card.selected = True
-        self.static_format_card.update_style()
-        self.static_format_card.clicked.connect(
-            lambda: self._select_watermark_format("static_watermark", False)
-        )
-        self.dynamic_format_card = OptionCard(
-            self.tr("动态水印"), self.tr("移动、缩放、淡入淡出")
-        )
-        self.dynamic_format_card.clicked.connect(
-            lambda: self._select_watermark_format("dynamic_watermark", True)
-        )
-        format_layout.addWidget(self.static_format_card)
-        format_layout.addWidget(self.dynamic_format_card)
-        parameters_layout.addLayout(format_layout)
+        self.detection_settings_container = QWidget()
+        detection_settings_layout = QVBoxLayout(self.detection_settings_container)
+        detection_settings_layout.setContentsMargins(0, 0, 0, 0)
+        detection_settings_layout.setSpacing(6)
+        detection_settings_layout.addWidget(self.mode_parameters_stack)
+        detection_settings_layout.addWidget(self.confidence_container)
+        parameters_layout.addWidget(self.detection_settings_container)
 
         self.tracking_container = QWidget()
         tracking_layout = QVBoxLayout(self.tracking_container)
         tracking_layout.setContentsMargins(0, 0, 0, 0)
-        tracking_layout.addWidget(self.create_label_group(
-            self.tr("视频水印跟踪"),
-            self.tr("可选：跟踪指定关键帧水印，极大提高水印检测速度")
-        ))
         self.tracking_btn = QPushButton(self.tr("🎯 启用跟踪(可选)"))
         self.tracking_btn.setObjectName("secondaryBtn")
         self.tracking_btn.setCursor(Qt.PointingHandCursor)
@@ -262,6 +294,8 @@ class WatermarkDetectSettings(QWidget):
         tracking_layout.addWidget(self.tracking_btn)
         self.tracking_container.setVisible(False)
         parameters_layout.addWidget(self.tracking_container)
+        self.video_format_container.setVisible(False)
+        self.video_strategy_container.setVisible(False)
         ai_layout.addWidget(self.parameters_card)
 
         manual_page = QWidget()
@@ -324,9 +358,7 @@ class WatermarkDetectSettings(QWidget):
     def _create_area_button(self):
         button = QPushButton(self.tr("🖼 水印区域选择"))
         button.setObjectName("secondaryBtn")
-        button.clicked.connect(
-            lambda _: self._watermark_area_selector(image_boxes_only=True)
-        )
+        button.clicked.connect(lambda _: self._watermark_area_selector(image_boxes_only=True))
         return button
 
     def _create_confidence_widget(self):
@@ -364,6 +396,49 @@ class WatermarkDetectSettings(QWidget):
         self.conf_slider.valueChanged.connect(self._on_conf_changed)
         layout.addWidget(self.conf_slider)
         return container
+
+    def _create_anchor_frame_control(self):
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        layout.addWidget(self.create_label_group(self.tr("起始关键帧"), None))
+
+        frame_spin = QSpinBox()
+        frame_spin.setObjectName("anchorFrameInput")
+        frame_spin.setRange(1, self.total_video_frames)
+        frame_spin.setValue(1)
+        frame_spin.setFixedHeight(30)
+        layout.addWidget(frame_spin)
+        return container, frame_spin
+
+    def _create_frame_range_controls(self):
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        layout.addWidget(self.create_label_group(self.tr("处理帧范围"), None))
+
+        range_layout = QHBoxLayout()
+        range_layout.setContentsMargins(0, 0, 0, 0)
+        range_layout.setSpacing(8)
+        range_start = QSpinBox()
+        range_start.setObjectName("frameRangeInput")
+        range_start.setRange(1, self.total_video_frames)
+        range_start.setValue(1)
+        range_start.setFixedHeight(30)
+        range_end = QSpinBox()
+        range_end.setObjectName("frameRangeInput")
+        range_end.setRange(1, self.total_video_frames)
+        range_end.setValue(self.total_video_frames)
+        range_end.setFixedHeight(30)
+        range_layout.addWidget(range_start, 1)
+        range_label = QLabel(self.tr("至"))
+        range_label.setObjectName("inlineLabel")
+        range_layout.addWidget(range_label, 0, Qt.AlignCenter)
+        range_layout.addWidget(range_end, 1)
+        layout.addLayout(range_layout)
+        return container, range_start, range_end
 
     def create_label_group(self, title, desc):
         w = QWidget()
@@ -476,6 +551,14 @@ class WatermarkDetectSettings(QWidget):
         self.is_dynamic_watermark = is_dynamic
         self._update_tracking_visibility()
 
+    def _select_video_detection_strategy(self, strategy):
+        self.video_detection_strategy = strategy
+        self.frame_by_frame_card.selected = strategy == "frame_by_frame"
+        self.frame_by_frame_card.update_style()
+        self.tracking_detection_card.selected = strategy == "tracking"
+        self.tracking_detection_card.update_style()
+        self._update_tracking_visibility()
+
     def apply_styles(self):
         shadow = QGraphicsDropShadowEffect()
         shadow.setBlurRadius(25)
@@ -502,6 +585,58 @@ class WatermarkDetectSettings(QWidget):
             QFrame[parameterSection="true"] QLabel#labelTitle {
                 color: #0F172A;
                 font-size: 13px;
+            }
+
+            QSpinBox#anchorFrameInput, QSpinBox#frameRangeInput {
+                padding: 0 18px 0 10px;
+                border-radius: 10px;
+                color: #1e293b;
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                font-size: 12px;
+                selection-background-color: #6366f1;
+            }
+            QSpinBox#anchorFrameInput:hover, QSpinBox#frameRangeInput:hover {
+                background: #fff;
+                border-color: #cbd5e1;
+            }
+            QSpinBox#anchorFrameInput:focus, QSpinBox#frameRangeInput:focus {
+                background: #fff;
+                border-color: #818cf8;
+            }
+            QSpinBox#anchorFrameInput::up-button,
+            QSpinBox#anchorFrameInput::down-button,
+            QSpinBox#frameRangeInput::up-button,
+            QSpinBox#frameRangeInput::down-button {
+                subcontrol-origin: border;
+                width: 13px;
+                height: 12px;
+                border: none;
+                background: transparent;
+            }
+            QSpinBox#anchorFrameInput::up-button,
+            QSpinBox#frameRangeInput::up-button {
+                subcontrol-position: top right;
+                top: 2px;
+                right: 2px;
+            }
+            QSpinBox#anchorFrameInput::down-button,
+            QSpinBox#frameRangeInput::down-button {
+                subcontrol-position: bottom right;
+                bottom: 2px;
+                right: 2px;
+            }
+            QSpinBox#anchorFrameInput::up-arrow,
+            QSpinBox#frameRangeInput::up-arrow {
+                image: url(:/qfluentwidgets/images/icons/CareUpSolid_black.svg);
+                width: 7px;
+                height: 7px;
+            }
+            QSpinBox#anchorFrameInput::down-arrow,
+            QSpinBox#frameRangeInput::down-arrow {
+                image: url(:/qfluentwidgets/images/icons/CareDownSolid_black.svg);
+                width: 7px;
+                height: 7px;
             }
             
             OptionCard { background: #FAFBFC; border: 1.5px solid #E2E8F0; border-radius: 12px; }
@@ -608,13 +743,42 @@ class WatermarkDetectSettings(QWidget):
 
     def set_file_path(self, file_path):
         if not file_path:
+            self.file_path = None
+            self.is_video_file = False
+            self._update_tracking_visibility()
             return
         if os.path.isfile(file_path):
             self.file_path = file_path
         else:
             self.file_path = os.path.join(file_path, os.listdir(file_path)[0])
         self.is_video_file = get_file_type(self.file_path) == "video"
+        if self.is_video_file:
+            self._update_video_frame_count()
         self._update_tracking_visibility()
+
+    def _update_video_frame_count(self):
+        capture = open_video_capture(self.file_path)
+        if not capture.isOpened():
+            capture.release()
+            self.total_video_frames = 1
+            MessageBox(
+                title=self.tr("无法读取视频"),
+                content=self.tr("无法获取视频帧数，请检查文件格式或文件是否损坏。"),
+                parent=self.window(),
+            ).exec()
+        else:
+            reported_frames = capture.get(cv2.CAP_PROP_FRAME_COUNT)
+            capture.release()
+            self.total_video_frames = (
+                max(1, int(reported_frames)) if reported_frames > 0 else 1
+            )
+
+        self.anchor_frame_spin.setRange(1, self.total_video_frames)
+        self.anchor_frame_spin.setValue(1)
+        self.frame_range_start.setRange(1, self.total_video_frames)
+        self.frame_range_start.setValue(1)
+        self.frame_range_end.setRange(1, self.total_video_frames)
+        self.frame_range_end.setValue(self.total_video_frames)
 
     def _watermark_area_selector(self, single_area_only=False, image_boxes_only=False):
         if not self.file_path:
@@ -639,8 +803,18 @@ class WatermarkDetectSettings(QWidget):
         self.manualWatermarktMaskPath.emit(mask_path)
 
     def _update_tracking_visibility(self, update_height=True):
-        should_show = self.is_video_file and self.is_dynamic_watermark
-        self.tracking_container.setVisible(should_show)
+        is_fixed = self.is_video_file and not self.is_dynamic_watermark
+        is_dynamic = self.is_video_file and self.is_dynamic_watermark
+        is_frame_by_frame = is_dynamic and self.video_detection_strategy == "frame_by_frame"
+        is_tracking = is_dynamic and self.video_detection_strategy == "tracking"
+
+        self.video_options_card.setVisible(self.is_video_file)
+        self.video_format_container.setVisible(self.is_video_file)
+        self.video_strategy_container.setVisible(is_dynamic)
+        self.anchor_frame_container.setVisible(is_fixed)
+        self.frame_range_container.setVisible(is_fixed or is_frame_by_frame)
+        self.detection_settings_container.setVisible(not self.is_video_file or is_fixed or is_frame_by_frame)
+        self.tracking_container.setVisible(is_tracking)
         if update_height:
             self.update_layout_height()
 
