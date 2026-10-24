@@ -16,6 +16,20 @@ from app.ui.widgets.video_object_detector_widget import VideoObjectDetectorWidge
 from app.utils.image_io import open_video_capture
 
 
+class AutoSizeStackedWidget(QStackedWidget):
+    def sizeHint(self):
+        w = self.currentWidget()
+        if w is not None:
+            return w.sizeHint()
+        return super().sizeHint()
+
+    def minimumSizeHint(self):
+        w = self.currentWidget()
+        if w is not None:
+            return w.minimumSizeHint()
+        return super().minimumSizeHint()
+
+
 class OptionCard(QFrame):
     clicked = Signal()
 
@@ -239,7 +253,7 @@ class WatermarkDetectSettings(QWidget):
         self.video_options_card.setVisible(False)
         ai_layout.insertWidget(0, self.video_options_card)
 
-        self.mode_parameters_stack = QStackedWidget()
+        self.mode_parameters_stack = AutoSizeStackedWidget()
         self.mode_parameters = {}
         for mode, _, _, _, _ in detection_modes:
             page = QWidget()
@@ -479,34 +493,108 @@ class WatermarkDetectSettings(QWidget):
         layout.addWidget(divider, 1)
         return header
     
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not getattr(self, "_initial_height_set", False):
+            self._initial_height_set = True
+            target_height = self._calc_card_target_height()
+            self.card.setMaximumHeight(target_height)
+            self.card.setMinimumHeight(0)
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
 
-    def get_current_page_height(self, index: int):
-        widget = self.stack.widget(index)
+    def _calc_visible_widget_height(self, widget: QWidget) -> int:
+        if not widget.isVisible():
+            return 0
         layout = widget.layout()
-        if layout:
-            width = self.card.width() if self.card.width() > 0 else widget.width()
-            if width > 0:
-                return layout.heightForWidth(width) if layout.heightForWidth(width) > 0 else widget.sizeHint().height()
-        widget.adjustSize()
-        return widget.sizeHint().height()
-    
+        if layout is None:
+            return widget.sizeHint().height()
+        m = layout.contentsMargins()
+        v_margins = m.top() + m.bottom()
+        h_margins = m.left() + m.right()
+
+        if isinstance(widget, QStackedWidget):
+            current = widget.currentWidget()
+            if current is None:
+                return 0
+            return self._calc_visible_widget_height(current) + v_margins
+
+        item_heights = []
+        item_widths = []
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item is None:
+                continue
+            w = item.widget()
+            if w is not None:
+                if not w.isVisible():
+                    continue
+                item_heights.append(self._calc_visible_widget_height(w))
+                item_widths.append(w.sizeHint().width() + h_margins)
+            elif item.layout() is not None:
+                sub_h = self._calc_visible_layout_height(item.layout())
+                if sub_h > 0:
+                    item_heights.append(sub_h)
+            elif item.spacerItem() is not None:
+                sp = item.spacerItem()
+                item_heights.append(sp.sizeHint().height())
+
+        if not item_heights:
+            return v_margins
+
+        if isinstance(layout, QHBoxLayout):
+            total = max(item_heights) + v_margins
+        else:
+            spacing_total = layout.spacing() * max(0, len(item_heights) - 1)
+            total = sum(item_heights) + spacing_total + v_margins
+        return total
+
+    def _calc_visible_layout_height(self, layout) -> int:
+        m = layout.contentsMargins()
+        v_margins = m.top() + m.bottom()
+        item_heights = []
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item is None:
+                continue
+            w = item.widget()
+            if w is not None:
+                if not w.isVisible():
+                    continue
+                item_heights.append(self._calc_visible_widget_height(w))
+            elif item.layout() is not None:
+                h = self._calc_visible_layout_height(item.layout())
+                if h > 0:
+                    item_heights.append(h)
+            elif item.spacerItem() is not None:
+                item_heights.append(item.spacerItem().sizeHint().height())
+        if not item_heights:
+            return v_margins
+        if isinstance(layout, QHBoxLayout):
+            return max(item_heights) + v_margins
+        spacing_total = layout.spacing() * max(0, len(item_heights) - 1)
+        return sum(item_heights) + spacing_total + v_margins
+
+    def _calc_card_target_height(self) -> int:
+        tabs_h = self.tabs_container.sizeHint().height()
+        current_page = self.stack.widget(self.current_tab_index)
+        page_h = self._calc_visible_widget_height(current_page)
+        extra = 8
+        return tabs_h + extra + page_h
+
     def animate_height_change(self, target_height: int):
         start_height = self.card.height()
-        self.card.setMinimumWidth(self.card.width())
         self.height_anim = QPropertyAnimation(self.card, b"maximumHeight")
         self.height_anim.setDuration(250)
         self.height_anim.setStartValue(start_height)
         self.height_anim.setEndValue(target_height)
         self.height_anim.setEasingCurve(QEasingCurve.OutCubic)
-        self.height_anim.finished.connect(lambda: self.card.setMinimumWidth(0))
+        self.height_anim.finished.connect(lambda: self.card.setMinimumHeight(0))
         self.height_anim.start()
 
     def update_layout_height(self):
-        content_height = self.get_current_page_height(self.current_tab_index)
-        extra_height = 82  # tabs + spacing + margins
-        target_height = content_height + extra_height
+        target_height = self._calc_card_target_height()
         self.animate_height_change(target_height)
 
     def switch_tab(self, index):
@@ -527,9 +615,8 @@ class WatermarkDetectSettings(QWidget):
             card.update_style()
 
         self.mode_parameters_stack.setCurrentWidget(self.mode_parameters[mode])
-        self.confidence_container.setVisible(
-            mode in ("semantic_detect", "space_detect")
-        )
+        self.mode_parameters_stack.updateGeometry()
+        self.confidence_container.setVisible(mode in ("semantic_detect", "space_detect"))
         if mode in ("semantic_detect", "space_detect"):
             self.watermarkDetectType.emit("ai_interactive_detect")
             self.watermarkAIInteractiveType.emit(mode)
