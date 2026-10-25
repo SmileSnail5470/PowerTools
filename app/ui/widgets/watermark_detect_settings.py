@@ -1009,11 +1009,20 @@ class WatermarkDetectSettings(QWidget):
     def _watermark_area_selector(self, single_area_only=False, image_boxes_only=False):
         if not self.file_path:
             return
-        area_selector = AreaSelectorDialog(file_path=self.file_path, single_area_only=single_area_only, parent=self)
+        allow_negative_boxes = not single_area_only
+        area_selector = AreaSelectorDialog(
+            file_path=self.file_path,
+            single_area_only=single_area_only,
+            parent=self,
+            allow_negative_boxes=allow_negative_boxes,
+        )
         area_selector.exec()
         boxes = []
         for item in area_selector.get_results():
-            boxes.append((item["x"], item["y"], item["x"] + item["w"], item["y"] + item["h"]))
+            box = (item["x"], item["y"], item["x"] + item["w"], item["y"] + item["h"])
+            if allow_negative_boxes:
+                box += (item.get("type", "positive"),)
+            boxes.append(box)
         if not image_boxes_only:
             self.watermarkBoxes.emit(boxes)
         else:

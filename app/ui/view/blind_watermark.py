@@ -151,6 +151,7 @@ class ProcessRegionCard(HeaderCardWidget):
             single_area_only=True,
             parent=self.window(),
         )
+        dialog.current_box_type = "negative"  # 保留区域
         dialog.exec()
         boxes = dialog.get_results()
         region = boxes[0] if boxes else None
