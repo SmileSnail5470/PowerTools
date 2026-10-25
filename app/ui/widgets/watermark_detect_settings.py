@@ -2,18 +2,121 @@ import os
 import sys
 import cv2
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QSlider, QFileDialog, QLabel, QPushButton, QLineEdit, 
-    QStackedWidget,  QSpinBox, QFrame, QGraphicsDropShadowEffect
+    QWidget, QVBoxLayout, QHBoxLayout, QSlider, QFileDialog, QLabel, QPushButton, QLineEdit,
+    QStackedWidget, QSpinBox, QFrame, QGraphicsDropShadowEffect, QDialog
 )
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal
-from PySide6.QtGui import QColor, QFont
-from app.ui.library.qfluentwidgets import setFont, MessageBox, FlowLayout
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal, QTimer, QSize
+from PySide6.QtGui import QColor, QFont, QImage
+from app.ui.library.qfluentwidgets import setFont, MessageBox, FlowLayout, FluentIcon
 from app.ui.common.utils import get_file_type
 from app.ui.common.config import cfg
 from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
 from app.ui.widgets.watermark_manual_select_widget import WatermarkMaskTool
-from app.ui.widgets.video_object_detector_widget import VideoObjectDetectorWidget
+from app.ui.widgets.video_object_detector_widget import VideoFrameCanvas, VideoObjectDetectorWidget
 from app.utils.image_io import open_video_capture
+
+
+class WatermarkVideoPreviewDialog(QDialog):
+    def __init__(self, file_path, total_frames, initial_frame=1, parent=None):
+        super().__init__(parent)
+        self.capture = open_video_capture(file_path)
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self._advance_frame)
+        self.fps = self.capture.get(cv2.CAP_PROP_FPS) if self.capture.isOpened() else 0
+        if not self.fps or self.fps <= 0:
+            self.fps = 30
+
+        self.setWindowTitle(self.tr("预览视频"))
+        self.resize(900, 600)
+
+        layout = QVBoxLayout(self)
+        self.canvas = VideoFrameCanvas(self, need_hover_hint=False)
+        self.canvas.set_view_mode("original")
+        self.canvas.setMinimumSize(480, 320)
+        layout.addWidget(self.canvas, 1)
+
+        controls = QHBoxLayout()
+        self.play_button = QPushButton(self.tr("播放"))
+        self.play_button.setObjectName("secondaryBtn")
+        self.play_button.setFixedHeight(34)
+        self.play_button.clicked.connect(self._toggle_playback)
+        controls.addWidget(self.play_button)
+
+        self.frame_slider = QSlider(Qt.Horizontal)
+        self.frame_slider.setRange(1, max(1, total_frames))
+        self.frame_slider.setValue(min(max(1, initial_frame), max(1, total_frames)))
+        self.frame_slider.valueChanged.connect(self._show_frame)
+        controls.addWidget(self.frame_slider, 1)
+
+        self.frame_label = QLabel()
+        controls.addWidget(self.frame_label)
+        layout.addLayout(controls)
+
+        self._show_frame(self.frame_slider.value())
+
+    def _show_frame(self, frame_number):
+        if not self.capture.isOpened():
+            return
+        self.capture.set(cv2.CAP_PROP_POS_FRAMES, frame_number - 1)
+        success, frame = self.capture.read()
+        if success:
+            self._display_frame(frame)
+        else:
+            self._show_frame_error()
+        self.frame_label.setText(self.tr("{0} / {1} 帧").format(frame_number, self.frame_slider.maximum()))
+
+    def _display_frame(self, frame):
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        height, width, channels = rgb_frame.shape
+        image = QImage(
+            rgb_frame.data,
+            width,
+            height,
+            channels * width,
+            QImage.Format_RGB888,
+        ).copy()
+        self.canvas.set_frame(image, show_detection_overlay=False, show_prompts=False)
+
+    def _show_frame_error(self):
+        self.canvas.set_frame(
+            QImage(),
+            placeholder=self.tr("无法读取视频帧"),
+            show_detection_overlay=False,
+            show_prompts=False,
+        )
+
+    def _toggle_playback(self):
+        if self.timer.isActive():
+            self.timer.stop()
+            self.play_button.setText(self.tr("播放"))
+            return
+        if self.frame_slider.value() >= self.frame_slider.maximum():
+            self.frame_slider.setValue(1)
+        self.timer.start(max(1, round(1000 / self.fps)))
+        self.play_button.setText(self.tr("暂停"))
+
+    def _advance_frame(self):
+        if self.frame_slider.value() >= self.frame_slider.maximum():
+            self.timer.stop()
+            self.play_button.setText(self.tr("播放"))
+            return
+        frame_number = self.frame_slider.value() + 1
+        success, frame = self.capture.read()
+        if not success:
+            self.timer.stop()
+            self.play_button.setText(self.tr("播放"))
+            self._show_frame_error()
+            return
+        previous_block_state = self.frame_slider.blockSignals(True)
+        self.frame_slider.setValue(frame_number)
+        self.frame_slider.blockSignals(previous_block_state)
+        self._display_frame(frame)
+        self.frame_label.setText(self.tr("{0} / {1} 帧").format(frame_number, self.frame_slider.maximum()))
+
+    def closeEvent(self, event):
+        self.timer.stop()
+        self.capture.release()
+        super().closeEvent(event)
 
 
 class AutoSizeStackedWidget(QStackedWidget):
@@ -422,7 +525,21 @@ class WatermarkDetectSettings(QWidget):
         frame_spin.setRange(1, self.total_video_frames)
         frame_spin.setValue(1)
         frame_spin.setFixedHeight(30)
-        layout.addWidget(frame_spin)
+        frame_layout = QHBoxLayout()
+        frame_layout.setContentsMargins(0, 0, 0, 0)
+        frame_layout.setSpacing(8)
+        frame_layout.addWidget(frame_spin, 1)
+        preview_button = QPushButton()
+        preview_button.setObjectName("previewBtn")
+        preview_button.setIcon(FluentIcon.VIDEO.icon())
+        preview_button.setIconSize(QSize(16, 16))
+        preview_button.setFixedSize(36, 30)
+        preview_button.setToolTip(self.tr("预览视频"))
+        preview_button.setAccessibleName(self.tr("预览视频"))
+        preview_button.setCursor(Qt.PointingHandCursor)
+        preview_button.clicked.connect(lambda _checked=False: self._open_video_preview(frame_spin.value()))
+        frame_layout.addWidget(preview_button)
+        layout.addLayout(frame_layout)
         return container, frame_spin
 
     def _create_frame_range_controls(self):
@@ -450,6 +567,16 @@ class WatermarkDetectSettings(QWidget):
         range_label.setObjectName("inlineLabel")
         range_layout.addWidget(range_label, 0, Qt.AlignCenter)
         range_layout.addWidget(range_end, 1)
+        preview_button = QPushButton()
+        preview_button.setObjectName("previewBtn")
+        preview_button.setIcon(FluentIcon.VIDEO.icon())
+        preview_button.setIconSize(QSize(16, 16))
+        preview_button.setFixedSize(36, 30)
+        preview_button.setToolTip(self.tr("预览视频"))
+        preview_button.setAccessibleName(self.tr("预览视频"))
+        preview_button.setCursor(Qt.PointingHandCursor)
+        preview_button.clicked.connect(lambda _checked=False: self._open_video_preview(range_start.value()))
+        range_layout.addWidget(preview_button)
         layout.addLayout(range_layout)
         return container, range_start, range_end
 
@@ -767,6 +894,19 @@ class WatermarkDetectSettings(QWidget):
                 padding-top: 14px;
                 padding-bottom: 10px;
             }
+            #previewBtn {
+                background: #F1F5F9;
+                border: 1px solid #E2E8F0;
+                border-radius: 10px;
+                padding: 0;
+            }
+            #previewBtn:hover {
+                background: #E2E8F0;
+                border-color: #CBD5E1;
+            }
+            #previewBtn:pressed {
+                background: #CBD5E1;
+            }
             #primaryBtn { 
                 background: #2563EB; color: white; border: none; border-radius: 14px; 
                 padding: 16px; margin-top: 10px;
@@ -917,6 +1057,25 @@ class WatermarkDetectSettings(QWidget):
             ).exec()
             return
         dialog = VideoObjectDetectorWidget(file_path=self.file_path, parent=self.window())
+        dialog.exec()
+
+    def _open_video_preview(self, initial_frame):
+        if not self.file_path:
+            return
+        dialog = WatermarkVideoPreviewDialog(
+            file_path=self.file_path,
+            total_frames=self.total_video_frames,
+            initial_frame=initial_frame,
+            parent=self.window(),
+        )
+        if not dialog.capture.isOpened():
+            dialog.capture.release()
+            MessageBox(
+                title=self.tr("无法读取视频"),
+                content=self.tr("无法打开视频预览，请检查文件格式或文件是否损坏。"),
+                parent=self.window(),
+            ).exec()
+            return
         dialog.exec()
 
     def _on_tracking_data_ready(self, data):

@@ -19,10 +19,11 @@ class VideoFrameCanvas(QFrame):
     promptAdded = Signal(tuple)
     promptStateChanged = Signal(bool, bool)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, need_hover_hint: bool = True):
         super().__init__(parent)
         self.setObjectName("videoCanvas")
         self.setMouseTracking(True)
+        self.need_hover_hint = need_hover_hint
         self._frame = QImage()
         self._placeholder = self.tr("打开视频以预览画面")
         self._view_mode = "overlay"
@@ -128,7 +129,7 @@ class VideoFrameCanvas(QFrame):
         event.accept()
 
     def _paint_hover_hint(self, painter: QPainter):
-        if self._hint_opacity <= 0:
+        if self._hint_opacity <= 0 or not self.need_hover_hint:
             return
         hint_width = max(0, min(400, self.width() - 32))
         hint_rect = QRectF(self.rect().left() + 16, self.rect().bottom() - 48, hint_width, 32)
