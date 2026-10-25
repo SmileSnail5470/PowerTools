@@ -372,7 +372,7 @@ class VideoObjectDetectorWidget(QDialog):
 
         self.setWindowTitle(self.tr("视频分割与跟踪工作台"))
         self.setObjectName("videoObjectDetector")
-        self.setFixedSize(1400, 800)
+        self.setFixedSize(1400, 840)
 
         self._build_ui()
         backend_type, hardware_name = global_backend_info_cache.get()
@@ -879,6 +879,48 @@ class VideoObjectDetectorWidget(QDialog):
         range_row.addWidget(range_end, 1)
         layout.addLayout(range_row)
 
+    def _add_detection_sensitivity_setting(self, layout: QVBoxLayout):
+        container = QWidget()
+        sensitivity_layout = QVBoxLayout(container)
+        sensitivity_layout.setContentsMargins(0, 0, 0, 0)
+        sensitivity_layout.setSpacing(6)
+
+        header = QVBoxLayout()
+        header.setSpacing(0)
+        title = QLabel(self.tr("检测灵敏度"))
+        title.setObjectName("sensitivityTitle")
+        setFont(title, 12, QFont.DemiBold)
+        description = QLabel(self.tr("越高越严格，可能漏检；越低越宽松，可能误检"))
+        description.setObjectName("sensitivityDescription")
+        setFont(description, 10)
+        header.addWidget(title)
+
+        self.sensitivity_value_label = QLabel("0.30")
+        self.sensitivity_value_label.setObjectName("sensitivityValue")
+        setFont(self.sensitivity_value_label, 11, QFont.Bold)
+        description_row = QHBoxLayout()
+        description_row.addWidget(description)
+        description_row.addStretch()
+        description_row.addWidget(self.sensitivity_value_label, 0, Qt.AlignVCenter)
+        header.addLayout(description_row)
+        sensitivity_layout.addLayout(header)
+        sensitivity_layout.addSpacing(2)
+
+        self.sensitivity_slider = QSlider(Qt.Horizontal)
+        self.sensitivity_slider.setObjectName("sensitivitySlider")
+        self.sensitivity_slider.setRange(0, 100)
+        self.sensitivity_slider.setValue(30)
+        self.sensitivity_slider.setFixedHeight(24)
+        self.sensitivity_slider.setCursor(Qt.PointingHandCursor)
+        self.detection_sensitivity = self.sensitivity_slider.value() / 100.0
+        self.sensitivity_slider.valueChanged.connect(self._on_detection_sensitivity_changed)
+        sensitivity_layout.addWidget(self.sensitivity_slider)
+        layout.addWidget(container)
+
+    def _on_detection_sensitivity_changed(self, value: int):
+        self.detection_sensitivity = value / 100.0
+        self.sensitivity_value_label.setText(f"{value / 100.0:.2f}")
+
     def _build_settings_panel(self):
         panel = QWidget()
         panel.setObjectName("leftPanel")
@@ -905,7 +947,7 @@ class VideoObjectDetectorWidget(QDialog):
         body = QWidget()
         body.setObjectName("panelBody")
         layout = QVBoxLayout(body)
-        layout.setContentsMargins(16, 14, 16, 18)
+        layout.setContentsMargins(16, 10, 16, 10)
         layout.setSpacing(8)
         panel_layout.addWidget(body, 1)
 
@@ -983,6 +1025,7 @@ class VideoObjectDetectorWidget(QDialog):
         self._add_anchor_frame_setting(sam_layout, "anchor_spin", "anchor_button", "anchorFrameInput")
         self._add_tracking_direction_setting(sam_layout, "direction_buttons")
         self._add_frame_range_setting(sam_layout, "range_start", "range_end")
+        self._add_detection_sensitivity_setting(sam_layout)
         sam_layout.addSpacing(6)
         sam_layout.addWidget(self._build_save_path_section("save_path_input"))
 
@@ -1000,7 +1043,7 @@ class VideoObjectDetectorWidget(QDialog):
         edge_layout = QVBoxLayout(self.edgetam_params)
         edge_layout.setContentsMargins(0, 0, 0, 0)
         edge_layout.setSpacing(8)
-        edge_layout.addWidget(self._pill_label(self.tr("ⓘ EdgeTAM 需要先提供可靠初始掩码，不通过文本搜索目标。"), "warningBox", wrap=False))
+        edge_layout.addWidget(self._pill_label(self.tr("ⓘ 快速检测需要先提供可靠初始掩码，不通过文本搜索目标。"), "warningBox", wrap=False))
         self._add_anchor_frame_setting(edge_layout, "edge_anchor_spin", "edge_anchor_button", "anchorFrameInput")
         self._add_tracking_direction_setting(edge_layout, "edge_direction_buttons")
         self._add_frame_range_setting(edge_layout, "edge_range_start", "edge_range_end")
@@ -1930,6 +1973,32 @@ VIDEO_OBJECT_DETECTOR_STYLESHEET = """
             QLineEdit#textInput:focus, QSpinBox#textInput:focus, QComboBox#textInput:focus {
                 background: #fff;
                 border: 1px solid #818cf8;
+            }
+            #sensitivityTitle { color: #1e293b; }
+            #sensitivityDescription { color: #94a3b8; }
+            #sensitivityValue {
+                color: #4f46e5;
+                background: rgba(238, 242, 255, 0.9);
+                border: 1px solid rgba(165, 180, 252, 0.45);
+                border-radius: 8px;
+                padding: 2px 2px;
+            }
+            #sensitivitySlider::groove:horizontal {
+                border-radius: 3px;
+                height: 6px;
+                background: #e2e8f0;
+            }
+            #sensitivitySlider::handle:horizontal {
+                background: #4f46e5;
+                border: none;
+                width: 16px;
+                height: 16px;
+                margin: -5px 0;
+                border-radius: 8px;
+            }
+            #sensitivitySlider::sub-page:horizontal {
+                background: #4f46e5;
+                border-radius: 3px;
             }
             QSpinBox#anchorFrameInput, QSpinBox#frameRangeInput {
                 padding: 0 18px 0 10px;
