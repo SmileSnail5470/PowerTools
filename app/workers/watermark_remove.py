@@ -22,6 +22,55 @@ from app.algorithms.visible_watermark_removal.params_config import (
     VideoMaskConfig,
     VideoWatermarkRemoveConfig,
 )
+from dataclasses import dataclass, field
+
+
+
+@dataclass
+class _IOParams:
+    input_path: str = ""
+    output_path: str = ""
+    output_format: str = "保持原格式"
+
+
+@dataclass
+class _DetectParams:
+    watermark_detect_type: str = "ai_detect"
+    video_watermark_format: str = "static_watermark"
+    video_watermark_ai_detect_strategy: str = "tracking"
+    video_watermark_ai_detect_frame_range: list = [1, 2**31 - 1]
+    video_watermark_ai_detect_anchor_frame: int = 1
+    manual_watermark_mask_path: str = ""
+    watermark_ai_detect_method: str = "semantic_detect"
+    watermark_ai_detect_prompt: str = ""
+    watermark_ai_detect_pos_boxes: list = field(default_factory=list)
+    watermark_ai_detect_neg_boxes: list = field(default_factory=list)
+    watermark_ai_detect_confidence: float = 0.3
+    video_watermark_tracking_data: dict = field(default_factory=lambda: {
+        "keyframes": [], 
+        "end_frame": None, 
+        "reverse_tracking_frames": 8
+    })
+
+
+@dataclass
+class _ModelParams:
+    model_name: str = ""
+    mask_dilate: int = 2
+    # restoration 模型参数
+    restoration_watermark_type: str = "general"
+    restoration_prompt: str = ""
+
+
+@dataclass
+class WatermarkRemoveUIParams:
+    io: _IOParams = field(default_factory=_IOParams)
+    detect: _DetectParams = field(default_factory=_DetectParams)
+    model: _ModelParams = field(default_factory=_ModelParams)
+    _feature_name_: str = ""
+
+    def validate(self) -> str:
+        pass
 
 
 

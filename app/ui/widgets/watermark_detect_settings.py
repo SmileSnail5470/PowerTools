@@ -186,20 +186,19 @@ class OptionCard(QFrame):
             event.accept()
 
 class WatermarkDetectSettings(QWidget):
-    watermarkDetectType = Signal(str)         # AI检测/人工检测
-    watermarkFormat = Signal(str)             # 静态水印/动态水印
-    manualWatermarktMaskPath = Signal(str)    # 手动标注 Mask 路径
-    maskDirectoryChanged = Signal(str)        # 人工指定 Mask 路径
-    imageBoxes = Signal(list)                 # 人工选中输入区域
-    # AI 交互检测信号
-    watermarkAIInteractiveType = Signal(str)  # 语义检测/空间范围检测
-    watermarkDetectPrompt = Signal(str)       # 语义检测提示词
-    watermarkBoxes = Signal(list)             # 水印空间范围 boxes 坐标
-    watermarkConfidence = Signal(float)       # 水印置信度
-    # AI 自动检测
-    watermarkContent = Signal(str)            # 通用水印/文字水印
-    # 动态水印跟踪信号
-    watermarkTrackingData = Signal(dict)      # 跟踪数据: {keyframes, end_frame, tracking_enabled, reverse_tracking_frames}
+    watermarkDetectType = Signal(str)                    # AI检测/人工检测
+    videoWatermarkFormat = Signal(str)                   # 静态水印/动态水印
+    videoWatermarkAIDetectStrategy = Signal(str)         # 逐帧检测/跟踪检测
+    videoWatermarkAIDetectFrameRange = Signal(int, int)  # 检测帧范围
+    videoWatermarkAIDetectAnchorFrame = Signal(int)      # 检测关键帧
+    manualWatermarktMaskPath = Signal(str)               # 手动标注 Mask 路径
+    maskDirectoryChanged = Signal(str)                   # 人工指定 Mask 路径
+    watermarkAIDetectMethod = Signal(str)                # 语义检测/空间范围检测/字幕/文本水印/通用水印
+    watermarkAIDetectPrompt = Signal(str)                # 语义检测提示词
+    watermarkAIDetectPosBoxes = Signal(list)             # 水印检测范围 boxes -- 正提示框
+    watermarkAIDetectNegBoxes = Signal(list)             # 水印检测范围 boxes -- 负提示框
+    watermarkAIDetectConfidence = Signal(float)          # 水印置信度
+    videoWatermarkTrackingData = Signal(dict)            # 跟踪数据: {keyframes, end_frame, tracking_enabled, reverse_tracking_frames}
 
 
     def __init__(self, parent=None):
@@ -330,8 +329,11 @@ class WatermarkDetectSettings(QWidget):
         strategy_layout.addWidget(self.frame_by_frame_card, 1)
         video_strategy_layout.addLayout(strategy_layout)
 
-        self.anchor_frame_container, self.anchor_frame_spin = (self._create_anchor_frame_control())
-        self.frame_range_container, self.frame_range_start, self.frame_range_end = (self._create_frame_range_controls())
+        self.anchor_frame_container, self.anchor_frame_spin = self._create_anchor_frame_control()
+        self.frame_range_container, self.frame_range_start, self.frame_range_end = self._create_frame_range_controls()
+        self.anchor_frame_spin.valueChanged.connect(self.videoWatermarkAIDetectAnchorFrame.emit)
+        self.frame_range_start.valueChanged.connect(self._emit_video_detect_frame_range)
+        self.frame_range_end.valueChanged.connect(self._emit_video_detect_frame_range)
 
         self.tracking_container = QWidget()
         tracking_layout = QVBoxLayout(self.tracking_container)
@@ -369,7 +371,7 @@ class WatermarkDetectSettings(QWidget):
                 self.input_box.setObjectName("inputBox")
                 setFont(self.input_box, 12)
                 self.input_box.setPlaceholderText(self.tr("文本描述（建议英文，可点击下方快捷按钮）..."))
-                self.input_box.textChanged.connect(lambda text: self.watermarkDetectPrompt.emit(text))
+                self.input_box.textChanged.connect(lambda text: self.watermarkAIDetectPrompt.emit(text))
                 page_layout.addWidget(self.input_box)
                 chip_layout = QHBoxLayout()
                 chip_layout.setSpacing(12)
@@ -474,7 +476,7 @@ class WatermarkDetectSettings(QWidget):
     def _create_area_button(self):
         button = QPushButton(self.tr("🖼 水印区域选择"))
         button.setObjectName("secondaryBtn")
-        button.clicked.connect(lambda _: self._watermark_area_selector(image_boxes_only=True))
+        button.clicked.connect(lambda _: self._watermark_area_selector())
         return button
 
     def _create_confidence_widget(self):
@@ -744,13 +746,8 @@ class WatermarkDetectSettings(QWidget):
         self.mode_parameters_stack.setCurrentWidget(self.mode_parameters[mode])
         self.mode_parameters_stack.updateGeometry()
         self.confidence_container.setVisible(mode in ("semantic_detect", "space_detect"))
-        if mode in ("semantic_detect", "space_detect"):
-            self.watermarkDetectType.emit("ai_interactive_detect")
-            self.watermarkAIInteractiveType.emit(mode)
-        else:
-            self.watermarkDetectType.emit("ai_auto_detect")
-            self.watermarkContent.emit(mode)
-
+        self.watermarkDetectType.emit("ai_detect")
+        self.watermarkAIDetectMethod.emit(mode)
         self._update_tracking_visibility(update_height=False)
         if update_height:
             self.update_layout_height()
@@ -760,7 +757,7 @@ class WatermarkDetectSettings(QWidget):
         self.static_format_card.update_style()
         self.dynamic_format_card.selected = is_dynamic
         self.dynamic_format_card.update_style()
-        self.watermarkFormat.emit(watermark_format)
+        self.videoWatermarkFormat.emit(watermark_format)
         self.is_dynamic_watermark = is_dynamic
         self._update_tracking_visibility()
 
@@ -770,6 +767,7 @@ class WatermarkDetectSettings(QWidget):
         self.frame_by_frame_card.update_style()
         self.tracking_detection_card.selected = strategy == "tracking"
         self.tracking_detection_card.update_style()
+        self.videoWatermarkAIDetectStrategy.emit(strategy)
         self._update_tracking_visibility()
 
     def apply_styles(self):
@@ -965,7 +963,10 @@ class WatermarkDetectSettings(QWidget):
     def _on_conf_changed(self, value):
         float_val = value / 100.0
         self.conf_val_label.setText(f"{float_val:.2f}")
-        self.watermarkConfidence.emit(float_val)
+        self.watermarkAIDetectConfidence.emit(float_val)
+
+    def _emit_video_detect_frame_range(self, _value):
+        self.videoWatermarkAIDetectFrameRange.emit(self.frame_range_start.value(), self.frame_range_end.value())
 
     def set_file_path(self, file_path):
         if not file_path:
@@ -1006,7 +1007,7 @@ class WatermarkDetectSettings(QWidget):
         self.frame_range_end.setRange(1, self.total_video_frames)
         self.frame_range_end.setValue(self.total_video_frames)
 
-    def _watermark_area_selector(self, single_area_only=False, image_boxes_only=False):
+    def _watermark_area_selector(self, single_area_only=False):
         if not self.file_path:
             return
         allow_negative_boxes = not single_area_only
@@ -1017,16 +1018,16 @@ class WatermarkDetectSettings(QWidget):
             allow_negative_boxes=allow_negative_boxes,
         )
         area_selector.exec()
-        boxes = []
+        positive_boxes = []
+        negative_boxes = []
         for item in area_selector.get_results():
             box = (item["x"], item["y"], item["x"] + item["w"], item["y"] + item["h"])
-            if allow_negative_boxes:
-                box += (item.get("type", "positive"),)
-            boxes.append(box)
-        if not image_boxes_only:
-            self.watermarkBoxes.emit(boxes)
-        else:
-            self.imageBoxes.emit(boxes)
+            if allow_negative_boxes and item.get("type") == "negative":
+                negative_boxes.append(box)
+            else:
+                positive_boxes.append(box)
+        self.watermarkAIDetectPosBoxes.emit(positive_boxes)
+        self.watermarkAIDetectNegBoxes.emit(negative_boxes)
 
     def _process_manual_detect(self):
         if not self.file_path:
@@ -1088,4 +1089,4 @@ class WatermarkDetectSettings(QWidget):
         dialog.exec()
 
     def _on_tracking_data_ready(self, data):
-        self.watermarkTrackingData.emit(data)
+        self.videoWatermarkTrackingData.emit(data)
