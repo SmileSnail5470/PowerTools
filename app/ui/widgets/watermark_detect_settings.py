@@ -1068,6 +1068,8 @@ class WatermarkDetectSettings(QWidget):
             return
         dialog = VideoObjectDetectorWidget(file_path=self.file_path, parent=self.window())
         dialog.exec()
+        tracking_data = dialog.get_results()
+        self._on_tracking_data_ready(tracking_data)
 
     def _open_video_preview(self, initial_frame):
         if not self.file_path:

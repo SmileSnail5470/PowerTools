@@ -26,7 +26,7 @@ from app.ui.widgets.watermark_detect_settings import WatermarkDetectSettings
 
 from app.ui.common.event_bus import global_event_bus
 from app.controllers.task_manager import global_task_manager
-from app.ui.common.task_params import bind_widget_to_param, TaskParams
+from app.ui.common.task_params import bind_widget_to_param, LayeredTaskParams
 from app.ui.common.task_status import TaskStatusModel
 from app.ui.common.utils import get_file_type, global_backend_info_cache
 from app.ui.common.config import cfg
@@ -36,7 +36,7 @@ from app.workers.watermark_remove import WatermarkRemoveWork, WatermarkRemoveUIP
 from app.license.globals import feature_gate
 
 
-watermark_remove_params = WatermarkRemoveUIParams()
+watermark_remove_params = LayeredTaskParams(params=WatermarkRemoveUIParams())
 watermark_remove_task_status_model = TaskStatusModel()
 # 当前批次已提交的任务 future，用于支持一次性取消
 watermark_remove_active_futures = []

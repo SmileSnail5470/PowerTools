@@ -349,6 +349,201 @@ class VideoPreviewViewport(QWidget):
         self.canvas.setGeometry(8, canvas_top, max(0, self.width() - 16), max(0, self.height() - canvas_top - 8))
 
 
+class RunModeDialog(QDialog):
+    _RADIUS = 20
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("runModeDialog")
+        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setModal(True)
+        self._selected = "foreground"
+        self._build_ui()
+        self.setStyleSheet(RUN_MODE_DIALOG_STYLESHEET)
+        self.setFixedWidth(540)
+        self.adjustSize()
+
+    def selected_mode(self) -> str:
+        return self._selected
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        r = self._RADIUS
+        rect = QRectF(self.rect()).adjusted(8, 8, -8, -8)
+        for offset, blur_alpha in ((6, 18), (4, 28), (2, 38)):
+            shadow_rect = rect.adjusted(-offset * 0.3, -offset * 0.15, offset * 0.3, offset * 0.6)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(15, 23, 42, blur_alpha))
+            painter.drawRoundedRect(shadow_rect, r + offset * 0.3, r + offset * 0.3)
+        painter.setPen(QPen(QColor("#e2e8f0"), 1))
+        painter.setBrush(QColor("#ffffff"))
+        painter.drawRoundedRect(rect, r, r)
+
+    def _build_ui(self):
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(8, 8, 8, 14)
+        outer.setSpacing(0)
+        container = QWidget()
+        container.setObjectName("runModeContainer")
+        outer.addWidget(container)
+
+        root = QVBoxLayout(container)
+        root.setContentsMargins(28, 24, 28, 24)
+        root.setSpacing(0)
+        title = QLabel(self.tr("选择运行方式"))
+        title.setObjectName("runModeTitle")
+        setFont(title, 16, QFont.Bold)
+        subtitle = QLabel(self.tr("选择本次分割与跟踪任务的执行方式"))
+        subtitle.setObjectName("runModeSubtitle")
+        setFont(subtitle, 12)
+        root.addWidget(title)
+        root.addSpacing(4)
+        root.addWidget(subtitle)
+        root.addSpacing(20)
+        cards_row = QHBoxLayout()
+        cards_row.setSpacing(14)
+        self._fg_card = self._make_card(
+            icon_object_name="cardIconForeground",
+            icon_char="▶",
+            icon_color="#ffffff",
+            title=self.tr("前台运行"),
+            badge=self.tr("立即执行"),
+            badge_object="cardBadge",
+            features=[
+                self.tr("✓  工作台保持打开"),
+                self.tr("✓  实时进度显示"),
+                self.tr("✓  可随时终止任务"),
+            ],
+            mode="foreground",
+        )
+        self._bg_card = self._make_card(
+            icon_object_name="cardIconBackground",
+            icon_char="⏳",
+            icon_color="#ffffff",
+            title=self.tr("后台运行"),
+            badge=self.tr("批量推荐"),
+            badge_object="cardBadgeRecommend",
+            features=[
+                self.tr("✓  工作台自动关闭"),
+                self.tr("✓  支持批量排队"),
+                self.tr("✓  不阻塞当前操作"),
+            ],
+            mode="background",
+        )
+        self._fg_card.setChecked(True)
+        cards_row.addWidget(self._fg_card)
+        cards_row.addWidget(self._bg_card)
+        root.addLayout(cards_row)
+        root.addSpacing(22)
+        divider = QFrame()
+        divider.setObjectName("dialogDivider")
+        divider.setFixedHeight(1)
+        root.addWidget(divider)
+        root.addSpacing(16)
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+        btn_row.addStretch()
+
+        cancel_btn = QPushButton(self.tr("取消"))
+        cancel_btn.setObjectName("runModeCancelBtn")
+        cancel_btn.setCursor(Qt.PointingHandCursor)
+        cancel_btn.setFixedHeight(38)
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+
+        self._confirm_btn = QPushButton(self.tr("确认并开始"))
+        self._confirm_btn.setObjectName("runModeConfirmBtn")
+        self._confirm_btn.setCursor(Qt.PointingHandCursor)
+        self._confirm_btn.setFixedHeight(38)
+        self._confirm_btn.clicked.connect(self._on_confirm)
+        btn_row.addWidget(self._confirm_btn)
+
+        root.addLayout(btn_row)
+
+    def _make_card(
+        self,
+        icon_object_name: str,
+        icon_char: str,
+        icon_color: str,
+        title: str,
+        badge: str,
+        badge_object: str,
+        features: list[str],
+        mode: str,
+    ) -> QPushButton:
+        card = QPushButton()
+        card.setObjectName("runModeCard")
+        card.setCheckable(True)
+        card.setCursor(Qt.PointingHandCursor)
+        card.setFixedHeight(190)
+        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        card.clicked.connect(lambda _checked=False, m=mode: self._select_card(m))
+
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(0)
+
+        top_row = QHBoxLayout()
+        top_row.setSpacing(14)
+        top_row.setContentsMargins(0, 0, 0, 0)
+        top_row.setAlignment(Qt.AlignVCenter)
+
+        icon_label = QLabel(icon_char)
+        icon_label.setObjectName(icon_object_name)
+        icon_label.setAlignment(Qt.AlignCenter)
+        icon_label.setFixedSize(44, 44)
+        setFont(icon_label, 18)
+        icon_label.setStyleSheet(f"color: {icon_color};")
+        top_row.addWidget(icon_label, 0, Qt.AlignVCenter)
+
+        title_row = QHBoxLayout()
+        title_row.setSpacing(8)
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setAlignment(Qt.AlignVCenter)
+
+        title_label = QLabel(title)
+        title_label.setObjectName("cardTitle")
+        setFont(title_label, 13, QFont.Bold)
+        title_label.setFixedHeight(22)
+        title_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        title_row.addWidget(title_label, 0, Qt.AlignVCenter)
+
+        badge_label = QLabel(badge)
+        badge_label.setObjectName(badge_object)
+        setFont(badge_label, 10)
+        badge_label.setFixedHeight(20)
+        badge_label.setAlignment(Qt.AlignVCenter)
+        badge_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        title_row.addWidget(badge_label, 0, Qt.AlignVCenter)
+        title_row.addStretch()
+
+        top_row.addLayout(title_row, 1)
+        layout.addLayout(top_row)
+        layout.addSpacing(14)
+
+        for feature in features:
+            feat = QLabel(feature)
+            feat.setObjectName("cardFeatureItem")
+            setFont(feat, 11)
+            feat.setFixedHeight(22)
+            feat.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+            layout.addWidget(feat)
+            layout.addSpacing(4)
+
+        return card
+
+    def _select_card(self, mode: str):
+        self._selected = mode
+        self._fg_card.setChecked(mode == "foreground")
+        self._bg_card.setChecked(mode == "background")
+        self._confirm_btn.setText(self.tr("确认并开始") if mode == "foreground" else self.tr("提交后台任务"))
+
+    def _on_confirm(self):
+        self.accept()
+
+
 class VideoObjectDetectorWidget(QDialog):
     taskTerminateRequested = Signal()
 
@@ -1692,8 +1887,51 @@ class VideoObjectDetectorWidget(QDialog):
         if hasattr(self, "play_button"):
             self._set_button_icon(self.play_button, FluentIcon.PLAY, dark=True)
 
+    def _get_current_algo_params(self) -> dict:
+        if self.current_model == "sam3":
+            direction = next((k for k, btn in self.direction_buttons.items() if btn.isChecked()), "forward")
+            return {
+                "model": "sam3",
+                "text_prompt": self.prompt_input.text().strip(),
+                "prompts": list(self.canvas._prompts),
+                "anchor_frame": self.anchor_spin.value(),
+                "direction": direction,
+                "frame_range": (self.range_start.value(), self.range_end.value()),
+                "detection_sensitivity": self.detection_sensitivity,
+                "save_path": self.save_path_input.text().strip(),
+            }
+        else:
+            direction = next((k for k, btn in self.edge_direction_buttons.items() if btn.isChecked()), "forward")
+            return {
+                "model": "edgetam",
+                "prompts": list(self.canvas._prompts),
+                "anchor_frame": self.edge_anchor_spin.value(),
+                "direction": direction,
+                "frame_range": (self.edge_range_start.value(), self.edge_range_end.value()),
+                "save_path": self.edge_save_path_input.text().strip(),
+            }
+
+    def get_results(self):
+        return getattr(self, "_last_run_result", None)
+
+    def _show_run_mode_dialog(self):
+        dialog = RunModeDialog(self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        mode = dialog.selected_mode()
+        if mode == "foreground":
+            params = self._get_current_algo_params()
+            save_path = params.get("save_path", self._default_save_path())
+            self._last_run_result = save_path
+            self.set_task_running(True)
+            self._set_label_status(self.canvas_status, self.tr("●  任务启动"), "ready")
+        elif mode == "background":
+            params = self._get_current_algo_params()
+            self._last_run_result = params
+            self.close()
+
     def _show_inference_notice(self):
-        self._set_label_status(self.canvas_status, self.tr("●  当前为界面预览，尚未接入推理算法"), "warning")
+        self._show_run_mode_dialog()
 
     def closeEvent(self, event):
         self._stop_playback()
@@ -1706,6 +1944,131 @@ class VideoObjectDetectorWidget(QDialog):
                     capture.release()
                     model_captures[view] = None
         super().closeEvent(event)
+
+
+RUN_MODE_DIALOG_STYLESHEET = """
+            QDialog#runModeDialog {
+                background: transparent;
+            }
+            QWidget#runModeContainer {
+                background: #ffffff;
+                border-radius: 20px;
+            }
+            #runModeTitle {
+                color: #0f172a;
+                font-size: 16px;
+                font-weight: 700;
+                background: transparent;
+            }
+            #runModeSubtitle {
+                color: #64748b;
+                font-size: 12px;
+                background: transparent;
+            }
+            QPushButton#runModeCard {
+                text-align: left;
+                background: #f8fafc;
+                border: 2px solid #e2e8f0;
+                border-radius: 16px;
+                padding: 0px;
+            }
+            QPushButton#runModeCard:hover {
+                background: #f1f5f9;
+                border-color: #cbd5e1;
+            }
+            QPushButton#runModeCard:checked {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #eef2ff, stop:1 #e0e7ff);
+                border-color: #6366f1;
+            }
+            QPushButton#runModeCard:checked:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #e0e7ff, stop:1 #c7d2fe);
+                border-color: #4f46e5;
+            }
+            #cardIconForeground {
+                border-radius: 22px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #6366f1, stop:1 #4f46e5);
+            }
+            #cardIconBackground {
+                border-radius: 22px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #8b5cf6, stop:1 #7c3aed);
+            }
+            #cardTitle {
+                color: #1e293b;
+                font-size: 14px;
+                font-weight: 700;
+                background: transparent;
+            }
+            QPushButton#runModeCard:checked #cardTitle {
+                color: #312e81;
+            }
+            #cardBadge {
+                color: #64748b;
+                background: rgba(241, 245, 249, 0.9);
+                border: 1px solid #e2e8f0;
+                border-radius: 6px;
+                padding: 1px 7px;
+                font-size: 10px;
+                font-weight: 600;
+            }
+            QPushButton#runModeCard:checked #cardBadge {
+                color: #4338ca;
+                background: rgba(224, 231, 255, 0.9);
+                border-color: rgba(165, 180, 252, 0.7);
+            }
+            #cardBadgeRecommend {
+                color: #047857;
+                background: rgba(236, 253, 245, 0.9);
+                border: 1px solid rgba(167, 243, 208, 0.8);
+                border-radius: 6px;
+                padding: 1px 7px;
+                font-size: 10px;
+                font-weight: 600;
+            }
+            #cardFeatureItem {
+                color: #475569;
+                font-size: 11px;
+                background: transparent;
+            }
+            QPushButton#runModeCard:checked #cardFeatureItem {
+                color: #4338ca;
+            }
+            #dialogDivider {
+                background: #f1f5f9;
+            }
+            QPushButton#runModeCancelBtn {
+                color: #475569;
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+                padding: 8px 20px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QPushButton#runModeCancelBtn:hover {
+                background: #f1f5f9;
+                border-color: #cbd5e1;
+            }
+            QPushButton#runModeCancelBtn:pressed { background: #e2e8f0; }
+            QPushButton#runModeConfirmBtn {
+                color: #ffffff;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #6366f1);
+                border: none;
+                border-radius: 10px;
+                padding: 8px 24px;
+                font-size: 12px;
+                font-weight: 700;
+            }
+            QPushButton#runModeConfirmBtn:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4338ca, stop:1 #4f46e5);
+            }
+            QPushButton#runModeConfirmBtn:pressed { background: #3730a3; }
+            QPushButton#runModeConfirmBtn:disabled {
+                background: #cbd5e1;
+                color: #94a3b8;
+            }
+"""
 
 
 VIDEO_OBJECT_DETECTOR_STYLESHEET = """
