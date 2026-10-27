@@ -61,10 +61,10 @@ class FileSelectorCard(HeaderCardWidget):
 
         singleFileSelector = FileSelectorWidget(self)
         singleFileSelector.item_selected.connect(lambda file_path: global_event_bus.watermarkRemove_InputFileUpdate.emit(file_path))
-        bind_widget_to_param(singleFileSelector, "item_selected", watermark_remove_params, "input_path", transform=None)
+        bind_widget_to_param(singleFileSelector, "item_selected", watermark_remove_params, "io.input_path", transform=None)
         batchFilesSelector = DirectorySelectorWidget(self)
         batchFilesSelector.item_selected.connect(lambda file_path: global_event_bus.watermarkRemove_InputFileUpdate.emit(file_path))
-        bind_widget_to_param(batchFilesSelector, "item_selected", watermark_remove_params, "input_path", transform=None)
+        bind_widget_to_param(batchFilesSelector, "item_selected", watermark_remove_params, "io.input_path", transform=None)
 
         self.addSubInterface(singleFileSelector, 'FileSelectorWidget', self.tr("文件"))
         self.addSubInterface(batchFilesSelector, 'DirectorySelectorWidget', self.tr("目录"))
@@ -96,36 +96,26 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
         self.viewLayout.addLayout(main_layout)
 
         watermark_detect_settings = WatermarkDetectSettings(parent=self)
-        bind_widget_to_param(watermark_detect_settings, "watermarkDetectType", watermark_remove_params, "watermark_detect_type", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "watermarkFormat", watermark_remove_params, "watermark_format", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "manualWatermarktMaskPath", watermark_remove_params, "manual_watermark_mask_path", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "maskDirectoryChanged", watermark_remove_params, "manual_watermark_mask_path", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "watermarkAIInteractiveType", watermark_remove_params, "watermark_ai_interactive_type", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "watermarkDetectPrompt", watermark_remove_params, "watermark_detect_prompt", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "watermarkBoxes", watermark_remove_params, "watermark_boxes", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "imageBoxes", watermark_remove_params, "image_boxes", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "watermarkContent", watermark_remove_params, "watermark_content", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "watermarkConfidence", watermark_remove_params, "watermark_confidence", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "watermarkTrackingData", watermark_remove_params, "watermark_tracking_data", transform=None)
-        # 设置参数默认值
-        watermark_detect_settings.watermarkDetectType.emit("ai_interactive_detect")
-        watermark_detect_settings.watermarkFormat.emit("static_watermark")
-        watermark_detect_settings.manualWatermarktMaskPath.emit("")
-        watermark_detect_settings.maskDirectoryChanged.emit("")
-        watermark_detect_settings.watermarkAIInteractiveType.emit("semantic_detect")
-        watermark_detect_settings.watermarkDetectPrompt.emit("")
-        watermark_detect_settings.watermarkBoxes.emit([])
-        watermark_detect_settings.imageBoxes.emit([])
-        watermark_detect_settings.watermarkContent.emit("general_watermark")
-        watermark_detect_settings.watermarkConfidence.emit(0.3)
-        watermark_detect_settings.watermarkTrackingData.emit({"keyframes": [], "end_frame": None, "reverse_tracking_frames": 8})
+        bind_widget_to_param(watermark_detect_settings, "watermarkDetectType", watermark_remove_params, "detect.watermark_detect_type", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "videoWatermarkFormat", watermark_remove_params, "detect.video_watermark_format", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "videoWatermarkAIDetectStrategy", watermark_remove_params, "detect.video_watermark_ai_detect_strategy", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "videoWatermarkAIDetectFrameRange", watermark_remove_params, "detect.video_watermark_ai_detect_frame_range", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "videoWatermarkAIDetectAnchorFrame", watermark_remove_params, "detect.video_watermark_ai_detect_anchor_frame", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "manualWatermarktMaskPath", watermark_remove_params, "detect.manual_watermark_mask_path", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "maskDirectoryChanged", watermark_remove_params, "detect.manual_watermark_mask_path", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkAIDetectMethod", watermark_remove_params, "detect.watermark_ai_detect_method", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkAIDetectPrompt", watermark_remove_params, "detect.watermark_ai_detect_prompt", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkAIDetectPosBoxes", watermark_remove_params, "detect.watermark_ai_detect_pos_boxes", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkAIDetectNegBoxes", watermark_remove_params, "detect.watermark_ai_detect_neg_boxes", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkAIDetectConfidence", watermark_remove_params, "detect.watermark_ai_detect_confidence", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "videoWatermarkTrackingData", watermark_remove_params, "detect.video_watermark_tracking_data", transform=None)
 
         global_event_bus.watermarkRemove_InputFileUpdate.connect(
             lambda file_path: (
                 watermark_detect_settings.set_file_path(file_path=file_path),
-                None if file_path else watermark_detect_settings.watermarkBoxes.emit([]),
-                None if file_path else watermark_detect_settings.imageBoxes.emit([]),
-                None if file_path else watermark_detect_settings.watermarkTrackingData.emit({"keyframes": [], "end_frame": None, "reverse_tracking_frames": 8})
+                None if file_path else watermark_detect_settings.watermarkAIDetectPosBoxes.emit([]),
+                None if file_path else watermark_detect_settings.watermarkAIDetectNegBoxes.emit([]),
+                None if file_path else watermark_detect_settings.videoWatermarkTrackingData.emit({"keyframes": [], "end_frame": None, "reverse_tracking_frames": 8})
             )
         )
 
@@ -226,9 +216,8 @@ class RestorationWatermarkPromptCard(HeaderCardWidget):
             QTextEdit:focus { border: 1px solid #667eea; background-color: #ffffff; }
         """)
         setFont(self.prompt_edit, fontSize=13)
-        self.prompt_edit.textChanged.connect(
-            lambda: watermark_remove_params.set_param("restoration_prompt", self.prompt_edit.toPlainText())
-        )
+        self.prompt_edit.textChanged.connect(lambda: watermark_remove_params.set_param("restoration_prompt", self.prompt_edit.toPlainText()))
+        # bind_widget_to_param(self.prompt_edit, "textChanged", watermark_remove_params, "model.restoration_prompt", transform=None)
         layout.addWidget(self.prompt_edit)
 
         self._on_type_selected(self.PRESETS[0][0])
@@ -858,7 +847,7 @@ class OutputSettingsCard(HeaderCardWidget):
         self.save_location_line_edit.setPlaceholderText(self.tr("选择保存位置"))
         save_location_action = QAction(FluentIcon.FOLDER_ADD.qicon(), "", triggered=self.save_location_browse)
         self.save_location_line_edit.addAction(save_location_action, QLineEdit.TrailingPosition)
-        bind_widget_to_param(self.save_location_line_edit, "textChanged", watermark_remove_params, "output_path", transform=None)
+        bind_widget_to_param(self.save_location_line_edit, "textChanged", watermark_remove_params, "io.output_path", transform=None)
         output_settings_layout.addWidget(self.save_location_line_edit)
         output_settings_layout.addSpacing(10)
 
@@ -868,7 +857,7 @@ class OutputSettingsCard(HeaderCardWidget):
         output_settings_layout.addWidget(output_format_label)
         self.output_format_combo = ComboBox()
         self.output_format_combo.addItems([self.tr("保持原格式")])
-        bind_widget_to_param(self.output_format_combo, "currentTextChanged", watermark_remove_params, "output_format", transform=None)
+        bind_widget_to_param(self.output_format_combo, "currentTextChanged", watermark_remove_params, "io.output_format", transform=None)
         output_settings_layout.addWidget(self.output_format_combo)
 
         self.viewLayout.addWidget(output_settings)
