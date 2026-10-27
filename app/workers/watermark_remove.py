@@ -34,11 +34,18 @@ class _IOParams:
 
 
 @dataclass
+class _VideoTrackingParams:
+    keyframes: list = field(default_factory=list)
+    end_frame: int | None = None
+    reverse_tracking_frames: int = 8
+
+
+@dataclass
 class _DetectParams:
     watermark_detect_type: str = "ai_detect"
     video_watermark_format: str = "static_watermark"
     video_watermark_ai_detect_strategy: str = "tracking"
-    video_watermark_ai_detect_frame_range: list = [1, 2**31 - 1]
+    video_watermark_ai_detect_frame_range: list = field(default_factory=lambda: [1, 2**31 - 1])
     video_watermark_ai_detect_anchor_frame: int = 1
     manual_watermark_mask_path: str = ""
     watermark_ai_detect_method: str = "semantic_detect"
@@ -46,11 +53,7 @@ class _DetectParams:
     watermark_ai_detect_pos_boxes: list = field(default_factory=list)
     watermark_ai_detect_neg_boxes: list = field(default_factory=list)
     watermark_ai_detect_confidence: float = 0.3
-    video_watermark_tracking_data: dict = field(default_factory=lambda: {
-        "keyframes": [], 
-        "end_frame": None, 
-        "reverse_tracking_frames": 8
-    })
+    video_watermark_tracking_data: _VideoTrackingParams = field(default_factory=_VideoTrackingParams)
 
 
 @dataclass
@@ -70,8 +73,20 @@ class WatermarkRemoveUIParams:
     _feature_name_: str = ""
 
     def validate(self) -> str:
-        pass
-
+        if not self.io.input_path:
+            return "请选择要处理的文件或目录"
+        if not self.io.output_path:
+            return "请设置文件保存位置"
+        if not self.model.model_name:
+            return "请选择水印移除算法"
+        if self.model.model_name in ["image_restoration"]:
+            # 文档图片模型不需要检测流程
+            return ""
+        if self.detect.watermark_ai_detect_method == "semantic_detect" and not self.detect.watermark_ai_detect_prompt:
+            return "已选【语意检测】请输入水印语义检测提示词"
+        if self.detect.watermark_ai_detect_method == "space_detect" and not self.detect.watermark_ai_detect_pos_boxes:
+            return "已选【框选区域】请框选检测的区域"
+        return ""
 
 
 class WatermarkRemoveWork(BaseWorker):
