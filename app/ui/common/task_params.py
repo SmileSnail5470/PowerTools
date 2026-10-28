@@ -25,7 +25,7 @@ class TaskParams(QObject):
 class LayeredTaskParams(QObject):
     param_changed = Signal(str, object)
 
-    def __init__(self, params=None, parent=None):
+    def __init__(self, params, parent=None):
         super().__init__(parent)
         self.params = params
 
@@ -64,9 +64,9 @@ def bind_widget_to_param(widget, signal_name: str, param_model: TaskParams | Lay
     
     """
     signal = getattr(widget, signal_name)
-    transform = transform or (lambda value: value)
 
-    def on_value_changed(value):
-        param_model.set_param(param_key, transform(value))
+    def on_value_changed(*args):
+        value = transform(*args) if transform else args[0] if args else None
+        param_model.set_param(param_key, value)
 
     signal.connect(on_value_changed)

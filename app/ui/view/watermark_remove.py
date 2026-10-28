@@ -168,66 +168,6 @@ class WatermarkTypeCardItem(QFrame):
             return
         super().mousePressEvent(event)
 
-
-class RestorationWatermarkPromptCard(HeaderCardWidget):
-    PRESETS = (
-        ("general", "💧", "通用水印", "文档中的文字或图形水印", "#38bdf8"),
-        ("horizontal", "↔️", "半透明水平", "半透明水平文字水印", "#22c55e"),
-        ("vertical", "↕️", "半透明垂直", "半透明垂直文字水印", "#f59e0b"),
-        ("diagonal", "📐", "半透明斜向", "半透明斜向文字水印", "#f472b6"),
-        ("logo", "©️", "图片/Logo", "半透明图片或 Logo 水印", "#0ea5e9"),
-    )
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setTitle(self.tr("📝 文档水印参数"))
-        self.setBorderRadius(8)
-        self.viewLayout.setContentsMargins(10, 10, 10, 10)
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-        self.viewLayout.addLayout(layout)
-
-        type_label = CaptionLabel(text=self.tr("水印类型"))
-        setFont(type_label, fontSize=14, weight=QFont.DemiBold)
-        layout.addWidget(type_label)
-        flow_layout = FlowLayout(needAni=True)
-        flow_layout.setContentsMargins(0, 0, 0, 0)
-        flow_layout.setHorizontalSpacing(8)
-        flow_layout.setVerticalSpacing(8)
-        self.type_cards = []
-        for key, icon, name, description, color in self.PRESETS:
-            card = WatermarkTypeCardItem(key, icon, name, description, color, self)
-            card.clicked.connect(self._on_type_selected)
-            flow_layout.addWidget(card)
-            self.type_cards.append(card)
-        layout.addLayout(flow_layout)
-
-        layout.addSpacing(8)
-        prompt_label = CaptionLabel(text=self.tr("自定义水印类型（可选）"))
-        setFont(prompt_label, fontSize=14, weight=QFont.DemiBold)
-        layout.addWidget(prompt_label)
-        self.prompt_edit = QTextEdit(self)
-        self.prompt_edit.setMaximumHeight(72)
-        self.prompt_edit.setPlaceholderText(self.tr("描述什么类型水印；留空则使用上方预设（建议使用英文）"))
-        self.prompt_edit.setStyleSheet("""
-            QTextEdit { border: 1px solid #e0e0e0; border-radius: 8px; padding: 6px; background-color: #fafafa; color: #1a1a1a; }
-            QTextEdit:focus { border: 1px solid #667eea; background-color: #ffffff; }
-        """)
-        setFont(self.prompt_edit, fontSize=13)
-        self.prompt_edit.textChanged.connect(lambda: watermark_remove_params.set_param("restoration_prompt", self.prompt_edit.toPlainText()))
-        # bind_widget_to_param(self.prompt_edit, "textChanged", watermark_remove_params, "model.restoration_prompt", transform=None)
-        layout.addWidget(self.prompt_edit)
-
-        self._on_type_selected(self.PRESETS[0][0])
-
-    def _on_type_selected(self, selected_key):
-        for card in self.type_cards:
-            card.set_selected(card.key == selected_key)
-        watermark_remove_params.set_param("restoration_watermark_type", selected_key)
-
-
 class WatermarkRemoveStyleCard(HeaderCardWidget):
     model_name = Signal(str)
 
@@ -476,7 +416,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         for card in self.all_cards:
             card.mousePressEvent = lambda event, c=card: self.on_card_clicked(c)
 
-        bind_widget_to_param(self, "model_name", watermark_remove_params, "model_name", transform=None)
+        bind_widget_to_param(self, "model_name", watermark_remove_params, "model.model_name", transform=None)
         self.select_first_interactive()
         global_event_bus.watermarkRemove_InputFileUpdate.connect(lambda file_path: self.update_default_models(file_path=file_path))
         global_event_bus.License_update.connect(self.select_first_interactive)
@@ -588,7 +528,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         """)
         slider.setFixedHeight(22)
         slider.valueChanged.connect(lambda v: value_label.setText(str(v)))
-        bind_widget_to_param(slider, "valueChanged", watermark_remove_params, "mask_dilate", transform=None)
+        bind_widget_to_param(slider, "valueChanged", watermark_remove_params, "model.mask_dilate", transform=None)
         slider.valueChanged.emit(2)
         layout.addWidget(slider)
         return container
@@ -631,11 +571,11 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         def _on_type_selected(selected_key):
             for tc in type_cards:
                 tc.set_selected(tc.key == selected_key)
-            watermark_remove_params.set_param("restoration_watermark_type", selected_key)
 
         for key, icon, name, color in PRESETS:
             tc = WatermarkTypeCardItem(key, icon, name, name, color, container)
             tc.clicked.connect(_on_type_selected)
+            bind_widget_to_param(tc, "clicked", watermark_remove_params, "model.restoration_watermark_type")
             flow_layout.addWidget(tc)
             type_cards.append(tc)
         layout.addWidget(flow_widget)
@@ -654,12 +594,10 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
             QTextEdit:focus { border: 1px solid #667eea; background-color: #ffffff; }
         """)
         setFont(prompt_edit, 13)
-        prompt_edit.textChanged.connect(
-            lambda: watermark_remove_params.set_param("restoration_prompt", prompt_edit.toPlainText())
-        )
+        bind_widget_to_param(prompt_edit, "textChanged", watermark_remove_params, "model.restoration_prompt", transform=lambda: prompt_edit.toPlainText())
         layout.addWidget(prompt_edit)
 
-        _on_type_selected(PRESETS[0][0])
+        type_cards[0].clicked.emit(type_cards[0].key)
         return container
 
     def _set_extra_image_models_visible(self, visible: bool):
@@ -922,10 +860,10 @@ class ControlPanelWidget(ScrollArea):
         main_layout.addStretch(1)
 
         watermark_remove_params.param_changed.connect(self._on_param_changed)
-        self._on_param_changed("model_name", watermark_remove_params.get_param("model_name"))
+        self._on_param_changed("model.model_name", watermark_remove_params.get_param("model.model_name"))
         
     def _on_param_changed(self, key, value):
-        if key != "model_name":
+        if key != "model.model_name":
             return
         if value == "image_restoration":
             for card in self.output_mask_cards:
@@ -998,7 +936,7 @@ class PreviewWidget(QWidget):
         watermark_remove_params.param_changed.connect(self._on_param_changed)
                 
     def _on_param_changed(self, key, value):
-        if key != "model_name":
+        if key != "model.model_name":
             return
         if value in ["image_restoration", "video_engine"]:
             self.status_info_widget.model.set_pipeline_steps(names=[self.tr('准备任务'), self.tr('去除水印'), self.tr('导出文件')])
@@ -1147,34 +1085,33 @@ class HeaderWidget(QWidget):
         self.process_btn.clicked.connect(self.remove_watermark_process)
 
     def remove_watermark_process(self):
-        init_params = watermark_remove_params.to_dict()
-        error_msg, task_params = self._params_check(params=init_params)
+        error_msg = self._params_check(params=watermark_remove_params)
         if error_msg:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
-        w = TaskInfoMessageBox(task_params, "watermark-remove", self.window())
+        w = TaskInfoMessageBox(watermark_remove_params, "watermark-remove", self.window())
         if not w.exec():
             return
         
-        allowed_use, error_msg = feature_gate.can_use(feature_name=feature_gate.get_feature_name(watermark_remove_params.to_dict()["model_name"]), return_errmsg=True)
+        allowed_use, error_msg = feature_gate.can_use(feature_name=feature_gate.get_feature_name(watermark_remove_params.get_param("model.model_name")), return_errmsg=True)
         if not allowed_use:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
-        task_params["_feature_name_"] = feature_gate.get_feature_name(watermark_remove_params.to_dict()["model_name"])
+        watermark_remove_params.params._feature_name_ = feature_gate.get_feature_name(watermark_remove_params.get_param("model.model_name"))
 
         total_tasks = []
-        input_path = task_params["input_path"]
+        input_path = watermark_remove_params.get_param("io.input_path")
         global_event_bus.watermarkRemove_ImageNavigationInit.emit()
         if os.path.isdir(input_path):
             self.is_batch_task = True
             for one_file in os.listdir(input_path):
-                task_params["input_path"] = os.path.join(input_path, one_file)
-                task_instance = WatermarkRemoveWork(**task_params)
+                watermark_remove_params.set_param("io.input_path", os.path.join(input_path, one_file))
+                task_instance = WatermarkRemoveWork(watermark_remove_params)
                 func, args, kwargs = task_instance.to_worker()
                 total_tasks.append((func, args, kwargs))
         else:
             self.is_batch_task = False
-            task_instance = WatermarkRemoveWork(**task_params)
+            task_instance = WatermarkRemoveWork(watermark_remove_params)
             func, args, kwargs = task_instance.to_worker()
             total_tasks.append((func, args, kwargs))
 
@@ -1234,90 +1171,26 @@ class HeaderWidget(QWidget):
     def _task_finished(self, input_path, output_path):
         if not feature_gate.is_pro:
             try:
-                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(watermark_remove_params.to_dict()["model_name"]))
+                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(watermark_remove_params.get_param("model.model_name")))
             except Exception:
                 pass
-            global_event_bus.watermarkRemove_TaskFinishedByModel.emit(watermark_remove_params.to_dict()["model_name"])
+            global_event_bus.watermarkRemove_TaskFinishedByModel.emit(watermark_remove_params.get_param("model.model_name"))
         watermark_remove_task_status_model.report_success()
         global_event_bus.watermarkRemove_TaskFinished.emit(input_path, output_path)
         if not self.is_batch_task:
             watermark_remove_task_status_model.finish_step(name=self.tr("导出文件"))
 
-    def _params_check(self, params):
+    def _params_check(self, params: LayeredTaskParams):
         error_msg = ""
-        task_params = {}
-        if not params:
-            error_msg = self.tr("请设置水印移除参数")
-            return error_msg, task_params
         if not cfg.get(cfg.localWatermarkRemoveEnabled):
             error_msg = self.tr("请在设置页面打开 '水印移除' 能力开关")
-            return error_msg, task_params
-        
-        if "input_path" not in params or not params["input_path"]:
-            error_msg = self.tr("请选择要处理的文件或目录")
-            return error_msg, task_params
-        else:
-            task_params["input_path"] = params["input_path"]
-
-        if get_file_type(params["input_path"]) == "video" and cfg.get(cfg.additionalParams)["SoftwareSettings"]["FFmpeg_status_info"]["text"] != "OK":
+            return error_msg
+        if get_file_type(params.get_param("io.input_path")) == "video" and \
+           cfg.get(cfg.additionalParams)["SoftwareSettings"]["FFmpeg_status_info"]["text"] != "OK":
             error_msg = self.tr("请在设置页面配置软件 FFmpeg 的正确路径并通过验证")
-            return error_msg, task_params
-
-        if "output_path" not in params or not params["output_path"]:
-            error_msg = self.tr("请设置文件保存位置")
-            return error_msg, task_params
-        else:
-            task_params["output_path"] = params["output_path"]
-            task_params["output_format"] = params["output_format"]
-
-        if "model_name" not in params or not params["model_name"]:
-            error_msg = self.tr("请选择水印移除算法")
-            return error_msg, task_params
-        else:
-            task_params["model_name"] = params["model_name"]
-
-        if task_params["model_name"] in ["image_restoration"]:
-            task_params["restoration_watermark_type"] = params.get("restoration_watermark_type", "general")
-            task_params["restoration_prompt"] = params.get("restoration_prompt", "")
-        else:
-            # 水印检测
-            if "watermark_detect_type" not in params:
-                error_msg = self.tr("请选择水印检测方式")
-                return error_msg, task_params
-            else:
-                task_params["watermark_detect_type"] = params["watermark_detect_type"]
-
-            if "mask_dilate" not in params:
-                error_msg = self.tr("请设置水印 Mask 扩张系数")
-                return error_msg, task_params
-            else:
-                task_params["mask_dilate"] = params["mask_dilate"]
-
-            if "image_boxes" in params and params["image_boxes"]:
-                task_params["image_boxes"] = params["image_boxes"]
-            if "watermark_tracking_data" in params and params["watermark_tracking_data"]:
-                task_params["watermark_tracking_data"] = params["watermark_tracking_data"]
-
-            if params["watermark_detect_type"] == "ai_auto_detect":
-                task_params["watermark_content"] = params["watermark_content"]
-                task_params["watermark_format"] = params["watermark_format"]
-            if params["watermark_detect_type"] == "ai_interactive_detect":
-                task_params["watermark_ai_interactive_type"] = params["watermark_ai_interactive_type"]
-                task_params["watermark_format"] = params["watermark_format"]
-                task_params["watermark_confidence"] = params["watermark_confidence"]
-                if task_params["watermark_ai_interactive_type"] == "semantic_detect":
-                    if not params["watermark_detect_prompt"]:
-                        error_msg = self.tr("请框输入水印语义检测提示词")
-                        return error_msg, task_params
-                    task_params["watermark_detect_prompt"] = params["watermark_detect_prompt"]
-                if task_params["watermark_ai_interactive_type"] == "space_detect":
-                    if not params["watermark_boxes"]:
-                        error_msg = self.tr("请框选水印位置")
-                        return error_msg, task_params
-                    task_params["watermark_boxes"] = params["watermark_boxes"]
-            if params["watermark_detect_type"] == "manual_detect":
-                task_params["manual_watermark_mask_path"] = params["manual_watermark_mask_path"]
-        return error_msg, task_params
+            return error_msg
+        error_msg = params.params.validate()
+        return error_msg
 
 
 class WatermarkRemove(QWidget):
