@@ -372,10 +372,10 @@ class ImageWatermarkRemove():
                 **det.to_segment_kwargs(),
                 **kwargs,
             )
-            if det.watermark_boxes and not (det.ai_detect_type == "ai_interactive_detect" and det.ai_interactive_type == "space_detect"):
+            if det.watermark_ai_detect_pos_boxes:
                 h, w = mask.shape
                 mask_image = np.zeros((h, w), dtype=np.uint8)
-                for bbox in det.watermark_boxes:
+                for bbox in det.watermark_ai_detect_pos_boxes:
                     xmin, ymin, xmax, ymax = bbox
                     mask_image[ymin:ymax, xmin:xmax] = mask[ymin:ymax, xmin:xmax]
                 mask = mask_image

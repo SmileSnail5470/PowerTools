@@ -43,14 +43,7 @@ class MaskPreparer:
         config = self.config
         detection, segment = config.detection, config.segment
         if self._segmentor is None:
-            self._segmentor = WatermarkSegment(
-                detection.watermark_type,
-                detection.ai_detect_type,
-                detection.ai_interactive_type,
-                detection.ai_interactive_prompt,
-                detection.ai_interactive_boxes,
-                detection.watermark_confidence,
-            )
+            self._segmentor = WatermarkSegment(detection)
         mask = self._segmentor.segment(
             image_path=str(frame_file),
             sr_onnx_path=segment.sr_segment_onnx_path,
@@ -64,13 +57,10 @@ class MaskPreparer:
 
     def _postprocess_mask(self, mask: np.ndarray) -> np.ndarray:
         detection = self.config.detection
-        if not detection.watermark_boxes or (
-            detection.ai_detect_type == "ai_interactive_detect"
-            and detection.ai_interactive_type == "space_detect"
-        ):
+        if not detection.watermark_ai_detect_pos_boxes:
             return mask
         result = np.zeros(mask.shape, dtype=np.uint8)
-        for xmin, ymin, xmax, ymax in detection.watermark_boxes:
+        for xmin, ymin, xmax, ymax in detection.watermark_ai_detect_pos_boxes:
             result[ymin:ymax, xmin:xmax] = mask[ymin:ymax, xmin:xmax]
         return result
 

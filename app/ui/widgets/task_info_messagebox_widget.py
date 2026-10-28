@@ -13,10 +13,11 @@ from app.workers.blind_watermark_remove_work import BlindWatermarkRemoveUIParams
 
 
 class TaskInfoMessageBox(MessageBoxBase):
-    def __init__(self, layered_params, task_type: str, parent=None):
+    def __init__(self, layered_params, task_type: str, parent=None, file_type=None):
         super().__init__(parent)
         self._lp = layered_params          # LayeredTaskParams
         self._p = layered_params.params    # 具体的 XxxUIParams dataclass
+        self._file_type = file_type
         self.task_type = task_type
         self.titleLabel = SubtitleLabel(self.tr("任务信息总结"))
         self.viewLayout.addWidget(self.titleLabel)
@@ -70,41 +71,56 @@ class TaskInfoMessageBox(MessageBoxBase):
             "general_watermark":"通用检测",
             "static_watermark": "静态水印",
             "dynamic_watermark":"动态水印",
-            "tracking":         "跟踪",
+            "tracking":         "跟踪检测",
+            "frame_by_frame":   "逐帧检测",
             "general_edit":     "智能重绘",
+            "object_removal":   "智能消除",
             "patchwiper":       "细节增强",
             "emdf":             "自适应修补",
             "image_restoration":"智能修补",
             "grig":             "平衡修复",
             "lama":             "自然保守",
             "coordfill":        "快速填充",
-            "video_engine":     "视频引擎",
+            "video_engine":     "关键帧擦除",
+            "ppt":              "时序擦除"
         }
         layout.addWidget(self._section_input(p.io.input_path))
-        params = [
-            (self.tr("水印检测方式"), value_map.get(p.detect.watermark_detect_type, p.detect.watermark_detect_type)),
-            (self.tr("AI 检测方法"), value_map.get(p.detect.watermark_ai_detect_method, p.detect.watermark_ai_detect_method)),
-        ]
-        if p.detect.watermark_ai_detect_prompt:
-            params.append((self.tr("检测提示词"), p.detect.watermark_ai_detect_prompt))
-        if p.detect.manual_watermark_mask_path:
-            params.append((self.tr("手工 Mask"), p.detect.manual_watermark_mask_path))
-        if p.detect.watermark_ai_detect_confidence:
-            pass
-        if p.detect.watermark_ai_detect_neg_boxes:
-            pass
-        if p.detect.watermark_ai_detect_pos_boxes:
-            pass
-        if p.detect.video_watermark_ai_detect_strategy:
-            pass
-        if p.detect.video_watermark_ai_detect_anchor_frame:
-            pass
-        if p.detect.video_watermark_ai_detect_frame_range:
-            pass
-        if p.detect.video_watermark_format:
-            pass
-        if p.detect.video_watermark_tracking_data:
-            pass
+        params = [(self.tr("水印检测方式"), value_map.get(p.detect.watermark_detect_type, p.detect.watermark_detect_type))]
+        if p.detect.watermark_detect_type == "manual_detect":
+            if p.detect.manual_watermark_mask_path:
+                params.append((self.tr("手工 Mask"), p.detect.manual_watermark_mask_path))
+        else:
+            need_image_detect_params = True
+            if self._file_type == "video":
+                params.append((self.tr("水印类型"), value_map.get(p.detect.video_watermark_format, p.detect.video_watermark_format)))
+                if p.detect.video_watermark_format == "dynamic_watermark":
+                    params.append((self.tr("水印检测策略"), value_map.get(p.detect.video_watermark_ai_detect_strategy, p.detect.video_watermark_ai_detect_strategy)))
+                    if p.detect.video_watermark_ai_detect_strategy == "tracking":
+                        params.append((self.tr("水印根据检测参数"), value_map.get(p.detect.video_watermark_tracking_data, p.detect.video_watermark_tracking_data)))
+                        need_image_detect_params = False
+                    else:
+                        params.append((self.tr("检测帧范围"), value_map.get(p.detect.video_watermark_ai_detect_frame_range, p.detect.video_watermark_ai_detect_frame_range)))
+                else:
+                    params.append((self.tr("检测关键帧"), value_map.get(p.detect.video_watermark_ai_detect_anchor_frame, p.detect.video_watermark_ai_detect_anchor_frame)))
+                    params.append((self.tr("检测帧范围"), value_map.get(p.detect.video_watermark_ai_detect_frame_range, p.detect.video_watermark_ai_detect_frame_range)))
+            if need_image_detect_params:
+                params.append((self.tr("水印检测方法"), value_map.get(p.detect.watermark_ai_detect_method, p.detect.watermark_ai_detect_method)))
+                if p.detect.watermark_ai_detect_method == "semantic_detect":
+                    params.append((self.tr("检测提示词"), p.detect.watermark_ai_detect_prompt))
+                    params.append((self.tr("检测灵敏度"), p.detect.watermark_ai_detect_prompt))
+                    if p.detect.watermark_ai_detect_neg_boxes:
+                        params.append((self.tr("负检测框 (保留)"), p.detect.watermark_ai_detect_neg_boxes))
+                    if p.detect.watermark_ai_detect_pos_boxes:
+                        params.append((self.tr("正检测框 (去除)"), p.detect.watermark_ai_detect_pos_boxes))
+                elif p.detect.watermark_ai_detect_method == "space_detect":
+                    params.append((self.tr("检测灵敏度"), p.detect.watermark_ai_detect_prompt))
+                    if p.detect.watermark_ai_detect_neg_boxes:
+                        params.append((self.tr("负检测框 (保留)"), p.detect.watermark_ai_detect_neg_boxes))
+                    if p.detect.watermark_ai_detect_pos_boxes:
+                        params.append((self.tr("正检测框 (去除)"), p.detect.watermark_ai_detect_pos_boxes))
+                else:
+                    if p.detect.watermark_ai_detect_pos_boxes:
+                        params.append((self.tr("正检测框 (去除)"), p.detect.watermark_ai_detect_pos_boxes))
         params.append((self.tr("模型"), value_map.get(p.model.model_name, p.model.model_name)))
         if p.model.model_name == "image_restoration":
             params.append((self.tr("水印类型"), p.model.restoration_watermark_type))

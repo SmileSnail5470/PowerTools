@@ -7,6 +7,8 @@ from app.ui.common.config import cfg
 
 
 def get_file_type(input_file: str):
+    if os.path.isdir(input_file):
+        input_file = os.path.join(input_file, os.listdir(input_file)[0])
     images_suffix = ["png", "jpg", "jpeg", "bmp", "avif", "webp"]
     videos_sufffix = ["mp4", "avi", "mov", "mkv"]
     ext = os.path.splitext(input_file)[1].lower().lstrip(".")

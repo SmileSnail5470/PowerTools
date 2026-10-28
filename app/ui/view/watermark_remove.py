@@ -1089,7 +1089,7 @@ class HeaderWidget(QWidget):
         if error_msg:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
-        w = TaskInfoMessageBox(watermark_remove_params, "watermark-remove", self.window())
+        w = TaskInfoMessageBox(watermark_remove_params, "watermark-remove", self.window(), file_type=get_file_type(watermark_remove_params.get_param("io.input_path")))
         if not w.exec():
             return
         

@@ -82,8 +82,10 @@ class WatermarkRemoveUIParams:
         if self.model.model_name in ["image_restoration"]:
             # 文档图片模型不需要检测流程
             return ""
+        if self.detect.watermark_detect_type == "manual_detect":
+            return ""
         if self.detect.watermark_ai_detect_method == "semantic_detect" and not self.detect.watermark_ai_detect_prompt:
-            return "已选【语意检测】请输入水印语义检测提示词"
+            return "已选【语义检测】请输入水印语义检测提示词"
         if self.detect.watermark_ai_detect_method == "space_detect" and not self.detect.watermark_ai_detect_pos_boxes:
             return "已选【框选区域】请框选检测的区域"
         return ""
@@ -152,27 +154,17 @@ class WatermarkRemoveWork(BaseWorker):
         detect = p.detect
         tracking_data = detect.video_watermark_tracking_data
         detection_cfg = DetectionConfig(
-            watermark_type="all",
-            ai_detect_type=detect.watermark_detect_type,
-            ai_interactive_type=detect.watermark_ai_detect_method,
-            ai_interactive_prompt=detect.watermark_ai_detect_prompt,
-            ai_interactive_boxes=(
-                detect.watermark_ai_detect_pos_boxes
-                if detect.watermark_ai_detect_method == "space_detect"
-                else []
-            ),
-            watermark_confidence=detect.watermark_ai_detect_confidence,
-            watermark_boxes=[],
+            watermark_ai_detect_method=detect.watermark_ai_detect_method,
+            watermark_ai_detect_prompt=detect.watermark_ai_detect_prompt,
+            watermark_ai_detect_pos_boxes=detect.watermark_ai_detect_pos_boxes,
+            watermark_ai_detect_neg_boxes=detect.watermark_ai_detect_neg_boxes,
+            watermark_ai_detect_confidence=detect.watermark_ai_detect_confidence,
         )
         runtime_cfg = RuntimeConfig(
             progress_cb=progress_cb,
             ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
             should_cancel=cancel_requested,
         )
-        model_name = p.model.model_name
-        mask_dilate = p.model.mask_dilate
-        manual_mask_path = detect.manual_watermark_mask_path or ""
-        watermark_format = detect.video_watermark_format
         tracking_dict = {
             "keyframes": tracking_data.keyframes,
             "end_frame": tracking_data.end_frame,
@@ -180,15 +172,15 @@ class WatermarkRemoveWork(BaseWorker):
         }
 
         if file_type == "image":
-            if model_name not in ["image_restoration"]:
+            if p.model.model_name not in ["image_restoration"]:
                 image_cfg = ImageWatermarkRemoveConfig(
                     segment=segment_paths,
                     inpaint=inpaint_paths,
                     detection=detection_cfg,
                     mask=MaskConfig(
-                        mask_path=manual_mask_path,
-                        refine_type=model_name,
-                        dilate_num=int(mask_dilate),
+                        mask_path=detect.manual_watermark_mask_path,
+                        refine_type=p.model.model_name,
+                        dilate_num=int(p.model.mask_dilate),
                     ),
                     runtime=runtime_cfg,
                 )
@@ -204,8 +196,8 @@ class WatermarkRemoveWork(BaseWorker):
                     runtime=runtime_cfg,
                 )
                 self._get_image_instance().run_without_mask(input_path, output_file, config=restoration_cfg)
-        elif model_name != "video_engine":
-            if model_name not in ["image_restoration"]:
+        elif p.model.model_name != "video_engine":
+            if p.model.model_name not in ["image_restoration"]:
                 ppt_onnx_basedir = os.path.join(self.deps_path, _resolve_hardware_variant(), "video_inpainting", "ppt")
                 tacker_onnx_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "tracker")
                 video_cfg = VideoWatermarkRemoveConfig(
@@ -217,10 +209,10 @@ class WatermarkRemoveWork(BaseWorker):
                     ),
                     detection=detection_cfg,
                     mask=VideoMaskConfig(
-                        mask_path=manual_mask_path,
-                        refine_type=model_name,
-                        dilate_num=int(mask_dilate),
-                        use_cache_mask=(watermark_format == "static_watermark"),
+                        mask_path=detect.manual_watermark_mask_path,
+                        refine_type=p.model.model_name,
+                        dilate_num=int(p.model.mask_dilate),
+                        use_cache_mask=(detect.video_watermark_format == "static_watermark"),
                         watermark_tracking_data=tracking_dict,
                     ),
                     runtime=RuntimeConfig(
@@ -255,8 +247,8 @@ class WatermarkRemoveWork(BaseWorker):
                     prompt=None,
                     task_type=None,
                     keyframe_stride=2,
-                    is_static_watermark=(watermark_format == "static_watermark"),
-                    mask_path=manual_mask_path,
+                    is_static_watermark=(detect.video_watermark_format == "static_watermark"),
+                    mask_path=detect.manual_watermark_mask_path,
                 ),
                 segment=segment_paths,
                 inpaint=inpaint_paths,
