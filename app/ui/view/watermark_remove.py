@@ -1136,7 +1136,7 @@ class HeaderWidget(QWidget):
             future.progress.connect(lambda value, msg, path=input_path: self._task_progress(path, value, msg))
 
         for func, args, kwargs in total_tasks:
-            input_path = kwargs["input_path"]
+            input_path = args[1].get_param("io.input_path")
             submit_task(func, args, kwargs, input_path)
         TeachingTip.create(
             target=self.process_btn,

@@ -23,15 +23,15 @@ from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
 
 from app.ui.common.event_bus import global_event_bus
 from app.controllers.task_manager import global_task_manager
-from app.ui.common.task_params import bind_widget_to_param, TaskParams
+from app.ui.common.task_params import bind_widget_to_param, LayeredTaskParams
 from app.ui.common.task_status import TaskStatusModel
 from app.ui.common.utils import get_file_type, global_backend_info_cache
 from app.ui.common.config import cfg
-from app.workers.image_edit_work import ImageEditWork
+from app.workers.image_edit_work import ImageEditWork, ImageEditUIParams
 from app.license.globals import feature_gate
 
 
-image_edit_params = TaskParams()
+image_edit_params = LayeredTaskParams(params=ImageEditUIParams())
 image_edit_task_status_model = TaskStatusModel()
 # 当前批次已提交的任务 future，用于支持一次性取消
 image_edit_active_futures = []
@@ -78,7 +78,7 @@ class PromptInputCard(HeaderCardWidget):
         main_layout.addWidget(hint_label)
 
     def _on_text_changed(self):
-        image_edit_params.set_param("prompt", self.prompt_edit.toPlainText())
+        image_edit_params.set_param("task.prompt", self.prompt_edit.toPlainText())
 
 
 class ReferenceImageCard(HeaderCardWidget):
@@ -96,7 +96,7 @@ class ReferenceImageCard(HeaderCardWidget):
 
         self.file_selector = FileSelectorWidget(self)
         self.file_selector.item_selected.connect(self._on_file_selected)
-        bind_widget_to_param(self.file_selector, "item_selected", image_edit_params, "input_path", transform=None)
+        bind_widget_to_param(self.file_selector, "item_selected", image_edit_params, "io.input_path", transform=None)
         main_layout.addWidget(self.file_selector)
 
         preview_layout = QHBoxLayout()
@@ -142,7 +142,7 @@ class ReferenceImageCard(HeaderCardWidget):
 
     def _on_file_selected(self, file_path):
         self._file_path = file_path
-        image_edit_params.set_param("mask_boxes", [])
+        image_edit_params.set_param("task.mask_boxes", [])
         self.area_info_label.setText(self.tr("未选择区域"))
         if file_path and os.path.isfile(file_path):
             pixmap = QPixmap(file_path)
@@ -160,7 +160,7 @@ class ReferenceImageCard(HeaderCardWidget):
         dialog = AreaSelectorDialog(file_path=self._file_path, single_area_only=False, parent=self.window())
         dialog.exec()
         boxes = dialog.get_results()
-        image_edit_params.set_param("mask_boxes", boxes)
+        image_edit_params.set_param("task.mask_boxes", boxes)
         if boxes:
             self.area_info_label.setText(self.tr("已选择 {0} 个区域").format(len(boxes)))
         else:
@@ -264,7 +264,7 @@ class ModelSelectCard(HeaderCardWidget):
         self.tab_image.toggled.connect(lambda checked: self._on_tab_changed(0, checked))
         self.tab_video.toggled.connect(lambda checked: self._on_tab_changed(1, checked))
 
-        bind_widget_to_param(self, "model_name", image_edit_params, "model_name", transform=None)
+        bind_widget_to_param(self, "model_name", image_edit_params, "model.model_name", transform=None)
         self.select_first_interactive()
         global_event_bus.License_update.connect(self.select_first_interactive)
         global_event_bus.imageEdit_TaskFinishedByModel.connect(self._on_task_finished_by_model)
@@ -349,7 +349,7 @@ class OutputSettingsCard(HeaderCardWidget):
         self.save_location_line_edit.setPlaceholderText(self.tr("选择保存位置"))
         save_location_action = QAction(FluentIcon.FOLDER_ADD.qicon(), "", triggered=self.save_location_browse)
         self.save_location_line_edit.addAction(save_location_action, QLineEdit.TrailingPosition)
-        bind_widget_to_param(self.save_location_line_edit, "textChanged", image_edit_params, "output_path", transform=None)
+        bind_widget_to_param(self.save_location_line_edit, "textChanged", image_edit_params, "io.output_path", transform=None)
         output_settings_layout.addWidget(self.save_location_line_edit)
 
         self.viewLayout.addLayout(output_settings_layout)
@@ -541,30 +541,34 @@ class HeaderWidget(QWidget):
         self.process_btn.clicked.connect(self._on_process)
 
     def _on_process(self):
-        init_params = image_edit_params.to_dict()
-        error_msg, task_params = self._params_check(params=init_params)
+        error_msg = image_edit_params.validate()
+        if not cfg.get(cfg.localImageEditEnabled):
+            error_msg = self.tr("请在设置页面打开 '图像编辑' 能力开关")
         if error_msg:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
-        w = TaskInfoMessageBox(task_params, "image-edit", self.window())
+        w = TaskInfoMessageBox(image_edit_params, "image-edit", self.window())
         if not w.exec():
             return
+
+        model_name = image_edit_params.get_param("model.model_name")
         allowed_use, error_msg = feature_gate.can_use(
-            feature_name=feature_gate.get_feature_name(image_edit_params.to_dict()["model_name"]),
+            feature_name=feature_gate.get_feature_name(model_name),
             return_errmsg=True
         )
         if not allowed_use:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
-        task_params["_feature_name_"] = feature_gate.get_feature_name(image_edit_params.to_dict()["model_name"])
-        output_dir = task_params["output_path"]
-        input_path = task_params["input_path"] if "input_path" in task_params else os.path.join(output_dir, "image.png")
+        image_edit_params.params._feature_name_ = feature_gate.get_feature_name(model_name)
+
+        output_dir = image_edit_params.get_param("io.output_path")
+        input_path = image_edit_params.get_param("io.input_path") or os.path.join(output_dir, "image.png")
         basename = os.path.basename(input_path).rsplit(".", 1)
         output_file = os.path.join(
             output_dir,
             "{0}_edited.{1}".format(basename[0], basename[1] if len(basename) > 1 else "png")
         )
-        task_params["output_path"] = output_file
+        image_edit_params.set_param("io.output_path", output_file)
         if not os.path.exists(input_path):
             global_event_bus.imageEdit_PreviewMode.emit("single")
             input_path = output_file
@@ -572,7 +576,7 @@ class HeaderWidget(QWidget):
         global_event_bus.imageEdit_ImageNavigationInit.emit()
         self.is_batch_task = False
 
-        task_instance = ImageEditWork(**task_params)
+        task_instance = ImageEditWork(image_edit_params)
         func, args, kwargs = task_instance.to_worker()
 
         backend_type, gpu_name = global_backend_info_cache.get(key="backend_info")
@@ -616,42 +620,16 @@ class HeaderWidget(QWidget):
             image_edit_task_status_model.start_step(name=self.tr("导出结果"))
 
     def _task_finished(self, input_path, output_path):
+        model_name = image_edit_params.get_param("model.model_name")
         if not feature_gate.is_pro:
             try:
-                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(image_edit_params.to_dict()["model_name"]))
+                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(model_name))
             except Exception:
                 pass
-            global_event_bus.imageEdit_TaskFinishedByModel.emit(image_edit_params.to_dict()["model_name"])
+            global_event_bus.imageEdit_TaskFinishedByModel.emit(model_name)
         image_edit_task_status_model.report_success()
         global_event_bus.imageEdit_TaskFinished.emit(input_path, output_path)
         image_edit_task_status_model.finish_step(name=self.tr("导出结果"))
-
-    def _params_check(self, params):
-        error_msg = ""
-        task_params = {}
-        if not params:
-            error_msg = self.tr("请设置图像编辑参数")
-            return error_msg, task_params
-        if not cfg.get(cfg.localImageEditEnabled):
-            error_msg = self.tr("请在设置页面打开 '图像编辑' 能力开关")
-            return error_msg, task_params
-        if "prompt" not in params or not params.get("prompt", "").strip():
-            error_msg = self.tr("请输入编辑提示词")
-            return error_msg, task_params
-        task_params["prompt"] = params["prompt"].strip()
-        if "input_path" in params and params["input_path"]:
-            task_params["input_path"] = params["input_path"]
-        if "model_name" not in params or not params["model_name"]:
-            error_msg = self.tr("请选择编辑模型")
-            return error_msg, task_params
-        task_params["model_name"] = params["model_name"]
-        if "mask_boxes" in params and params["mask_boxes"]:
-            task_params["mask_boxes"] = params["mask_boxes"]
-        if "output_path" not in params or not params["output_path"]:
-            error_msg = self.tr("请设置文件保存位置")
-            return error_msg, task_params
-        task_params["output_path"] = params["output_path"]
-        return error_msg, task_params
 
 
 class ImageEdit(QWidget):

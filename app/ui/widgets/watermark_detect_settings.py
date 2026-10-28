@@ -268,7 +268,7 @@ class WatermarkDetectSettings(QWidget):
         detection_types_flow.setVerticalSpacing(8)
         self.detection_mode_cards = {}
         detection_modes = (
-            ("semantic_detect", self.tr("语意识别"), self.tr("按文本描述识别"), "🧠", "#EDE9FE"),
+            ("semantic_detect", self.tr("语义识别"), self.tr("按文本描述识别"), "🧠", "#EDE9FE"),
             ("space_detect", self.tr("框选区域"), self.tr("手动框选水印"), "🎯", "#DBEAFE"),
             ("subtitle", self.tr("字幕"), self.tr("识别字幕"), "💬", "#FCE7F3"),
             ("text_watermark", self.tr("文字水印"), self.tr("识别文字水印"), "🔤", "#DCFCE7"),

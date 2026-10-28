@@ -1,536 +1,343 @@
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import (
-    QApplication, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QGridLayout, QScrollArea
-)
+from PySide6.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QGridLayout, QScrollArea
 from app.ui.library.qfluentwidgets import setFont, MessageBoxBase, TeachingTip, InfoBarIcon, TeachingTipTailPosition, SubtitleLabel
 
+from app.workers.watermark_remove import WatermarkRemoveUIParams
+from app.workers.watermark_extract_work import WatermarkExtractUIParams
+from app.workers.watermark_add_work import WatermarkAddUIParams
+from app.workers.ocr_work import OCRUIParams
+from app.workers.image_restoration_work import ImageRestorationUIParams
+from app.workers.image_edit_work import ImageEditUIParams
+from app.workers.blind_watermark_remove_work import BlindWatermarkRemoveUIParams
 
-param_name_map = {
-    "input_path": "文件路径",
-    "watermark_type": "水印类型",
-    "blind_watermark_task_type": "盲水印任务类型",
-    "blind_watermark_model_name": "盲水印算法",
-    "watermark_detect_type": "水印检测方式",
-    "manual_watermark_mask_path": "人工标注 Mask 路径",
-    "watermark_ai_interactive_type": "AI 交互检测水印方式",
-    "watermark_detect_prompt": "AI 水印检测提示词",
-    "watermark_boxes": "AI 框选检测 Box",
-    "image_boxes": "人工选中水印区域 Box",
-    "watermark_tracking_data": "视频水印跟踪参数",
-    "watermark_confidence": "水印置信度",
-    "restoration_watermark_type": "文档水印类型",
-    "restoration_prompt": "自定义水印类型",
-    "mask_dilate": "水印 Mask 扩张系数",
-    "model_name": "模型类型",
-    "watermark_text": "水印文本",
-    "custom_characters": "盲水印字符集",
-    "font": "字体",
-    "font_size": "字体大小",
-    "font_color": "字体颜色",
-    "watermark_image": "图片水印位置",
-    "watermark_opacity": "水印透明度（%）",
-    "watermark_content": "水印样式",
-    "watermark_format": "水印形式",
-    "watermark_location": "水印位置",
-    "watermark_rotation": "水印旋转角度（{0}）".format("\u00B0"),
-    "watermark_zoom": "水印缩放比例（%）",
-    "output_path": "保存位置",
-    "output_format": "保存格式",
-    "ocr_rec_language": "识别目标语言",
-    "drop_score": "OCR 识别置信度",
-    "use_textline_ori": "文本行方向矫正",
-    "use_color_fix": "颜色校正",
-    "high_quality_output": "启用高质量输出",
-    "reserve_region": "原图保留区域",
-    "prompt": "编辑提示词",
-    "mask_boxes": "编辑区域",
-    "task_type": "修复任务类型",
-    "num_inference_steps": "推理步数",
-    "guidance": "修复强度",
-    "seed": "随机种子",
-    "low_memory": "低显存模式",
-    "upscale": "放大倍数",
-}
 
 class TaskInfoMessageBox(MessageBoxBase):
-    def __init__(self, params, task_type, parent=None):
+    def __init__(self, layered_params, task_type: str, parent=None):
         super().__init__(parent)
-        self.task_params = params
+        self._lp = layered_params          # LayeredTaskParams
+        self._p = layered_params.params    # 具体的 XxxUIParams dataclass
         self.task_type = task_type
         self.titleLabel = SubtitleLabel(self.tr("任务信息总结"))
         self.viewLayout.addWidget(self.titleLabel)
         self.setModal(True)
-        self.setup_ui()
-        
-    def setup_ui(self):
+        self._build()
+
+    def _build(self):
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
-        
+
         body = QFrame()
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(24, 10, 24, 20)
         body_layout.setSpacing(10)
-        
-        if self.task_type == "watermark-add":
-            value_map = {
-                "visible": "可见水印",
-                "blind": "盲水印",
-                "ImageSettings": "图片水印",
-                "TextSettings": "文本水印",
-                "videoseal": "稳定可靠",
-                "pixelseal": "追求质量"
-            }
-            input_section = self.create_section(self.tr("📁 输入文件路径"))
-            input_path = self.create_path_label(self.task_params["input_path"])
-            input_section.layout().addWidget(input_path)
-            
-            scroll_area = QScrollArea()
-            scroll_area.setWidgetResizable(True)
-            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            scroll_area.setStyleSheet("""
-                QScrollArea {
-                    background-color: #f5f5f5;
-                    border: none;
-                    border-radius: 12px;
-                }
-            """)
-            params_section = self.create_section(self.tr("⚙️ 水印参数"))
-            params_grid = QGridLayout()
-            params_grid.setSpacing(10)
-            
-            row, col = 0, 0
-            is_image_watermark = True if self.task_params.get("watermark_content", "TextSettings") == "ImageSettings" else False
-            for key, value in self.task_params.items():
-                if key in ["input_path", "output_path", "output_format"]:
-                    continue
-                if is_image_watermark and key in ["font", "font_size", "font_color", "watermark_text"]:
-                    continue
-                if not is_image_watermark and key in ["watermark_image"]:
-                    continue
-                param_widget = self.create_param_widget(param_name_map[key], value if value not in value_map else value_map[value])
-                params_grid.addWidget(param_widget, row, col)
-                col += 1
-                if col >= 1:
-                    col = 0
-                    row += 1
-            params_section.layout().addLayout(params_grid)
-            scroll_area.setWidget(params_section)
-            
-            output_section = self.create_section(self.tr("💾 输出保存设置"))
-            output_path = self.create_path_label(self.task_params["output_path"], header=self.tr("输出位置："))
-            output_format = self.create_path_label(self.task_params["output_format"], header=self.tr("输出格式："))
-            output_section.layout().addWidget(output_path)
-            output_section.layout().addWidget(output_format)
-            
-            body_layout.addWidget(input_section)
-            body_layout.addWidget(scroll_area)
-            body_layout.addWidget(output_section)
-        if self.task_type == "watermark-extract":
-            value_map = {
-                "visible": "可见水印",
-                "blind": "盲水印",
-                "extract_blind_watermark": "提取",
-                "add_blind_watermark": "添加",
-                "videoseal": "稳定可靠",
-                "pixelseal": "追求质量"
-            }
-            input_section = self.create_section(self.tr("📁 输入文件路径"))
-            input_path = self.create_path_label(self.task_params["input_path"])
-            input_section.layout().addWidget(input_path)
-            
-            scroll_area = QScrollArea()
-            scroll_area.setWidgetResizable(True)
-            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            scroll_area.setStyleSheet("""
-                QScrollArea {
-                    background-color: #f5f5f5;
-                    border: none;
-                    border-radius: 12px;
-                }
-            """)
-            params_section = self.create_section(self.tr("⚙️ 水印参数"))
-            params_grid = QGridLayout()
-            params_grid.setSpacing(10)
-            
-            row, col = 0, 0
-            for key, value in self.task_params.items():
-                if key in ["input_path"]:
-                    continue
-                param_widget = self.create_param_widget(param_name_map[key], value if value not in value_map else value_map[value])
-                params_grid.addWidget(param_widget, row, col)
-                col += 1
-                if col >= 1:
-                    col = 0
-                    row += 1
-            params_section.layout().addLayout(params_grid)
-            scroll_area.setWidget(params_section)
 
-            body_layout.addWidget(input_section)
-            body_layout.addWidget(scroll_area)
-        if self.task_type == "watermark-remove":
-            value_map = {
-                "ai_auto_detect": "AI 全自动检测",
-                "ai_interactive_detect": "AI 交互检测",
-                "manual_detect": "手工标注",
-                "general_watermark": "通用水印",
-                "text_watermark": "文本水印",
-                "subtitle": "字幕",
-                "static_watermark": "静态",
-                "dynamic_watermark": "动态",
-                "semantic_detect": "语义检测",
-                "space_detect": "空间位置检测",
-                "general_edit": "智能重绘",
-                "patchwiper": "细节增强",
-                "emdf": "自适应修补",
-                "image_restoration": "智能修补",
-                "grig": "平衡修复",
-                "lama": "自然保守",
-                "coordfill": "快速填充"
-            }
-            value_map.update({
-                "general": "通用水印",
-                "horizontal": "半透明水平",
-                "vertical": "半透明垂直",
-                "diagonal": "半透明斜向",
-                "logo": "图片/Logo",
-            })
-            input_section = self.create_section(self.tr("📁 输入文件路径"))
-            input_path = self.create_path_label(self.task_params["input_path"])
-            input_section.layout().addWidget(input_path)
-            
-            scroll_area = QScrollArea()
-            scroll_area.setWidgetResizable(True)
-            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            scroll_area.setStyleSheet("""
-                QScrollArea {
-                    background-color: #f5f5f5;
-                    border: none;
-                    border-radius: 12px;
-                }
-            """)
-            params_section = self.create_section(self.tr("⚙️ 水印参数"))
-            params_grid = QGridLayout()
-            params_grid.setSpacing(10)
-            
-            row, col = 0, 0
-            for key, value in self.task_params.items():
-                if key in ["input_path", "output_path", "output_format"]:
-                    continue
-                param_widget = self.create_param_widget(param_name_map[key], str(value) if str(value) not in value_map else value_map[value])
-                params_grid.addWidget(param_widget, row, col)
-                col += 1
-                if col >= 1:
-                    col = 0
-                    row += 1
-            params_section.layout().addLayout(params_grid)
-            scroll_area.setWidget(params_section)
+        builder = {
+            "watermark-remove":       self._build_watermark_remove,
+            "watermark-add":          self._build_watermark_add,
+            "watermark-extract":      self._build_watermark_extract,
+            "ocr-rec":                self._build_ocr,
+            "blind-watermark-remove": self._build_blind_watermark_remove,
+            "image-edit":             self._build_image_edit,
+            "image-restoration":      self._build_image_restoration,
+        }.get(self.task_type)
 
-            output_section = self.create_section(self.tr("💾 输出保存设置"))
-            output_path = self.create_path_label(self.task_params["output_path"], header=self.tr("输出位置："))
-            output_format = self.create_path_label(self.task_params["output_format"], header=self.tr("输出格式："))
-            output_section.layout().addWidget(output_path)
-            output_section.layout().addWidget(output_format)
-            
-            body_layout.addWidget(input_section)
-            body_layout.addWidget(scroll_area)
-            body_layout.addWidget(output_section)
-        if self.task_type == "ocr-rec":
-            value_map = {
-                "zh-jp-en": "中日英",
-                "pp_ocr": "通用识别"
-            }
-            input_section = self.create_section(self.tr("📁 输入文件路径"))
-            input_path = self.create_path_label(self.task_params["input_path"])
-            input_section.layout().addWidget(input_path)
-            
-            scroll_area = QScrollArea()
-            scroll_area.setWidgetResizable(True)
-            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            scroll_area.setStyleSheet("""
-                QScrollArea {
-                    background-color: #f5f5f5;
-                    border: none;
-                    border-radius: 12px;
-                }
-            """)
-            params_section = self.create_section(self.tr("⚙️ OCR 参数"))
-            params_grid = QGridLayout()
-            params_grid.setSpacing(10)
-            
-            row, col = 0, 0
-            for key, value in self.task_params.items():
-                if key in ["input_path"]:
-                    continue
-                param_widget = self.create_param_widget(param_name_map[key], value if value not in value_map else value_map[value])
-                params_grid.addWidget(param_widget, row, col)
-                col += 1
-                if col >= 1:
-                    col = 0
-                    row += 1
-            params_section.layout().addLayout(params_grid)
-            scroll_area.setWidget(params_section)
-            
-            body_layout.addWidget(input_section)
-            body_layout.addWidget(scroll_area)
-        if self.task_type == "blind-watermark-remove":
-            value_map = {
-                "reverse_edit": "智能消除",
-            }
-            input_section = self.create_section(self.tr("📁 输入文件路径"))
-            input_path = self.create_path_label(self.task_params["input_path"])
-            input_section.layout().addWidget(input_path)
-            
-            scroll_area = QScrollArea()
-            scroll_area.setWidgetResizable(True)
-            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            scroll_area.setStyleSheet("""
-                QScrollArea {
-                    background-color: #f5f5f5;
-                    border: none;
-                    border-radius: 12px;
-                }
-            """)
-            params_section = self.create_section(self.tr("⚙️ 暗水印去除参数"))
-            params_grid = QGridLayout()
-            params_grid.setSpacing(10)
-            
-            row, col = 0, 0
-            for key, value in self.task_params.items():
-                if key in ["input_path", "output_path"]:
-                    continue
-                param_widget = self.create_param_widget(param_name_map[key], str(value) if str(value) not in value_map else value_map[value])
-                params_grid.addWidget(param_widget, row, col)
-                col += 1
-                if col >= 1:
-                    col = 0
-                    row += 1
-            params_section.layout().addLayout(params_grid)
-            scroll_area.setWidget(params_section)
+        if builder:
+            builder(body_layout)
 
-            output_section = self.create_section(self.tr("💾 输出保存设置"))
-            output_path = self.create_path_label(self.task_params["output_path"], header=self.tr("输出位置："))
-            output_section.layout().addWidget(output_path)
-            
-            body_layout.addWidget(input_section)
-            body_layout.addWidget(scroll_area)
-            body_layout.addWidget(output_section)
-        if self.task_type == "image-edit":
-            value_map = {
-                "general_edit": "智能重绘",
-            }
-            scroll_area = QScrollArea()
-            scroll_area.setWidgetResizable(True)
-            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            scroll_area.setStyleSheet("""
-                QScrollArea {
-                    background-color: #f5f5f5;
-                    border: none;
-                    border-radius: 12px;
-                }
-            """)
-            params_section = self.create_section(self.tr("⚙️ 图像编辑参数"))
-            params_grid = QGridLayout()
-            params_grid.setSpacing(10)
-            
-            row, col = 0, 0
-            for key, value in self.task_params.items():
-                if key in ["output_path"]:
-                    continue
-                param_widget = self.create_param_widget(param_name_map[key], str(value) if str(value) not in value_map else value_map[value])
-                params_grid.addWidget(param_widget, row, col)
-                col += 1
-                if col >= 1:
-                    col = 0
-                    row += 1
-            params_section.layout().addLayout(params_grid)
-            scroll_area.setWidget(params_section)
-
-            output_section = self.create_section(self.tr("💾 输出保存设置"))
-            output_path = self.create_path_label(self.task_params["output_path"], header=self.tr("输出位置："))
-            output_section.layout().addWidget(output_path)
-            
-            body_layout.addWidget(scroll_area)
-            body_layout.addWidget(output_section)
-        
-        if self.task_type == "image-restoration":
-            value_map = {
-                "image_restoration": "智能修复",
-                "image_sr": "图像高清",
-                "restoration": "综合修复",
-                "dehaze": "去雾",
-                "derain": "去雨",
-                "denoise": "去噪",
-                "deblur": "去模糊",
-                "super_resolution": "超分放大",
-                "lowlight": "低光增强",
-                "compression": "去压缩伪影",
-                "old_photo": "老照片修复",
-                "watermark_remove": "去水印",
-                "subtitle_remove": "去字幕",
-            }
-            input_section = self.create_section(self.tr("📁 输入文件路径"))
-            input_path = self.create_path_label(self.task_params["input_path"])
-            input_section.layout().addWidget(input_path)
-
-            scroll_area = QScrollArea()
-            scroll_area.setWidgetResizable(True)
-            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            scroll_area.setStyleSheet("""
-                QScrollArea {
-                    background-color: #f5f5f5;
-                    border: none;
-                    border-radius: 12px;
-                }
-            """)
-            params_section = self.create_section(self.tr("⚙️ 图像修复参数"))
-            params_grid = QGridLayout()
-            params_grid.setSpacing(10)
-
-            row, col = 0, 0
-            for key, value in self.task_params.items():
-                if key in ["input_path", "output_path"]:
-                    continue
-                param_widget = self.create_param_widget(
-                    param_name_map.get(key, key), value_map.get(str(value), str(value))
-                )
-                params_grid.addWidget(param_widget, row, col)
-                col += 1
-                if col >= 1:
-                    col = 0
-                    row += 1
-            params_section.layout().addLayout(params_grid)
-            scroll_area.setWidget(params_section)
-
-            output_section = self.create_section(self.tr("💾 输出保存设置"))
-            output_path = self.create_path_label(self.task_params["output_path"], header=self.tr("输出位置："))
-            output_section.layout().addWidget(output_path)
-
-            body_layout.addWidget(input_section)
-            body_layout.addWidget(scroll_area)
-            body_layout.addWidget(output_section)
-
-        # 底部区域
         footer = QFrame()
         footer_layout = QHBoxLayout(footer)
         footer_layout.setContentsMargins(24, 5, 24, 5)
-        
-        tip_label = QLabel(self.tr("💡 提示：点击路径或参数可复制内容"))
-        tip_label.setStyleSheet("color: #6c757d;")
-        setFont(tip_label, 13)
-        
-        footer_layout.addWidget(tip_label)
-        
+        tip = QLabel(self.tr("💡 提示：点击路径或参数可复制内容"))
+        tip.setStyleSheet("color: #6c757d;")
+        setFont(tip, 13)
+        footer_layout.addWidget(tip)
+
         main_layout.addWidget(body)
         main_layout.addWidget(footer)
-
         self.viewLayout.addLayout(main_layout)
-        
-    def create_section(self, title):
-        section = QFrame()
-        section_layout = QVBoxLayout(section)
-        section_layout.setContentsMargins(20, 16, 20, 20)
 
-        section.setStyleSheet("""
-            QFrame {
-                background-color: #f5f5f5;
-                border: none;
-                border-radius: 12px;
-            }
-        """)
-        
-        title_label = QLabel(title)
-        setFont(title_label, 14, QFont.Bold)
-        title_label.setStyleSheet("""
+    def _build_watermark_remove(self, layout: QVBoxLayout):
+        p: WatermarkRemoveUIParams = self._p
+        value_map = {
+            "ai_detect":        "AI检测",
+            "manual_detect":    "手工标注",
+            "semantic_detect":  "语义检测",
+            "space_detect":     "框选区域",
+            "subtitle":         "字幕",
+            "text_watermark":   "文字水印",
+            "general_watermark":"通用检测",
+            "static_watermark": "静态水印",
+            "dynamic_watermark":"动态水印",
+            "tracking":         "跟踪",
+            "general_edit":     "智能重绘",
+            "patchwiper":       "细节增强",
+            "emdf":             "自适应修补",
+            "image_restoration":"智能修补",
+            "grig":             "平衡修复",
+            "lama":             "自然保守",
+            "coordfill":        "快速填充",
+            "video_engine":     "视频引擎",
+        }
+        layout.addWidget(self._section_input(p.io.input_path))
+        params = [
+            (self.tr("水印检测方式"), value_map.get(p.detect.watermark_detect_type, p.detect.watermark_detect_type)),
+            (self.tr("AI 检测方法"), value_map.get(p.detect.watermark_ai_detect_method, p.detect.watermark_ai_detect_method)),
+        ]
+        if p.detect.watermark_ai_detect_prompt:
+            params.append((self.tr("检测提示词"), p.detect.watermark_ai_detect_prompt))
+        if p.detect.manual_watermark_mask_path:
+            params.append((self.tr("手工 Mask"), p.detect.manual_watermark_mask_path))
+        if p.detect.watermark_ai_detect_confidence:
+            pass
+        if p.detect.watermark_ai_detect_neg_boxes:
+            pass
+        if p.detect.watermark_ai_detect_pos_boxes:
+            pass
+        if p.detect.video_watermark_ai_detect_strategy:
+            pass
+        if p.detect.video_watermark_ai_detect_anchor_frame:
+            pass
+        if p.detect.video_watermark_ai_detect_frame_range:
+            pass
+        if p.detect.video_watermark_format:
+            pass
+        if p.detect.video_watermark_tracking_data:
+            pass
+        params.append((self.tr("模型"), value_map.get(p.model.model_name, p.model.model_name)))
+        if p.model.model_name == "image_restoration":
+            params.append((self.tr("水印类型"), p.model.restoration_watermark_type))
+            if p.model.restoration_prompt:
+                params.append((self.tr("自定义提示词"), p.model.restoration_prompt))
+        else:
+            params.append((self.tr("Mask 扩张系数"),   str(p.model.mask_dilate)))
+
+        layout.addWidget(self._section_params(self.tr("⚙️ 去除参数"), params))
+        layout.addWidget(self._section_output(p.io.output_path, p.io.output_format))
+
+    def _build_watermark_add(self, layout: QVBoxLayout):
+        p: WatermarkAddUIParams = self._p
+        value_map = {
+            "visible":   "可见水印",
+            "blind":     "盲水印",
+            "TextSettings":  "文字水印",
+            "ImageSettings": "图片水印",
+            "videoseal": "稳定可靠",
+            "pixelseal": "追求质量",
+            "top-left": "左上", "top-center": "上中", "top-right": "右上",
+            "center-left": "左中", "center": "居中", "center-right": "右中",
+            "bottom-left": "左下", "bottom-center": "下中", "bottom-right": "右下",
+        }
+        layout.addWidget(self._section_input(p.io.input_path))
+        params = [(self.tr("水印类型"), value_map.get(p.type.watermark_type, p.type.watermark_type))]
+        if p.type.watermark_type == "visible":
+            params.append((self.tr("水印样式"), value_map.get(p.type.watermark_content, p.type.watermark_content)))
+            if p.type.watermark_content == "TextSettings":
+                params += [
+                    (self.tr("水印文字"),       p.visible.watermark_text),
+                    (self.tr("字体"),           p.visible.font),
+                    (self.tr("字体大小"),        str(p.visible.font_size)),
+                    (self.tr("字体颜色"),        p.visible.font_color),
+                ]
+            else:
+                params.append((self.tr("水印图片"), p.visible.watermark_image))
+            params += [
+                (self.tr("位置"),   value_map.get(p.visible.watermark_location, p.visible.watermark_location)),
+                (self.tr("透明度"), f"{p.visible.watermark_opacity}%"),
+                (self.tr("旋转"),   f"{p.visible.watermark_rotation}°"),
+                (self.tr("缩放"),   f"{p.visible.watermark_zoom}%"),
+            ]
+        else:
+            params += [
+                (self.tr("盲水印算法"), value_map.get(p.blind.blind_watermark_model_name, p.blind.blind_watermark_model_name)),
+                (self.tr("水印文字"),   p.blind.watermark_text),
+            ]
+
+        layout.addWidget(self._section_params(self.tr("⚙️ 水印参数"), params))
+        layout.addWidget(self._section_output(p.io.output_path, p.io.output_format))
+
+    def _build_watermark_extract(self, layout: QVBoxLayout):
+        p: WatermarkExtractUIParams = self._p
+        value_map = {
+            "videoseal": "稳定可靠",
+            "pixelseal": "追求质量",
+        }
+        layout.addWidget(self._section_input(p.io.input_path))
+        params = [(self.tr("盲水印算法"), value_map.get(p.blind.blind_watermark_model_name, p.blind.blind_watermark_model_name))]
+        layout.addWidget(self._section_params(self.tr("⚙️ 提取参数"), params))
+
+    def _build_ocr(self, layout: QVBoxLayout):
+        p: OCRUIParams = self._p
+        model_map = {"pp_ocr": "通用识别"}
+        lang_map  = {"zh-jp-en": "中日英"}
+        layout.addWidget(self._section_input(p.io.input_path))
+        params = [
+            (self.tr("模型"),         model_map.get(p.model.model_name, p.model.model_name)),
+            (self.tr("识别语言"),      lang_map.get(p.settings.ocr_rec_language, p.settings.ocr_rec_language)),
+            (self.tr("识别置信度"),    str(p.settings.drop_score)),
+            (self.tr("文本行方向矫正"), self.tr("开") if p.settings.use_textline_ori else self.tr("关")),
+        ]
+        layout.addWidget(self._section_params(self.tr("⚙️ OCR 参数"), params))
+
+    def _build_blind_watermark_remove(self, layout: QVBoxLayout):
+        p: BlindWatermarkRemoveUIParams = self._p
+        model_map = {"reverse_edit": "智能消除"}
+        layout.addWidget(self._section_input(p.io.input_path))
+        params = [
+            (self.tr("去除模型"),     model_map.get(p.model.model_name, p.model.model_name)),
+            (self.tr("颜色修复"),     self.tr("开") if p.settings.use_color_fix else self.tr("关")),
+            (self.tr("高质量输出"),   self.tr("开") if p.settings.high_quality_output else self.tr("关")),
+        ]
+        if p.settings.reserve_region:
+            r = p.settings.reserve_region
+            params.append((self.tr("保留区域"), f"X={r.get('x',0)} Y={r.get('y',0)} W={r.get('w',0)} H={r.get('h',0)}"))
+        layout.addWidget(self._section_params(self.tr("⚙️ 暗水印去除参数"), params))
+        layout.addWidget(self._section_output(p.io.output_path))
+
+    def _build_image_edit(self, layout: QVBoxLayout):
+        p: ImageEditUIParams = self._p
+        model_map = {"general_edit": "智能重绘"}
+        if p.io.input_path:
+            layout.addWidget(self._section_input(p.io.input_path))
+        params = [
+            (self.tr("编辑模型"),  model_map.get(p.model.model_name, p.model.model_name)),
+            (self.tr("提示词"),    p.task.prompt),
+        ]
+        if p.task.mask_boxes:
+            params.append((self.tr("编辑区域"), self.tr("{0} 个区域").format(len(p.task.mask_boxes))))
+        layout.addWidget(self._section_params(self.tr("⚙️ 图像编辑参数"), params))
+        layout.addWidget(self._section_output(p.io.output_path))
+
+    def _build_image_restoration(self, layout: QVBoxLayout):
+        p: ImageRestorationUIParams = self._p
+        model_map = {
+            "image_restoration": "智能修复",
+            "image_sr":          "图像高清",
+        }
+        task_map = {
+            "restoration":     "综合修复",
+            "dehaze":          "去雾",
+            "derain":          "去雨",
+            "snow":            "去雪",
+            "denoise":         "去噪",
+            "deblur":          "去模糊",
+            "shadow":          "去阴影",
+            "super_resolution":"超分放大",
+            "lowlight":        "低光增强",
+            "compression":     "去压缩伪影",
+            "watermark_remove":"去水印",
+        }
+        layout.addWidget(self._section_input(p.io.input_path))
+        params = [
+            (self.tr("修复任务"),  task_map.get(p.task.task_type, p.task.task_type)),
+            (self.tr("修复模型"),  model_map.get(p.model.model_name, p.model.model_name)),
+            (self.tr("低显存模式"), self.tr("开") if p.task.low_memory else self.tr("关")),
+        ]
+        if p.task.task_type == "super_resolution":
+            params.append((self.tr("放大倍数"), f"{p.task.upscale}x"))
+        if p.task.prompt:
+            params.append((self.tr("自定义提示词"), p.task.prompt))
+        layout.addWidget(self._section_params(self.tr("⚙️ 修复参数"), params))
+        layout.addWidget(self._section_output(p.io.output_path))
+
+    def _section_input(self, path: str) -> QFrame:
+        sec = self._make_section(self.tr("📁 输入文件路径"))
+        sec.layout().addWidget(self._path_label(path))
+        return sec
+
+    def _section_output(self, path: str, fmt: str = "") -> QFrame:
+        sec = self._make_section(self.tr("💾 输出保存设置"))
+        sec.layout().addWidget(self._path_label(path, header=self.tr("输出位置：")))
+        if fmt:
+            sec.layout().addWidget(self._path_label(fmt, header=self.tr("输出格式：")))
+        return sec
+
+    def _section_params(self, title: str, params: list[tuple[str, str]]) -> QFrame:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("""QScrollArea { background-color: #f5f5f5; border: none; border-radius: 12px; }""")
+
+        sec = self._make_section(title)
+        grid = QGridLayout()
+        grid.setSpacing(10)
+
+        for row, (name, value) in enumerate(params):
+            grid.addWidget(self._param_widget(name, str(value)), row, 0)
+
+        sec.layout().addLayout(grid)
+        scroll.setWidget(sec)
+        return scroll
+
+    def _make_section(self, title: str) -> QFrame:
+        sec = QFrame()
+        sec_layout = QVBoxLayout(sec)
+        sec_layout.setContentsMargins(20, 16, 20, 20)
+        sec.setStyleSheet("""QFrame { background-color: #f5f5f5; border: none; border-radius: 12px; }""")
+        lbl = QLabel(title)
+        setFont(lbl, 14, QFont.Bold)
+        lbl.setStyleSheet("""
             QLabel {
-                background: transparent;
-                color: #212529;
+                background: transparent; color: #212529;
                 padding-bottom: 8px;
-                border-bottom: 2px solid #7c3aed;
-                border-radius: 0px;
+                border-bottom: 2px solid #7c3aed; border-radius: 0px;
             }
         """)
-        
-        section_layout.addWidget(title_label)
-        return section
-    
-    def create_path_label(self, path, header=""):
-        label = QLabel(header + path)
-        label.setCursor(Qt.PointingHandCursor)
-        label.setStyleSheet("""
-            QLabel {
-                color: #0d6efd;
-                padding: 12px 16px;
-                background-color: #f1f3f5;
-                border-radius: 12px;
-                border: 1px solid #dee2e6;
-            }
-            QLabel:hover {
-                background-color: #e9ecef;
-                border: 1px solid #7c3aed;
-            }
-        """)
-        setFont(label, 13)
-        label.mousePressEvent = lambda e: self.copy_to_clipboard(path, label)
-        return label
+        sec_layout.addWidget(lbl)
+        return sec
 
-    def create_param_widget(self, key, value):
+    def _path_label(self, path: str, header: str = "") -> QLabel:
+        lbl = QLabel(header + path)
+        lbl.setCursor(Qt.PointingHandCursor)
+        lbl.setStyleSheet("""
+            QLabel {
+                color: #0d6efd; padding: 12px 16px;
+                background-color: #f1f3f5;
+                border-radius: 12px; border: 1px solid #dee2e6;
+            }
+            QLabel:hover { background-color: #e9ecef; border: 1px solid #7c3aed; }
+        """)
+        setFont(lbl, 13)
+        lbl.mousePressEvent = lambda e: self._copy(path, lbl)
+        return lbl
+
+    def _param_widget(self, name: str, value: str) -> QFrame:
         widget = QFrame()
         widget.setCursor(Qt.PointingHandCursor)
         widget.setStyleSheet("""
-            QFrame {
-                background-color: white;
-                border: 1px solid #dee2e6;
-                border-radius: 12px;
-            }
-            QFrame:hover {
-                border: 1px solid #7c3aed;
-            }
+            QFrame { background-color: white; border: 1px solid #dee2e6; border-radius: 12px; }
+            QFrame:hover { border: 1px solid #7c3aed; }
         """)
-        
-        layout = QVBoxLayout(widget)
-        
-        key_label = QLabel(key.replace("_", " ").title())
-        key_label.setStyleSheet("""
+        lay = QVBoxLayout(widget)
+
+        key_lbl = QLabel(name)
+        key_lbl.setStyleSheet("QLabel { color: #6c757d; letter-spacing: 0.5px; border: none; }")
+        setFont(key_lbl, 12, QFont.Bold)
+        key_lbl.setAlignment(Qt.AlignLeft)
+        key_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+
+        val_lbl = QLabel(value)
+        val_lbl.setStyleSheet("""
             QLabel {
-                color: #6c757d;
-                letter-spacing: 0.5px;
-                border: none;
+                color: #212529; background-color: #f1f3f5;
+                padding: 6px 6px; border-radius: 8px; border: 1px solid #e9ecef;
             }
         """)
-        setFont(key_label, 12, QFont.Bold)
-        key_label.setAlignment(Qt.AlignLeft)
-        key_label.setAttribute(Qt.WA_TransparentForMouseEvents)
-        
-        value_label = QLabel(str(value))
-        value_label.setStyleSheet("""
-            QLabel {
-                color: #212529;
-                background-color: #f1f3f5;
-                padding: 6px 6px;
-                border-radius: 8px;
-                border: 1px solid #e9ecef;
-            }
-        """)
-        setFont(value_label, 14, QFont.Bold)
-        value_label.setAlignment(Qt.AlignLeft)
-        value_label.setAttribute(Qt.WA_TransparentForMouseEvents)
-        
-        layout.addWidget(key_label)
-        layout.addWidget(value_label)
-        
-        widget.mousePressEvent = lambda e: self.copy_to_clipboard(str(value), widget)
+        setFont(val_lbl, 14, QFont.Bold)
+        val_lbl.setAlignment(Qt.AlignLeft)
+        val_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+
+        lay.addWidget(key_lbl)
+        lay.addWidget(val_lbl)
+
+        widget.mousePressEvent = lambda e: self._copy(value, widget)
         return widget
-    
-    def copy_to_clipboard(self, text, widget):
-        clipboard = QApplication.clipboard()
-        clipboard.setText(text)
-        self.show_copy_toast(widget)
-    
-    def show_copy_toast(self, widget):
+
+    def _copy(self, text: str, target):
+        QApplication.clipboard().setText(text)
         TeachingTip.create(
-            target=widget,
+            target=target,
             icon=InfoBarIcon.SUCCESS,
             title="Tips",
             content=self.tr("已复制到剪贴板"),

@@ -1,11 +1,46 @@
 import logging
 import os
 import numpy as np
+from dataclasses import dataclass, field
 from PIL import Image
 from app.ui.common.config import cfg
 from app.workers.work_base import BaseWorker, _resolve_hardware_variant
 from app.utils.logger.decorators import log_exception
 from app.algorithms.private.image_edit.general_edit.inference import ImageEditInference
+
+
+@dataclass
+class _ImageEditIOParams:
+    input_path: str = ""
+    output_path: str = ""
+
+
+@dataclass
+class _ImageEditModelParams:
+    model_name: str = ""
+
+
+@dataclass
+class _ImageEditTaskParams:
+    prompt: str = ""
+    mask_boxes: list = field(default_factory=list)
+
+
+@dataclass
+class ImageEditUIParams:
+    io: _ImageEditIOParams = field(default_factory=_ImageEditIOParams)
+    model: _ImageEditModelParams = field(default_factory=_ImageEditModelParams)
+    task: _ImageEditTaskParams = field(default_factory=_ImageEditTaskParams)
+    _feature_name_: str = ""
+
+    def validate(self) -> str:
+        if not self.task.prompt.strip():
+            return "请输入编辑提示词"
+        if not self.model.model_name:
+            return "请选择编辑模型"
+        if not self.io.output_path:
+            return "请设置文件保存位置"
+        return ""
 
 
 class ImageEditWork(BaseWorker):
@@ -25,17 +60,18 @@ class ImageEditWork(BaseWorker):
 
     @log_exception(logger=logging.getLogger('ImageEdit'), reraise=True, log_args=True, log_result=True)
     def run_algorithm(self, progress_cb, cancel_requested, *args, **kwargs):
-        input_path = kwargs["input_path"] if "input_path" in kwargs else None
-        output_path = kwargs["output_path"]
-        prompt = kwargs.get("prompt", "")
-        mask_boxes = kwargs.get("mask_boxes", [])
+        p: ImageEditUIParams = args[0].params
+        input_path = p.io.input_path or None
+        output_path = p.io.output_path
+        prompt = p.task.prompt
+        mask_boxes = p.task.mask_boxes
 
         if cancel_requested and cancel_requested():
             raise InterruptedError("Task was cancelled before start")
 
         model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "general_edit")
-        if "_feature_name_" in kwargs:
-            os.environ["_feature_name_"] = kwargs["_feature_name_"]
+        if p._feature_name_:
+            os.environ["_feature_name_"] = p._feature_name_
         if progress_cb:
             progress_cb("EditStart", "")
         inference = self._get_instance(model_dir)

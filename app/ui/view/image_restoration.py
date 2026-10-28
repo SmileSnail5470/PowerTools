@@ -24,17 +24,17 @@ from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 
 from app.ui.common.event_bus import global_event_bus
 from app.controllers.task_manager import global_task_manager
-from app.ui.common.task_params import bind_widget_to_param, TaskParams
+from app.ui.common.task_params import bind_widget_to_param, LayeredTaskParams
 from app.ui.common.task_status import TaskStatusModel
 from app.ui.common.utils import get_file_type, global_backend_info_cache
 from app.ui.common.config import cfg
 
-from app.workers.image_restoration_work import ImageRestorationWork
+from app.workers.image_restoration_work import ImageRestorationWork, ImageRestorationUIParams
 
 from app.license.globals import feature_gate
 
 
-image_restoration_params = TaskParams()
+image_restoration_params = LayeredTaskParams(params=ImageRestorationUIParams())
 image_restoration_task_status_model = TaskStatusModel()
 image_restoration_active_futures = []
 IMAGE_TASK_TYPES = (
@@ -150,7 +150,7 @@ class TaskTypeCard(HeaderCardWidget):
             self.cards.append(card)
         main_layout.addLayout(flow_layout)
 
-        bind_widget_to_param(self, "task_type", image_restoration_params, "task_type", transform=None)
+        bind_widget_to_param(self, "task_type", image_restoration_params, "task.task_type", transform=None)
         self._on_card_clicked(self.cards[0].key)
 
     def _on_card_clicked(self, key: str):
@@ -263,7 +263,7 @@ class ModelSelectCard(HeaderCardWidget):
         self.tab_image.toggled.connect(lambda checked: self._on_tab_changed(0, checked))
         self.tab_video.toggled.connect(lambda checked: self._on_tab_changed(1, checked))
 
-        bind_widget_to_param(self, "model_name", image_restoration_params, "model_name", transform=None)
+        bind_widget_to_param(self, "model_name", image_restoration_params, "model.model_name", transform=None)
         self._update_card_interactive()
         self.select_first_interactive()
         global_event_bus.License_update.connect(lambda: (self._update_card_interactive(), self.select_first_interactive()))
@@ -273,18 +273,19 @@ class ModelSelectCard(HeaderCardWidget):
         image_restoration_params.param_changed.connect(self._on_param_changed)
 
     def _update_card_interactive(self):
-        if "task_type" not in image_restoration_params.to_dict():
+        task_type = image_restoration_params.get_param("task.task_type")
+        if not task_type:
             return
-        is_super_resolution_task = True if image_restoration_params.to_dict()["task_type"] == "super_resolution" else False
+        is_super_resolution_task = (task_type == "super_resolution")
         for card in self.all_cards:
             card.set_selected(False)
             if card.get_name() == "image_sr":
                 card.set_interactive(is_super_resolution_task is True)
             else:
                 card.set_interactive(is_super_resolution_task is False)
-        
+
     def _on_param_changed(self, key, value):
-        if key != "task_type":
+        if key != "task.task_type":
             return
         self._update_card_interactive()
         self.select_first_interactive()
@@ -353,13 +354,13 @@ class FileSelectorCard(HeaderCardWidget):
         single_file_selector.item_selected.connect(
             lambda file_path: global_event_bus.imageRestoration_InputFileUpdate.emit(file_path)
         )
-        bind_widget_to_param(single_file_selector, "item_selected", image_restoration_params, "input_path", transform=None)
+        bind_widget_to_param(single_file_selector, "item_selected", image_restoration_params, "io.input_path", transform=None)
 
         batch_files_selector = DirectorySelectorWidget(self)
         batch_files_selector.item_selected.connect(
             lambda file_path: global_event_bus.imageRestoration_InputFileUpdate.emit(file_path)
         )
-        bind_widget_to_param(batch_files_selector, "item_selected", image_restoration_params, "input_path", transform=None)
+        bind_widget_to_param(batch_files_selector, "item_selected", image_restoration_params, "io.input_path", transform=None)
 
         self._add_sub_interface(single_file_selector, 'RestorationFileSelector', self.tr("文件"))
         self._add_sub_interface(batch_files_selector, 'RestorationDirectorySelector', self.tr("目录"))
@@ -401,7 +402,7 @@ class SettingsCard(HeaderCardWidget):
         self.upscale_card.addWidget(self.upscale_combox, stretch=0)
         self.upscale_card.setSeparatorVisible(True)
         bind_widget_to_param(
-            self.upscale_combox, "currentTextChanged", image_restoration_params, "upscale",
+            self.upscale_combox, "currentTextChanged", image_restoration_params, "task.upscale",
             transform=lambda text: int(str(text).rstrip("xX") or 1)
         )
         self.upscale_combox.currentTextChanged.emit("4x")
@@ -420,7 +421,7 @@ class SettingsCard(HeaderCardWidget):
         low_memory_card.addWidget(low_memory_btn)
         low_memory_card.setContentWordWrap(True)
         low_memory_card.setSeparatorVisible(True)
-        bind_widget_to_param(low_memory_btn, "toggled", image_restoration_params, "low_memory", transform=bool)
+        bind_widget_to_param(low_memory_btn, "toggled", image_restoration_params, "task.low_memory", transform=bool)
         low_memory_btn.toggled.emit(True)
         main_layout.addWidget(low_memory_card)
 
@@ -449,14 +450,14 @@ class SettingsCard(HeaderCardWidget):
             }
         """)
         setFont(self.prompt_edit, fontSize=13)
-        self.prompt_edit.textChanged.connect(lambda: image_restoration_params.set_param("prompt", self.prompt_edit.toPlainText()))
+        self.prompt_edit.textChanged.connect(lambda: image_restoration_params.set_param("task.prompt", self.prompt_edit.toPlainText()))
         prompt_layout.addWidget(self.prompt_edit)
         main_layout.addLayout(prompt_layout)
 
         image_restoration_params.param_changed.connect(self._on_param_changed)
 
     def _on_param_changed(self, key, value):
-        if key != "task_type":
+        if key != "task.task_type":
             return
         self.upscale_card.setVisible(value == "super_resolution")
 
@@ -481,7 +482,7 @@ class OutputSettingsCard(HeaderCardWidget):
         self.save_location_line_edit.setPlaceholderText(self.tr("选择保存位置"))
         save_location_action = QAction(FluentIcon.FOLDER_ADD.qicon(), "", triggered=self.save_location_browse)
         self.save_location_line_edit.addAction(save_location_action, QLineEdit.TrailingPosition)
-        bind_widget_to_param(self.save_location_line_edit, "textChanged", image_restoration_params, "output_path", transform=None)
+        bind_widget_to_param(self.save_location_line_edit, "textChanged", image_restoration_params, "io.output_path", transform=None)
         output_settings_layout.addWidget(self.save_location_line_edit)
 
         self.viewLayout.addLayout(output_settings_layout)
@@ -676,24 +677,26 @@ class HeaderWidget(QWidget):
         self.process_btn.clicked.connect(self._on_process)
 
     def _on_process(self):
-        init_params = image_restoration_params.to_dict()
-        error_msg, task_params = self._params_check(params=init_params)
+        error_msg = image_restoration_params.validate()
+        if not cfg.get(cfg.localImageRestorationEnabled):
+            error_msg = self.tr("请在设置页面打开 '图像修复' 能力开关")
         if error_msg:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
 
-        w = TaskInfoMessageBox(task_params, "image-restoration", self.window())
+        w = TaskInfoMessageBox(image_restoration_params, "image-restoration", self.window())
         if not w.exec():
             return
 
-        allowed_use, error_msg, feature_name = self._license_check(task_params["model_name"])
+        model_name = image_restoration_params.get_param("model.model_name")
+        allowed_use, error_msg, feature_name = self._license_check(model_name)
         if not allowed_use:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
-        task_params["_feature_name_"] = feature_name
+        image_restoration_params.params._feature_name_ = feature_name
 
         total_tasks = []
-        input_path = task_params["input_path"]
+        input_path = image_restoration_params.get_param("io.input_path")
         global_event_bus.imageRestoration_ImageNavigationInit.emit()
         if os.path.isdir(input_path):
             self.is_batch_task = True
@@ -701,12 +704,12 @@ class HeaderWidget(QWidget):
                 one_file_path = os.path.join(input_path, one_file)
                 if not os.path.isfile(one_file_path) or get_file_type(one_file_path) != "image":
                     continue
-                task_params["input_path"] = one_file_path
-                func, args, kwargs = ImageRestorationWork(**task_params).to_worker()
+                image_restoration_params.set_param("io.input_path", one_file_path)
+                func, args, kwargs = ImageRestorationWork(image_restoration_params).to_worker()
                 total_tasks.append((func, args, kwargs))
         else:
             self.is_batch_task = False
-            func, args, kwargs = ImageRestorationWork(**task_params).to_worker()
+            func, args, kwargs = ImageRestorationWork(image_restoration_params).to_worker()
             total_tasks.append((func, args, kwargs))
 
         if not total_tasks:
@@ -738,7 +741,7 @@ class HeaderWidget(QWidget):
             future.progress.connect(lambda value, msg, path=input_path: self._task_progress(path, value, msg))
 
         for func, args, kwargs in total_tasks:
-            one_input_path = kwargs["input_path"]
+            one_input_path = args[1].get_param("io.input_path")
             submit_task(func, args, kwargs, one_input_path)
 
         TeachingTip.create(
@@ -773,7 +776,7 @@ class HeaderWidget(QWidget):
                 image_restoration_task_status_model.start_step(name=self.tr("导出结果"))
 
     def _task_finished(self, input_path, result):
-        model_name = image_restoration_params.to_dict().get("model_name", "")
+        model_name = image_restoration_params.get_param("model.model_name")
         try:
             if not feature_gate.is_pro:
                 try:
@@ -788,40 +791,6 @@ class HeaderWidget(QWidget):
         global_event_bus.imageRestoration_TaskFinished.emit(input_path, output_path)
         if not self.is_batch_task:
             image_restoration_task_status_model.finish_step(name=self.tr("导出结果"))
-
-    def _params_check(self, params):
-        error_msg = ""
-        task_params = {}
-        if not params:
-            error_msg = self.tr("请设置图像修复参数")
-            return error_msg, task_params
-        if not cfg.get(cfg.localImageRestorationEnabled):
-            error_msg = self.tr("请在设置页面打开 '图像修复' 能力开关")
-            return error_msg, task_params
-        if "input_path" not in params or not params["input_path"]:
-            error_msg = self.tr("请选择要处理的文件或目录")
-            return error_msg, task_params
-        task_params["input_path"] = params["input_path"]
-        if "task_type" not in params or not params["task_type"]:
-            error_msg = self.tr("请选择修复任务类型")
-            return error_msg, task_params
-        task_params["task_type"] = params["task_type"]
-        if "model_name" not in params or not params["model_name"]:
-            error_msg = self.tr("请选择修复模型")
-            return error_msg, task_params
-        task_params["model_name"] = params["model_name"]
-        task_params["low_memory"] = bool(params.get("low_memory", True))
-        if params["task_type"] == "super_resolution":
-            task_params["upscale"] = int(params.get("upscale", 2))
-        prompt = (params.get("prompt") or "").strip()
-        if prompt:
-            task_params["prompt"] = prompt
-        if "output_path" not in params or not params["output_path"]:
-            error_msg = self.tr("请设置文件保存位置")
-            return error_msg, task_params
-        task_params["output_path"] = params["output_path"]
-        return error_msg, task_params
-
 
 class ImageRestoration(QWidget):
     def __init__(self, parent=None):

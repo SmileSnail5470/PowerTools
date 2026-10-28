@@ -112,9 +112,10 @@ class WatermarkRemoveWork(BaseWorker):
 
     @log_exception(logger=logging.getLogger('WatermarkRemove'), reraise=True, log_args=True, log_result=True)
     def run_algorithm(self, progress_cb, cancel_requested, *args, **kwargs):
-        input_path = kwargs["input_path"]
-        output_path = kwargs["output_path"]
-        output_format = kwargs["output_format"]
+        p: WatermarkRemoveUIParams = args[0].params
+        input_path = p.io.input_path
+        output_path = p.io.output_path
+        output_format = p.io.output_format
         base_name, source_ext = os.path.splitext(os.path.basename(input_path))
         output_ext = source_ext.lstrip(".") if output_format == "保持原格式" else output_format.lower()
         output_file = os.path.join(output_path, f"{base_name}_wm.{output_ext}")
@@ -127,8 +128,8 @@ class WatermarkRemoveWork(BaseWorker):
         general_edit_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "general_edit")
         image_restoration_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_restoration", "general_restoration")
         object_remove_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "object_remove")
-        if "_feature_name_" in kwargs:
-            os.environ["_feature_name_"] = kwargs["_feature_name_"]
+        if p._feature_name_:
+            os.environ["_feature_name_"] = p._feature_name_
         if "POWERTOOLS_TMPE_DIR" not in os.environ:
             os.environ["POWERTOOLS_TMPE_DIR"] = cfg.get(cfg.cachePath)
 
@@ -148,34 +149,46 @@ class WatermarkRemoveWork(BaseWorker):
             general_edit_onnx_dir=general_edit_dir,
             object_remove_onnx_dir=object_remove_dir,
         )
+        detect = p.detect
+        tracking_data = detect.video_watermark_tracking_data
         detection_cfg = DetectionConfig(
-            watermark_type=(
-                "text" if kwargs.get("watermark_content") == "text_watermark"
-                else "subtitle" if kwargs.get("watermark_content") == "subtitle"
-                else "all"
+            watermark_type="all",
+            ai_detect_type=detect.watermark_detect_type,
+            ai_interactive_type=detect.watermark_ai_detect_method,
+            ai_interactive_prompt=detect.watermark_ai_detect_prompt,
+            ai_interactive_boxes=(
+                detect.watermark_ai_detect_pos_boxes
+                if detect.watermark_ai_detect_method == "space_detect"
+                else []
             ),
-            ai_detect_type=kwargs["watermark_detect_type"],
-            ai_interactive_type=kwargs.get("watermark_ai_interactive_type", "semantic_detect"),
-            ai_interactive_prompt=kwargs.get("watermark_detect_prompt", "watermark"),
-            ai_interactive_boxes=kwargs.get("watermark_boxes", []),
-            watermark_confidence=kwargs.get("watermark_confidence", 0.5),
-            watermark_boxes=kwargs.get("image_boxes", []),
+            watermark_confidence=detect.watermark_ai_detect_confidence,
+            watermark_boxes=[],
         )
         runtime_cfg = RuntimeConfig(
             progress_cb=progress_cb,
             ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
             should_cancel=cancel_requested,
         )
+        model_name = p.model.model_name
+        mask_dilate = p.model.mask_dilate
+        manual_mask_path = detect.manual_watermark_mask_path or ""
+        watermark_format = detect.video_watermark_format
+        tracking_dict = {
+            "keyframes": tracking_data.keyframes,
+            "end_frame": tracking_data.end_frame,
+            "reverse_tracking_frames": tracking_data.reverse_tracking_frames,
+        }
+
         if file_type == "image":
-            if kwargs["model_name"] not in ["image_restoration"]:
+            if model_name not in ["image_restoration"]:
                 image_cfg = ImageWatermarkRemoveConfig(
                     segment=segment_paths,
                     inpaint=inpaint_paths,
                     detection=detection_cfg,
                     mask=MaskConfig(
-                        mask_path=kwargs["manual_watermark_mask_path"] if kwargs.get("manual_watermark_mask_path") else "",
-                        refine_type=kwargs["model_name"],
-                        dilate_num=int(kwargs["mask_dilate"]),
+                        mask_path=manual_mask_path,
+                        refine_type=model_name,
+                        dilate_num=int(mask_dilate),
                     ),
                     runtime=runtime_cfg,
                 )
@@ -185,14 +198,14 @@ class WatermarkRemoveWork(BaseWorker):
                     restoration=RestorationModelPaths(image_restoration_onnx_dir=image_restoration_dir),
                     params=RestorationConfig(
                         refine_type="image_restoration",
-                        restoration_prompt=kwargs.get("restoration_prompt", ""),
-                        restoration_watermark_type=kwargs.get("restoration_watermark_type", "general"),
+                        restoration_prompt=p.model.restoration_prompt,
+                        restoration_watermark_type=p.model.restoration_watermark_type,
                     ),
                     runtime=runtime_cfg,
                 )
                 self._get_image_instance().run_without_mask(input_path, output_file, config=restoration_cfg)
-        elif kwargs["model_name"] != "video_engine":
-            if kwargs["model_name"] not in ["image_restoration"]:
+        elif model_name != "video_engine":
+            if model_name not in ["image_restoration"]:
                 ppt_onnx_basedir = os.path.join(self.deps_path, _resolve_hardware_variant(), "video_inpainting", "ppt")
                 tacker_onnx_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "tracker")
                 video_cfg = VideoWatermarkRemoveConfig(
@@ -204,11 +217,11 @@ class WatermarkRemoveWork(BaseWorker):
                     ),
                     detection=detection_cfg,
                     mask=VideoMaskConfig(
-                        mask_path=kwargs["manual_watermark_mask_path"] if kwargs.get("manual_watermark_mask_path") else "",
-                        refine_type=kwargs["model_name"],
-                        dilate_num=int(kwargs["mask_dilate"]),
-                        use_cache_mask=(kwargs.get("watermark_format") == "static_watermark"),
-                        watermark_tracking_data=kwargs.get("watermark_tracking_data", {}),
+                        mask_path=manual_mask_path,
+                        refine_type=model_name,
+                        dilate_num=int(mask_dilate),
+                        use_cache_mask=(watermark_format == "static_watermark"),
+                        watermark_tracking_data=tracking_dict,
                     ),
                     runtime=RuntimeConfig(
                         progress_cb=progress_cb,
@@ -223,8 +236,8 @@ class WatermarkRemoveWork(BaseWorker):
                     restoration=RestorationModelPaths(image_restoration_onnx_dir=image_restoration_dir),
                     params=RestorationConfig(
                         refine_type="image_restoration",
-                        restoration_prompt=kwargs.get("restoration_prompt", ""),
-                        restoration_watermark_type=kwargs.get("restoration_watermark_type", "general"),
+                        restoration_prompt=p.model.restoration_prompt,
+                        restoration_watermark_type=p.model.restoration_watermark_type,
                     ),
                     runtime=RuntimeConfig(
                         progress_cb=progress_cb,
@@ -239,18 +252,18 @@ class WatermarkRemoveWork(BaseWorker):
                     model_paths=VideoEngineModelPaths(
                         video_engine_model_dir=os.path.join(self.deps_path, _resolve_hardware_variant(), "video_engine"),
                     ),
-                    prompt=kwargs.get("prompt"),
-                    task_type=kwargs.get("task_type"),
-                    keyframe_stride=int(kwargs.get("keyframe_stride", 2)),
-                    is_static_watermark=(kwargs.get("watermark_format") == "static_watermark"),
-                    mask_path=kwargs["manual_watermark_mask_path"] if kwargs.get("manual_watermark_mask_path") else "",
+                    prompt=None,
+                    task_type=None,
+                    keyframe_stride=2,
+                    is_static_watermark=(watermark_format == "static_watermark"),
+                    mask_path=manual_mask_path,
                 ),
                 segment=segment_paths,
                 inpaint=inpaint_paths,
                 detection=detection_cfg,
                 runtime=RuntimeConfig(
                     progress_cb=progress_cb,
-                    ffmpeg_path=kwargs.get("ffmpeg_path") or os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
+                    ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
                     should_cancel=cancel_requested,
                 ),
             )

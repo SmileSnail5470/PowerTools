@@ -42,19 +42,17 @@ class VideoEngineModelPaths:
 
 @dataclass(slots=True)
 class DetectionConfig:
-    watermark_type: Literal["text", "subtitle", "all"] = "all"
-    ai_detect_type: Literal[
-        "ai_interactive_detect",
-        "ai_auto_detect",
-    ] = "ai_interactive_detect"
-    ai_interactive_type: Literal[
+    watermark_ai_detect_method: Literal[
         "semantic_detect",
         "space_detect",
+        "text_watermark", 
+        "subtitle", 
+        "general_watermark"
     ] = "semantic_detect"
-    ai_interactive_prompt: str = "watermark"
-    ai_interactive_boxes: list = field(default_factory=list)
-    watermark_confidence: float = 0.5
-    watermark_boxes: list = field(default_factory=list)
+    watermark_ai_detect_prompt: str = "watermark"
+    watermark_ai_detect_pos_boxes: list = field(default_factory=list)
+    watermark_ai_detect_neg_boxes: list = field(default_factory=list)
+    watermark_ai_detect_confidence: float = 0.3
 
     # OCR 检测超参
     ocr_limit_side_len: int = 960

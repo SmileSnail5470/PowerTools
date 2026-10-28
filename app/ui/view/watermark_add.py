@@ -26,20 +26,20 @@ from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget
 from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget, StyleCard, CardSeparator
 
-from app.ui.common.task_params import bind_widget_to_param, TaskParams
+from app.ui.common.task_params import bind_widget_to_param, LayeredTaskParams
 from app.ui.common.event_bus import global_event_bus
 from app.ui.common.task_status import TaskStatusModel
 from app.ui.common.utils import get_file_type, global_backend_info_cache
 from app.ui.common.config import cfg
 
 from app.controllers.task_manager import global_task_manager
-from app.workers.watermark_add_work import WatermarkAddWork
-from app.workers.watermark_extract_work import WatermarkExtractWork
+from app.workers.watermark_add_work import WatermarkAddWork, WatermarkAddUIParams
+from app.workers.watermark_extract_work import WatermarkExtractWork, WatermarkExtractUIParams
 
 from app.license.globals import feature_gate
 
 
-watermark_add_params = TaskParams()
+watermark_add_params = LayeredTaskParams(params=WatermarkAddUIParams())
 task_status_model = TaskStatusModel()
 # 当前批次已提交的任务 future，用于支持一次性取消
 watermark_add_active_futures = []
@@ -64,10 +64,10 @@ class FileSelectorCard(HeaderCardWidget):
 
         singleFileSelector = FileSelectorWidget(self)
         singleFileSelector.item_selected.connect(lambda file_path: global_event_bus.watermarkAdd_InputFileUpdate.emit(file_path))
-        bind_widget_to_param(singleFileSelector, "item_selected", watermark_add_params, "input_path", transform=None)
+        bind_widget_to_param(singleFileSelector, "item_selected", watermark_add_params, "io.input_path", transform=None)
         batchFilesSelector = DirectorySelectorWidget(self)
         batchFilesSelector.item_selected.connect(lambda file_path: global_event_bus.watermarkAdd_InputFileUpdate.emit(file_path))
-        bind_widget_to_param(batchFilesSelector, "item_selected", watermark_add_params, "input_path", transform=None)
+        bind_widget_to_param(batchFilesSelector, "item_selected", watermark_add_params, "io.input_path", transform=None)
 
         self.addSubInterface(singleFileSelector, 'FileSelectorWidget', self.tr("文件"))
         self.addSubInterface(batchFilesSelector, 'DirectorySelectorWidget', self.tr("目录"))
@@ -179,7 +179,7 @@ class WatermarkTypeSelectorCard(HeaderCardWidget):
         self.visible_btn.mousePressEvent = lambda e: self.select_type("visible")
         self.blind_btn.mousePressEvent = lambda e: self.select_type("blind")
 
-        bind_widget_to_param(self, "watermark_type", watermark_add_params, "watermark_type", transform=None)
+        bind_widget_to_param(self, "watermark_type", watermark_add_params, "type.watermark_type", transform=None)
         self.watermark_type.emit("visible")
 
     def select_type(self, type_name: str):
@@ -243,7 +243,7 @@ class BlindWatermarkOperateCard(HeaderCardWidget):
         watermark_extract_card.setSeparatorVisible(True)
         watermark_extract_card.addWidget(watermark_extract_btn)
         main_layout.addWidget(watermark_extract_card)
-        bind_widget_to_param(self, "blind_watermark_task_type", watermark_add_params, "blind_watermark_task_type", transform=None)
+        bind_widget_to_param(self, "blind_watermark_task_type", watermark_add_params, "type.blind_watermark_task_type", transform=None)
         self.blind_watermark_task_type.emit("add_blind_watermark")
         self.hide()
 
@@ -301,7 +301,7 @@ class BlindWatermarkModelCard(HeaderCardWidget):
             card_instance.mousePressEvent = lambda event, c=card, idx=i: self.on_card_clicked(c, idx)
 
         main_layout.addStretch()
-        bind_widget_to_param(self, "blind_watermark_model_name", watermark_add_params, "blind_watermark_model_name", transform=None)
+        bind_widget_to_param(self, "blind_watermark_model_name", watermark_add_params, "blind.blind_watermark_model_name", transform=None)
         self.blind_watermark_model_name.emit("placeholder_model")
         self.select_first_interactive()
         global_event_bus.License_update.connect(self.select_first_interactive)
@@ -371,8 +371,8 @@ class WatermarkContentCard(HeaderCardWidget):
         blind_watermark_characters = cfg.get(cfg.blindWatermarkCharacters)
         self.blind_watermark_input = BlindWatermarkInputPanel(allowed_chars=list(blind_watermark_characters))
         self.blind_watermark_input.hide()
-        bind_widget_to_param(self.blind_watermark_input, "textUpdate", watermark_add_params, "watermark_text", transform=None)
-        bind_widget_to_param(self.blind_watermark_input, "charsChange", watermark_add_params, "custom_characters", transform=None)
+        bind_widget_to_param(self.blind_watermark_input, "textUpdate", watermark_add_params, "blind.watermark_text", transform=None)
+        bind_widget_to_param(self.blind_watermark_input, "charsChange", watermark_add_params, "blind.custom_characters", transform=None)
         self.blind_watermark_input.charsChange.connect(lambda characters: cfg.set(cfg.blindWatermarkCharacters, characters))
         self.blind_watermark_input.textUpdate.emit("POWERTOOLS")
         self.blind_watermark_input.charsChange.emit(blind_watermark_characters)
@@ -393,7 +393,7 @@ class WatermarkContentCard(HeaderCardWidget):
         self.text_edit.setText("POWERTOOLS")
         self.text_edit.setFixedHeight(50)
         setFont(self.text_edit, 13)
-        bind_widget_to_param(self, "watermark_text_changed", watermark_add_params, "watermark_text", transform=None)
+        bind_widget_to_param(self, "watermark_text_changed", watermark_add_params, "visible.watermark_text", transform=None)
         self.text_edit.textChanged.connect(self.watermark_text_update)
         self.text_edit.textChanged.emit()
         text_settings_layout.addWidget(self.text_edit)
@@ -404,7 +404,7 @@ class WatermarkContentCard(HeaderCardWidget):
         text_label_2.setStyleSheet("color: #888888;")  # 设置为浅灰色
         text_settings_layout.addWidget(text_label_2)
         font_combo = ComboBox()
-        bind_widget_to_param(font_combo, "currentTextChanged", watermark_add_params, "font", transform=lambda name: self.font_real_name(name))
+        bind_widget_to_param(font_combo, "currentTextChanged", watermark_add_params, "visible.font", transform=lambda name: self.font_real_name(name))
         self.common_fonts_zh, self.common_fonts_en = get_available_fonts()
         font_combo.addItems(list(self.common_fonts_zh.keys()) + list(self.common_fonts_en.keys()))
         font_combo.currentTextChanged.connect(self.font_changed)
@@ -424,7 +424,7 @@ class WatermarkContentCard(HeaderCardWidget):
         setFont(spinBox, 13)
         spinBox.setRange(8, 50)
         spinBox.setValue(15)
-        bind_widget_to_param(spinBox, "valueChanged", watermark_add_params, "font_size", transform=None)
+        bind_widget_to_param(spinBox, "valueChanged", watermark_add_params, "visible.font_size", transform=None)
         spinBox.valueChanged.emit(spinBox.value())
         text_settings_layout.addWidget(spinBox)
         text_settings_layout.addSpacing(10)
@@ -434,7 +434,7 @@ class WatermarkContentCard(HeaderCardWidget):
         text_label_4.setStyleSheet("color: #888888;")  # 设置为浅灰色
         text_settings_layout.addWidget(text_label_4)
         select_color = ColorPicker()
-        bind_widget_to_param(select_color, "color_changed", watermark_add_params, "font_color", transform=None)
+        bind_widget_to_param(select_color, "color_changed", watermark_add_params, "visible.font_color", transform=None)
         select_color.color_changed.emit(select_color.selected_color)
         text_settings_layout.addWidget(select_color)
 
@@ -450,7 +450,7 @@ class WatermarkContentCard(HeaderCardWidget):
         image_settings_layout.addWidget(text_label_1)
         FileUploadWidget.format_text_value = self.tr("支持 JPG, PNG 格式")
         upload_file_selector = FileSelectorWidget()
-        bind_widget_to_param(upload_file_selector, "item_selected", watermark_add_params, "watermark_image", transform=None)
+        bind_widget_to_param(upload_file_selector, "item_selected", watermark_add_params, "visible.watermark_image", transform=None)
         upload_file_selector.layout_add_height.connect(lambda x: self.adjust_stacked_height(x))
         image_settings_layout.addWidget(upload_file_selector)
 
@@ -458,7 +458,7 @@ class WatermarkContentCard(HeaderCardWidget):
         self.addSubInterface(imageSettings, 'ImageSettings', self.tr("图片"))
 
         self.stackedWidget.setCurrentWidget(textSettings)
-        bind_widget_to_param(self.pivot, "currentItemChanged", watermark_add_params, "watermark_content", transform=None)
+        bind_widget_to_param(self.pivot, "currentItemChanged", watermark_add_params, "type.watermark_content", transform=None)
         self.pivot.setCurrentItem(textSettings.objectName())
         self.pivot.currentItemChanged.connect(lambda k: self.on_pivot_changed(k))
         
@@ -546,8 +546,8 @@ class WatermarkSettingsCard(HeaderCardWidget):
             self.tr("左下"), self.tr("下中"), self.tr("右下"),
         ])
         bind_widget_to_param(
-            watermark_location_combo, "currentTextChanged", watermark_add_params, 
-            "watermark_location", transform=lambda x: self.watermark_location_map[x] if x in self.watermark_location_map else None
+            watermark_location_combo, "currentTextChanged", watermark_add_params,
+            "visible.watermark_location", transform=lambda x: self.watermark_location_map[x] if x in self.watermark_location_map else None
         )
         watermark_location_combo.currentTextChanged.emit(watermark_location_combo.currentText())
         watermark_location_layout.addWidget(watermark_location_combo)
@@ -568,7 +568,7 @@ class WatermarkSettingsCard(HeaderCardWidget):
         slider.setRange(-180, 180)
         slider.setValue(0)
         slider.valueChanged.connect(self.update_rotation_value)
-        bind_widget_to_param(slider, "valueChanged", watermark_add_params, "watermark_rotation", transform=None)
+        bind_widget_to_param(slider, "valueChanged", watermark_add_params, "visible.watermark_rotation", transform=None)
         slider.valueChanged.emit(slider.value())
         watermark_location_layout.addLayout(rotation_slider_top_layout)
         watermark_location_layout.addWidget(slider)
@@ -589,7 +589,7 @@ class WatermarkSettingsCard(HeaderCardWidget):
         zoom_slider.setRange(10, 200)
         zoom_slider.setValue(100)
         zoom_slider.valueChanged.connect(self.update_zoom_value)
-        bind_widget_to_param(zoom_slider, "valueChanged", watermark_add_params, "watermark_zoom", transform=None)
+        bind_widget_to_param(zoom_slider, "valueChanged", watermark_add_params, "visible.watermark_zoom", transform=None)
         zoom_slider.valueChanged.emit(zoom_slider.value())
         watermark_location_layout.addLayout(zoom_slider_top_layout)
         watermark_location_layout.addWidget(zoom_slider)
@@ -611,7 +611,7 @@ class WatermarkSettingsCard(HeaderCardWidget):
         slider.setRange(0, 100)
         slider.setValue(70)
         slider.valueChanged.connect(self.update_value)
-        bind_widget_to_param(slider, "valueChanged", watermark_add_params, "watermark_opacity", transform=None)
+        bind_widget_to_param(slider, "valueChanged", watermark_add_params, "visible.watermark_opacity", transform=None)
         slider.valueChanged.emit(slider.value())
         watermark_location_layout.addWidget(slider)
 
@@ -650,7 +650,7 @@ class OutputSettingsCard(HeaderCardWidget):
         self.save_location_line_edit.setPlaceholderText(self.tr("选择保存位置"))
         save_location_action = QAction(FluentIcon.FOLDER_ADD.qicon(), "", triggered=self.save_location_browse)
         self.save_location_line_edit.addAction(save_location_action, QLineEdit.TrailingPosition)
-        bind_widget_to_param(self.save_location_line_edit, "textChanged", watermark_add_params, "output_path", transform=None)
+        bind_widget_to_param(self.save_location_line_edit, "textChanged", watermark_add_params, "io.output_path", transform=None)
         output_settings_layout.addWidget(self.save_location_line_edit)
         output_settings_layout.addSpacing(10)
 
@@ -660,7 +660,7 @@ class OutputSettingsCard(HeaderCardWidget):
         output_settings_layout.addWidget(output_format_label)
         self.output_format_combo = ComboBox()
         self.output_format_combo.addItems([self.tr("保持原格式")])
-        bind_widget_to_param(self.output_format_combo, "currentTextChanged", watermark_add_params, "output_format", transform=None)
+        bind_widget_to_param(self.output_format_combo, "currentTextChanged", watermark_add_params, "io.output_format", transform=None)
         output_settings_layout.addWidget(self.output_format_combo)
 
         self.viewLayout.addWidget(output_settings)
@@ -814,40 +814,68 @@ class HeaderWidget(QWidget):
         self.process_btn.clicked.connect(self.add_watermark_process)
 
     def add_watermark_process(self):
-        init_params = watermark_add_params.to_dict()
-        error_msg, task_params = self._params_check(params=init_params)
-        is_blind_watermark_extract_task = True if "blind_watermark_task_type" in task_params and task_params["blind_watermark_task_type"] == "extract_blind_watermark" else False
+        is_extract_task = (watermark_add_params.get_param("type.blind_watermark_task_type") == "extract_blind_watermark")
+        error_msg = watermark_add_params.validate()
+        if not cfg.get(cfg.localWatermarkAddEnabled):
+            error_msg = self.tr("请在设置页面打开 '水印添加' 能力开关")
+        elif not error_msg and get_file_type(watermark_add_params.get_param("io.input_path")) == "video" and \
+                cfg.get(cfg.additionalParams)["SoftwareSettings"]["FFmpeg_status_info"]["text"] != "OK":
+            error_msg = self.tr("请在设置页面配置软件 FFmpeg 的正确路径并通过验证")
         if error_msg:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
-        w = TaskInfoMessageBox(task_params, "watermark-add" if not is_blind_watermark_extract_task else "watermark-extract", self.window())
+
+        task_label = "watermark-add" if not is_extract_task else "watermark-extract"
+        w = TaskInfoMessageBox(watermark_add_params, task_label, self.window())
         if not w.exec():
             return
-        
-        if watermark_add_params.to_dict()["blind_watermark_model_name"] != "placeholder_model":
-            allowed_use, error_msg = feature_gate.can_use(feature_name=feature_gate.get_feature_name(watermark_add_params.to_dict()["blind_watermark_model_name"]), return_errmsg=True)
+
+        blind_model_name = watermark_add_params.get_param("blind.blind_watermark_model_name")
+        if blind_model_name and blind_model_name != "placeholder_model":
+            allowed_use, error_msg = feature_gate.can_use(
+                feature_name=feature_gate.get_feature_name(blind_model_name), return_errmsg=True
+            )
             if not allowed_use:
                 MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
                 return
-            task_params["_feature_name_"] = feature_gate.get_feature_name(watermark_add_params.to_dict()["blind_watermark_model_name"])
-        
+            watermark_add_params.params._feature_name_ = feature_gate.get_feature_name(blind_model_name)
+
+        # 对盲水印提取任务，构造专用的 WatermarkExtractUIParams
+        if is_extract_task:
+            from app.workers.watermark_extract_work import WatermarkExtractUIParams, _ExtractIOParams, _ExtractBlindParams
+            extract_params_obj = WatermarkExtractUIParams(
+                io=_ExtractIOParams(input_path=watermark_add_params.get_param("io.input_path")),
+                blind=_ExtractBlindParams(
+                    blind_watermark_model_name=watermark_add_params.get_param("blind.blind_watermark_model_name"),
+                    custom_characters=cfg.get(cfg.blindWatermarkCharacters),
+                ),
+                _feature_name_=watermark_add_params.params._feature_name_,
+            )
+            from app.ui.common.task_params import LayeredTaskParams
+            extract_layered = LayeredTaskParams(params=extract_params_obj)
+
         total_tasks = []
-        input_path = task_params["input_path"]
+        input_path = watermark_add_params.get_param("io.input_path")
         global_event_bus.watermarkAdd_ImageNavigationInit.emit()
         if os.path.isdir(input_path):
             self.is_batch_task = True
             for one_file in os.listdir(input_path):
-                task_params["input_path"] = os.path.join(input_path, one_file)
-                task_instance = WatermarkAddWork(**task_params) if not is_blind_watermark_extract_task else WatermarkExtractWork(**task_params)
-                func, args, kwargs = task_instance.to_worker()
+                file_path = os.path.join(input_path, one_file)
+                if is_extract_task:
+                    extract_layered.set_param("io.input_path", file_path)
+                    func, args, kwargs = WatermarkExtractWork(extract_layered).to_worker()
+                else:
+                    watermark_add_params.set_param("io.input_path", file_path)
+                    func, args, kwargs = WatermarkAddWork(watermark_add_params).to_worker()
                 total_tasks.append((func, args, kwargs))
         else:
             self.is_batch_task = False
-            task_instance = WatermarkAddWork(**task_params) if not is_blind_watermark_extract_task else WatermarkExtractWork(**task_params)
-            func, args, kwargs = task_instance.to_worker()
+            if is_extract_task:
+                func, args, kwargs = WatermarkExtractWork(extract_layered).to_worker()
+            else:
+                func, args, kwargs = WatermarkAddWork(watermark_add_params).to_worker()
             total_tasks.append((func, args, kwargs))
 
-        # backend_type, gpu_name = global_backend_info_cache.get(key="backend_info")
         backend_type, gpu_name = "CPU 运行", ""
         task_status_model.start_batch(total=len(total_tasks), backend_type=backend_type, gpu_name=gpu_name)
         if not self.is_batch_task:
@@ -869,8 +897,8 @@ class HeaderWidget(QWidget):
             future.progress.connect(lambda value, msg, path=input_path: self._task_progress(path, value, msg))
 
         for func, args, kwargs in total_tasks:
-            input_path = kwargs["input_path"]
-            submit_task(func, args, kwargs, input_path)
+            one_input_path = args[1].get_param("io.input_path")
+            submit_task(func, args, kwargs, one_input_path)
 
         TeachingTip.create(
             target=self.process_btn,
@@ -902,89 +930,17 @@ class HeaderWidget(QWidget):
                 task_status_model.start_step(name=self.tr('导出文件'))
 
     def _task_finished(self, input_path, output_path):
+        blind_model_name = watermark_add_params.get_param("blind.blind_watermark_model_name")
         if not feature_gate.is_pro:
             try:
-                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(watermark_add_params.to_dict()["blind_watermark_model_name"]))
+                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(blind_model_name))
             except Exception:
                 pass
-            global_event_bus.watermarkAdd_TaskFinishedByModel.emit(watermark_add_params.to_dict()["blind_watermark_model_name"])
+            global_event_bus.watermarkAdd_TaskFinishedByModel.emit(blind_model_name)
         task_status_model.report_success()
         global_event_bus.watermarkAdd_TaskFinished.emit(input_path, output_path)
         if not self.is_batch_task:
             task_status_model.finish_step(name=self.tr("导出文件"))
-
-    def _params_check(self, params):
-        error_msg = ""
-        task_params = {}
-        if not params:
-            error_msg = self.tr("请设置水印参数")
-            return error_msg, task_params
-        if not cfg.get(cfg.localWatermarkAddEnabled):
-            error_msg = self.tr("请在设置页面打开 '水印添加' 能力开关")
-            return error_msg, task_params
-        
-        if "input_path" not in params or not params["input_path"]:
-            error_msg = self.tr("请选择要处理的文件或目录")
-            return error_msg, task_params
-        else:
-            task_params["input_path"] = params["input_path"]
-        
-        if get_file_type(params["input_path"]) == "video" and cfg.get(cfg.additionalParams)["SoftwareSettings"]["FFmpeg_status_info"]["text"] != "OK":
-            error_msg = self.tr("请在设置页面配置软件 FFmpeg 的正确路径并通过验证")
-            return error_msg, task_params
-
-        if "watermark_type" not in params:
-            error_msg = self.tr("请选择水印类型")
-            return error_msg, task_params
-        else:
-            task_params["watermark_type"] = params["watermark_type"]
-        
-        if "blind_watermark_task_type" in params and params["blind_watermark_task_type"] == "extract_blind_watermark":
-            task_params["blind_watermark_task_type"] = params["blind_watermark_task_type"]
-            if "blind_watermark_model_name" not in params or params["blind_watermark_model_name"] == "placeholder_model":
-                error_msg = self.tr("请选择盲水印算法")
-                return error_msg, task_params
-            task_params["blind_watermark_model_name"] = params["blind_watermark_model_name"]
-            task_params["custom_characters"] = cfg.get(cfg.blindWatermarkCharacters)
-            return error_msg, task_params
-
-        if "output_path" not in params or not params["output_path"]:
-            error_msg = self.tr("请设置文件保存位置")
-            return error_msg, task_params
-        else:
-            task_params["output_path"] = params["output_path"]
-            task_params["output_format"] = params["output_format"]
-
-        if params["watermark_type"] == "visible":
-            task_params["watermark_content"] = params["watermark_content"]
-            if params["watermark_content"] == "ImageSettings":
-                if "watermark_image" not in params or not params["watermark_image"]:
-                    error_msg = self.tr("请选择水印图片")
-                    return error_msg, task_params
-                task_params["watermark_image"] = params["watermark_image"]
-            else:
-                if not params["watermark_text"]:
-                    error_msg = self.tr("请设置水印文本")
-                    return error_msg, task_params
-                task_params["watermark_text"] = params["watermark_text"]
-                task_params["font"] = params["font"]
-                task_params["font_size"] = params["font_size"]
-                task_params["font_color"] = params["font_color"]
-            task_params["watermark_rotation"] = params["watermark_rotation"]
-            task_params["watermark_zoom"] = params["watermark_zoom"]
-            task_params["watermark_opacity"] = params["watermark_opacity"]
-            task_params["watermark_location"] = params["watermark_location"]
-        else:
-            if not params["watermark_text"]:
-                error_msg = self.tr("请设置水印文本")
-                return error_msg, task_params
-            if "blind_watermark_model_name" not in params or params["blind_watermark_model_name"] == "placeholder_model":
-                error_msg = self.tr("请选择盲水印算法")
-                return error_msg, task_params
-            task_params["watermark_text"] = params["watermark_text"]
-            task_params["blind_watermark_model_name"] = params["blind_watermark_model_name"]
-            task_params["custom_characters"] = params["custom_characters"]
-        return error_msg, task_params
 
 
 class PreviewWidget(QWidget):

@@ -2,6 +2,7 @@ import logging
 import os
 import cv2
 import numpy as np
+from dataclasses import dataclass, field
 from PIL import Image
 from app.ui.common.config import cfg
 from app.workers.work_base import BaseWorker, _resolve_hardware_variant
@@ -12,6 +13,45 @@ from app.algorithms.private.image_restoration.inference import ImageRestorationI
 
 restoration_logger = logging.getLogger('ImageRestoration')
 SAVE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tif", ".tiff"}
+
+
+@dataclass
+class _RestorationIOParams:
+    input_path: str = ""
+    output_path: str = ""
+
+
+@dataclass
+class _RestorationModelParams:
+    model_name: str = ""
+
+
+@dataclass
+class _RestorationTaskParams:
+    task_type: str = "restoration"
+    prompt: str = ""
+    seed: int = 42
+    low_memory: bool = True
+    upscale: int = 1
+
+
+@dataclass
+class ImageRestorationUIParams:
+    io: _RestorationIOParams = field(default_factory=_RestorationIOParams)
+    model: _RestorationModelParams = field(default_factory=_RestorationModelParams)
+    task: _RestorationTaskParams = field(default_factory=_RestorationTaskParams)
+    _feature_name_: str = ""
+
+    def validate(self) -> str:
+        if not self.io.input_path:
+            return "请选择要处理的文件或目录"
+        if not self.task.task_type:
+            return "请选择修复任务类型"
+        if not self.model.model_name:
+            return "请选择修复模型"
+        if not self.io.output_path:
+            return "请设置文件保存位置"
+        return ""
 
 
 class ImageRestorationWork(BaseWorker):
@@ -71,14 +111,15 @@ class ImageRestorationWork(BaseWorker):
 
     @log_exception(logger=restoration_logger, reraise=True, log_args=True, log_result=True)
     def run_algorithm(self, progress_cb, cancel_requested, *args, **kwargs):
-        input_path = kwargs["input_path"]
-        output_path = kwargs["output_path"]
-        task_type = kwargs.get("task_type", "restoration")
-        prompt = kwargs.get("prompt", "").strip()
-        seed = kwargs.get("seed", 42)
-        low_memory = kwargs.get("low_memory", True)
-        upscale = int(kwargs.get("upscale", 1) or 1)
-        model_name = kwargs.get("model_name")
+        p: ImageRestorationUIParams = args[0].params
+        input_path = p.io.input_path
+        output_path = p.io.output_path
+        task_type = p.task.task_type
+        prompt = p.task.prompt.strip()
+        seed = p.task.seed
+        low_memory = p.task.low_memory
+        upscale = int(p.task.upscale or 1)
+        model_name = p.model.model_name
 
         if cancel_requested and cancel_requested():
             raise InterruptedError("Task was cancelled before start")
@@ -89,8 +130,8 @@ class ImageRestorationWork(BaseWorker):
         if file_type != "image":
             raise Exception("图像修复暂不支持视频文件，视频算法接入中")
 
-        if "_feature_name_" in kwargs:
-            os.environ["_feature_name_"] = kwargs["_feature_name_"]
+        if p._feature_name_:
+            os.environ["_feature_name_"] = p._feature_name_
 
         model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_restoration", "general_restoration")
         output_dir = output_path
@@ -116,7 +157,7 @@ class ImageRestorationWork(BaseWorker):
 
         if cancel_requested and cancel_requested():
             raise InterruptedError("Task was cancelled after execution")
-        
+
         result_img.save(output_file)
         if progress_cb:
             progress_cb("RestorationCompleted", "")
