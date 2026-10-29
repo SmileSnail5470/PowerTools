@@ -70,7 +70,7 @@ class WatermarkRemoveUIParams:
     io: _IOParams = field(default_factory=_IOParams)
     detect: _DetectParams = field(default_factory=_DetectParams)
     model: _ModelParams = field(default_factory=_ModelParams)
-    _feature_name_: str = ""
+    _feature_name_: str | None = None
 
     def validate(self) -> str:
         if not self.io.input_path:
@@ -130,7 +130,7 @@ class WatermarkRemoveWork(BaseWorker):
         general_edit_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "general_edit")
         image_restoration_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_restoration", "general_restoration")
         object_remove_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "object_remove")
-        if p._feature_name_:
+        if p._feature_name_ is not None:
             os.environ["_feature_name_"] = p._feature_name_
         if "POWERTOOLS_TMPE_DIR" not in os.environ:
             os.environ["POWERTOOLS_TMPE_DIR"] = cfg.get(cfg.cachePath)

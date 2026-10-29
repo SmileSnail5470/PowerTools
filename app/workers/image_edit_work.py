@@ -31,7 +31,7 @@ class ImageEditUIParams:
     io: _ImageEditIOParams = field(default_factory=_ImageEditIOParams)
     model: _ImageEditModelParams = field(default_factory=_ImageEditModelParams)
     task: _ImageEditTaskParams = field(default_factory=_ImageEditTaskParams)
-    _feature_name_: str = ""
+    _feature_name_: str | None = None
 
     def validate(self) -> str:
         if not self.task.prompt.strip():
@@ -70,7 +70,7 @@ class ImageEditWork(BaseWorker):
             raise InterruptedError("Task was cancelled before start")
 
         model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "general_edit")
-        if p._feature_name_:
+        if p._feature_name_ is not None:
             os.environ["_feature_name_"] = p._feature_name_
         if progress_cb:
             progress_cb("EditStart", "")

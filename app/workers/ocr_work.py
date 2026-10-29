@@ -29,7 +29,7 @@ class OCRUIParams:
     io: _OCRIOParams = field(default_factory=_OCRIOParams)
     model: _OCRModelParams = field(default_factory=_OCRModelParams)
     settings: _OCRSettingsParams = field(default_factory=_OCRSettingsParams)
-    _feature_name_: str = ""
+    _feature_name_: str | None = None
 
     def validate(self) -> str:
         if not self.io.input_path:
@@ -59,7 +59,7 @@ class OCRWork(BaseWorker):
         p: OCRUIParams = args[0].params
         input_path = p.io.input_path
         onnx_model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "ocr")
-        if p._feature_name_:
+        if p._feature_name_ is not None:
             os.environ["_feature_name_"] = p._feature_name_
         ocr_params = {
             "limit_side_len": 960,

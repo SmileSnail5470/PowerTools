@@ -42,8 +42,9 @@ class BaseWorker():
         raise NotImplementedError("Subclasses must implement this method")
 
     def to_worker(self):
-        picklable_args = tuple(_make_picklable(a) for a in self.args)
-        return _worker_task_func, (self, *picklable_args), self.kwargs
+        self.args = tuple(_make_picklable(a) for a in self.args)
+        self.kwargs = {k: _make_picklable(v) for k, v in self.kwargs.items()}
+        return _worker_task_func, (self, *self.args), self.kwargs
 
     def file_type(self, input_file):
         return get_file_type(input_file=input_file)

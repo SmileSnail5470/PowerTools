@@ -33,7 +33,7 @@ class BlindWatermarkRemoveUIParams:
     io: _BlindRemoveIOParams = field(default_factory=_BlindRemoveIOParams)
     model: _BlindRemoveModelParams = field(default_factory=_BlindRemoveModelParams)
     settings: _BlindRemoveSettingsParams = field(default_factory=_BlindRemoveSettingsParams)
-    _feature_name_: str = ""
+    _feature_name_: str | None = None
 
     def validate(self) -> str:
         if not self.io.input_path:
@@ -85,7 +85,7 @@ class BlindWatermarkRemoveWork(BaseWorker):
             output_dir,
             f"{os.path.basename(input_path).rsplit('.', 1)[0]}_cleaned.{os.path.basename(input_path).rsplit('.', 1)[1]}"
         )
-        if p._feature_name_:
+        if p._feature_name_ is not None:
             os.environ["_feature_name_"] = p._feature_name_
 
         if file_type == "video":

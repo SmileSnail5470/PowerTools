@@ -40,7 +40,7 @@ class ImageRestorationUIParams:
     io: _RestorationIOParams = field(default_factory=_RestorationIOParams)
     model: _RestorationModelParams = field(default_factory=_RestorationModelParams)
     task: _RestorationTaskParams = field(default_factory=_RestorationTaskParams)
-    _feature_name_: str = ""
+    _feature_name_: str | None = None
 
     def validate(self) -> str:
         if not self.io.input_path:
@@ -130,7 +130,7 @@ class ImageRestorationWork(BaseWorker):
         if file_type != "image":
             raise Exception("图像修复暂不支持视频文件，视频算法接入中")
 
-        if p._feature_name_:
+        if p._feature_name_ is not None:
             os.environ["_feature_name_"] = p._feature_name_
 
         model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_restoration", "general_restoration")

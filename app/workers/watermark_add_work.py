@@ -50,7 +50,7 @@ class WatermarkAddUIParams:
     type: _WatermarkAddTypeParams = field(default_factory=_WatermarkAddTypeParams)
     visible: _WatermarkAddVisibleParams = field(default_factory=_WatermarkAddVisibleParams)
     blind: _WatermarkAddBlindParams = field(default_factory=_WatermarkAddBlindParams)
-    _feature_name_: str = ""
+    _feature_name_: str | None = None
 
     def validate(self) -> str:
         if not self.io.input_path:
@@ -201,7 +201,7 @@ class WatermarkAddWork(BaseWorker):
                 }
                 self._get_visible_instance().video_add_text_watermark(**watermark_params)
         elif not is_visible_watermark:
-            if p._feature_name_:
+            if p._feature_name_ is not None:
                 os.environ["_feature_name_"] = p._feature_name_
             custom_characters = p.blind.custom_characters or list("ABCDEFGHIJKLMNOPQRSTUVWXYZ,1234")
             os.environ["BLIND_WATERMARK_CHARSET"] = "".join(custom_characters) + "`"

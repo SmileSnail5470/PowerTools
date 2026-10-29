@@ -28,7 +28,7 @@ class _ExtractBlindParams:
 class WatermarkExtractUIParams:
     io: _ExtractIOParams = field(default_factory=_ExtractIOParams)
     blind: _ExtractBlindParams = field(default_factory=_ExtractBlindParams)
-    _feature_name_: str = ""
+    _feature_name_: str | None = None
 
     def validate(self) -> str:
         if not self.io.input_path:
@@ -210,7 +210,7 @@ class WatermarkExtractWork(BaseWorker):
         file_type = self.file_type(input_file=input_path)
         if file_type is None:
             raise Exception("Not support file {0}".format(os.path.splitext(input_path)[1].lstrip(".")))
-        if p._feature_name_:
+        if p._feature_name_ is not None:
             os.environ["_feature_name_"] = p._feature_name_
         custom_characters = p.blind.custom_characters or list("ABCDEFGHIJKLMNOPQRSTUVWXYZ,1234")
         os.environ["BLIND_WATERMARK_CHARSET"] = "".join(custom_characters) + "`"
