@@ -107,13 +107,13 @@ class TaskInfoMessageBox(MessageBoxBase):
                 params.append((self.tr("水印检测方法"), value_map.get(p.detect.watermark_ai_detect_method, p.detect.watermark_ai_detect_method)))
                 if p.detect.watermark_ai_detect_method == "semantic_detect":
                     params.append((self.tr("检测提示词"), p.detect.watermark_ai_detect_prompt))
-                    params.append((self.tr("检测灵敏度"), p.detect.watermark_ai_detect_prompt))
+                    params.append((self.tr("检测灵敏度"), p.detect.watermark_ai_detect_confidence))
                     if p.detect.watermark_ai_detect_neg_boxes:
                         params.append((self.tr("负检测框 (保留)"), p.detect.watermark_ai_detect_neg_boxes))
                     if p.detect.watermark_ai_detect_pos_boxes:
                         params.append((self.tr("正检测框 (去除)"), p.detect.watermark_ai_detect_pos_boxes))
                 elif p.detect.watermark_ai_detect_method == "space_detect":
-                    params.append((self.tr("检测灵敏度"), p.detect.watermark_ai_detect_prompt))
+                    params.append((self.tr("检测灵敏度"), p.detect.watermark_ai_detect_confidence))
                     if p.detect.watermark_ai_detect_neg_boxes:
                         params.append((self.tr("负检测框 (保留)"), p.detect.watermark_ai_detect_neg_boxes))
                     if p.detect.watermark_ai_detect_pos_boxes:

@@ -3,6 +3,17 @@ import time
 import traceback
 import logging
 from typing import Callable, Optional
+from dataclasses import asdict, is_dataclass
+
+
+def _format_arg(arg):
+    if type(arg).__name__ == "_PicklableParams" and hasattr(arg, "params"):
+        params = arg.params
+        if is_dataclass(params) and not isinstance(params, type):
+            return str(asdict(params))
+        return str(params)
+
+    return str(arg)
 
 
 def log_exception(
@@ -32,7 +43,7 @@ def log_exception(
             func_name = f"{func.__module__}.{func.__name__}"
             
             if log_args:
-                args_str = ', '.join([str(arg) for arg in args])
+                args_str = ', '.join([_format_arg(arg) for arg in args])
                 kwargs_str = ', '.join([f"{k}={v}" for k, v in kwargs.items()])
                 log.debug(f"Called function {func_name}({args_str}, {kwargs_str})")
             else:
@@ -60,7 +71,7 @@ def log_exception(
                         'exception_type': exc_type,
                         'exception_message': exc_msg,
                         'traceback': exc_tb,
-                        'function_args': args if log_args else None,
+                        'function_args': _format_arg(args) if log_args else None,
                         'function_kwargs': kwargs if log_args else None,
                     }
                 )              
@@ -111,9 +122,7 @@ def log_performance(
                     if log_args:
                         args_info = []
                         for i, arg in enumerate(args):
-                            arg_str = str(arg)
-                            if len(arg_str) > 100:
-                                arg_str = arg_str[:100] + "..."
+                            arg_str = _format_arg(arg)
                             args_info.append(f"arg{i}={arg_str}")
                         for k, v in kwargs.items():
                             val_str = str(v)
@@ -177,9 +186,7 @@ def log_function_call(
             if log_args:
                 args_strs = []
                 for i, arg in enumerate(args):
-                    arg_str = str(arg)
-                    if len(arg_str) > 100:
-                        arg_str = arg_str[:100] + "..."
+                    arg_str = _format_arg(arg)
                     args_strs.append(f"arg{i}={arg_str}")
                 
                 for k, v in kwargs.items():

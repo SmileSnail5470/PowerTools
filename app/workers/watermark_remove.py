@@ -126,7 +126,7 @@ class WatermarkRemoveWork(BaseWorker):
         if file_type is None:
             raise Exception("Not support file {0}".format(source_ext.lstrip(".")))
         onnx_model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "visible_watermark_removal")
-        segment_model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "segment")
+        segment_model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "object_segmentation")
         general_edit_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "general_edit")
         image_restoration_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_restoration", "general_restoration")
         object_remove_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "object_remove")
@@ -189,7 +189,7 @@ class WatermarkRemoveWork(BaseWorker):
                 restoration_cfg = RestorationRemoveConfig(
                     restoration=RestorationModelPaths(image_restoration_onnx_dir=image_restoration_dir),
                     params=RestorationConfig(
-                        refine_type="image_restoration",
+                        refine_type=p.model.model_name,
                         restoration_prompt=p.model.restoration_prompt,
                         restoration_watermark_type=p.model.restoration_watermark_type,
                     ),
@@ -227,7 +227,7 @@ class WatermarkRemoveWork(BaseWorker):
                 restoration_cfg = RestorationRemoveConfig(
                     restoration=RestorationModelPaths(image_restoration_onnx_dir=image_restoration_dir),
                     params=RestorationConfig(
-                        refine_type="image_restoration",
+                        refine_type=p.model.model_name,
                         restoration_prompt=p.model.restoration_prompt,
                         restoration_watermark_type=p.model.restoration_watermark_type,
                     ),

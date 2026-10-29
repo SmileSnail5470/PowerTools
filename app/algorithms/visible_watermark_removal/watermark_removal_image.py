@@ -10,7 +10,7 @@ from app.algorithms.visible_watermark_removal.modules.emdf_inpaint import EMDFIn
 from app.algorithms.visible_watermark_removal.modules.lama_inpaint import LamaInpaint
 from app.algorithms.visible_watermark_removal.modules.text_detection import detect_text_watermarks
 from app.algorithms.visible_watermark_removal.modules.yolo_detecttion import YOLODetection
-from app.algorithms.segment.inference import SegmentationInference
+from app.algorithms.private.object_segmentation.image.inference import ObjectSegmentationInference
 from app.algorithms.private.image_edit.general_edit.inference import ImageEditInference
 from app.algorithms.private.image_restoration.inference import ImageRestorationInference
 from app.algorithms.private.object_remove.inference import ObjectRemoveInference
@@ -123,26 +123,29 @@ class WatermarkSegment():
 
             mask = np.clip((sl_mask + pt_mask), 0, 255).astype(np.uint8)
         elif self.watermark_ai_detect_method == "semantic_detect":
-            segment_instance = SegmentationInference(
+            segment_instance = ObjectSegmentationInference(
                 model_dir=segment_onnx_dir,
-                prompt_mode="texts",
-                prompt_value=self.ai_interactive_prompt,
-                threshold=float(self.watermark_confidence)
+                threshold=float(self.watermark_ai_detect_confidence)
             )
-            segment_instance.prepare()
-            mask = segment_instance.inference_image(input_image_path=image_path)
+            mask = segment_instance.infer(
+                input_path=image_path,
+                text=self.watermark_ai_detect_prompt,
+                threshold=self.watermark_ai_detect_confidence,
+                box=self.watermark_ai_detect_pos_boxes,
+                negative_box=self.watermark_ai_detect_neg_boxes
+            )
         elif self.watermark_ai_detect_method == "space_detect":
-            prompt_value = []
-            for item in self.ai_interactive_boxes:
-                prompt_value.append(",".join(str(i) for i in item))
-            segment_instance = SegmentationInference(
+            segment_instance = ObjectSegmentationInference(
                 model_dir=segment_onnx_dir,
-                prompt_mode="boxes",
-                prompt_value=prompt_value,
-                threshold=float(self.watermark_confidence)
+                threshold=float(self.watermark_ai_detect_confidence)
             )
-            segment_instance.prepare()
-            mask = segment_instance.inference_image(input_image_path=image_path)
+            mask = segment_instance.infer(
+                input_path=image_path,
+                text="watermark",
+                threshold=self.watermark_ai_detect_confidence,
+                box=self.watermark_ai_detect_pos_boxes,
+                negative_box=self.watermark_ai_detect_neg_boxes
+            )
         else:
             raise Exception(f"Not support watermark_ai_detect_method {self.watermark_ai_detect_method}")
 
