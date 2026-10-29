@@ -861,20 +861,22 @@ class HeaderWidget(QWidget):
             self.is_batch_task = True
             for one_file in os.listdir(input_path):
                 file_path = os.path.join(input_path, one_file)
+                if not get_file_type(file_path):
+                    continue
                 if is_extract_task:
                     extract_layered.set_param("io.input_path", file_path)
                     func, args, kwargs = WatermarkExtractWork(extract_layered).to_worker()
                 else:
                     watermark_add_params.set_param("io.input_path", file_path)
                     func, args, kwargs = WatermarkAddWork(watermark_add_params).to_worker()
-                total_tasks.append((func, args, kwargs))
+                total_tasks.append((func, args, kwargs, file_path))
         else:
             self.is_batch_task = False
             if is_extract_task:
                 func, args, kwargs = WatermarkExtractWork(extract_layered).to_worker()
             else:
                 func, args, kwargs = WatermarkAddWork(watermark_add_params).to_worker()
-            total_tasks.append((func, args, kwargs))
+            total_tasks.append((func, args, kwargs, input_path))
 
         backend_type, gpu_name = "CPU 运行", ""
         task_status_model.start_batch(total=len(total_tasks), backend_type=backend_type, gpu_name=gpu_name)
@@ -896,8 +898,7 @@ class HeaderWidget(QWidget):
             )
             future.progress.connect(lambda value, msg, path=input_path: self._task_progress(path, value, msg))
 
-        for func, args, kwargs in total_tasks:
-            one_input_path = args[1].get_param("io.input_path")
+        for func, args, kwargs, one_input_path in total_tasks:
             submit_task(func, args, kwargs, one_input_path)
 
         TeachingTip.create(

@@ -706,11 +706,11 @@ class HeaderWidget(QWidget):
                     continue
                 image_restoration_params.set_param("io.input_path", one_file_path)
                 func, args, kwargs = ImageRestorationWork(image_restoration_params).to_worker()
-                total_tasks.append((func, args, kwargs))
+                total_tasks.append((func, args, kwargs, one_file_path))
         else:
             self.is_batch_task = False
             func, args, kwargs = ImageRestorationWork(image_restoration_params).to_worker()
-            total_tasks.append((func, args, kwargs))
+            total_tasks.append((func, args, kwargs, input_path))
 
         if not total_tasks:
             MessageBox(
@@ -740,8 +740,7 @@ class HeaderWidget(QWidget):
             )
             future.progress.connect(lambda value, msg, path=input_path: self._task_progress(path, value, msg))
 
-        for func, args, kwargs in total_tasks:
-            one_input_path = args[1].get_param("io.input_path")
+        for func, args, kwargs, one_input_path in total_tasks:
             submit_task(func, args, kwargs, one_input_path)
 
         TeachingTip.create(

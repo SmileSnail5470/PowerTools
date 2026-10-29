@@ -1105,15 +1105,17 @@ class HeaderWidget(QWidget):
         if os.path.isdir(input_path):
             self.is_batch_task = True
             for one_file in os.listdir(input_path):
+                if not get_file_type(os.path.join(input_path, one_file)):
+                    continue
                 watermark_remove_params.set_param("io.input_path", os.path.join(input_path, one_file))
                 task_instance = WatermarkRemoveWork(watermark_remove_params)
                 func, args, kwargs = task_instance.to_worker()
-                total_tasks.append((func, args, kwargs))
+                total_tasks.append((func, args, kwargs, os.path.join(input_path, one_file)))
         else:
             self.is_batch_task = False
             task_instance = WatermarkRemoveWork(watermark_remove_params)
             func, args, kwargs = task_instance.to_worker()
-            total_tasks.append((func, args, kwargs))
+            total_tasks.append((func, args, kwargs, input_path))
 
         backend_type, gpu_name = global_backend_info_cache.get(key="backend_info")
         watermark_remove_task_status_model.start_batch(total=len(total_tasks), backend_type=backend_type, gpu_name=gpu_name)
@@ -1135,8 +1137,7 @@ class HeaderWidget(QWidget):
             )
             future.progress.connect(lambda value, msg, path=input_path: self._task_progress(path, value, msg))
 
-        for func, args, kwargs in total_tasks:
-            input_path = args[1].get_param("io.input_path")
+        for func, args, kwargs, input_path in total_tasks:
             submit_task(func, args, kwargs, input_path)
         TeachingTip.create(
             target=self.process_btn,
@@ -1189,7 +1190,7 @@ class HeaderWidget(QWidget):
            cfg.get(cfg.additionalParams)["SoftwareSettings"]["FFmpeg_status_info"]["text"] != "OK":
             error_msg = self.tr("请在设置页面配置软件 FFmpeg 的正确路径并通过验证")
             return error_msg
-        error_msg = params.params.validate()
+        error_msg = params.validate()
         return error_msg
 
 

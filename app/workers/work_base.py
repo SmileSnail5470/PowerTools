@@ -11,6 +11,16 @@ def _resolve_hardware_variant() -> str:
     status, _ = global_backend_info_cache.get()
     return "gpu" if "GPU" in status else "cpu"
 
+class _PicklableParams:
+    def __init__(self, params):
+        self.params = params
+
+
+def _make_picklable(obj):
+    if hasattr(obj, "snapshot") and hasattr(obj, "param_changed"):
+        return _PicklableParams(obj.snapshot())
+    return obj
+
 
 def _worker_task_func(worker, *args, progress_cb=None, cancel_requested=None, **kwargs):
     if cancel_requested and cancel_requested():
@@ -32,9 +42,8 @@ class BaseWorker():
         raise NotImplementedError("Subclasses must implement this method")
 
     def to_worker(self):
-        """转换成 TaskManager 可用的 Worker
-        """
-        return _worker_task_func, (self, *self.args), self.kwargs
-    
+        picklable_args = tuple(_make_picklable(a) for a in self.args)
+        return _worker_task_func, (self, *picklable_args), self.kwargs
+
     def file_type(self, input_file):
         return get_file_type(input_file=input_file)

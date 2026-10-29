@@ -438,15 +438,17 @@ class HeaderWidget(QWidget):
         if os.path.isdir(input_path):
             self.is_batch_task = True
             for one_file in os.listdir(input_path):
+                if not get_file_type(os.path.join(input_path, one_file)):
+                    continue
                 ocr_params.set_param("io.input_path", os.path.join(input_path, one_file))
                 task_instance = OCRWork(ocr_params)
                 func, args, kwargs = task_instance.to_worker()
-                total_tasks.append((func, args, kwargs))
+                total_tasks.append((func, args, kwargs, os.path.join(input_path, one_file)))
         else:
             self.is_batch_task = False
             task_instance = OCRWork(ocr_params)
             func, args, kwargs = task_instance.to_worker()
-            total_tasks.append((func, args, kwargs))
+            total_tasks.append((func, args, kwargs, input_path))
 
         backend_type, gpu_name = global_backend_info_cache.get(key="backend_info")
         ocr_task_status_model.start_batch(total=len(total_tasks), backend_type=backend_type, gpu_name=gpu_name)
@@ -468,8 +470,7 @@ class HeaderWidget(QWidget):
             )
             future.progress.connect(lambda value, msg, path=input_path: self._task_progress(path, value, msg))
 
-        for func, args, kwargs in total_tasks:
-            one_input_path = args[1].get_param("io.input_path")
+        for func, args, kwargs, one_input_path in total_tasks:
             submit_task(func, args, kwargs, one_input_path)
 
         TeachingTip.create(
