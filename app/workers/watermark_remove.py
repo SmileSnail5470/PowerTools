@@ -22,7 +22,7 @@ from app.algorithms.visible_watermark_removal.params_config import (
     VideoMaskConfig,
     VideoWatermarkRemoveConfig,
 )
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 
 
 
@@ -35,8 +35,17 @@ class _IOParams:
 
 @dataclass
 class _VideoTrackingParams:
-    keyframes: list = field(default_factory=list)
-    end_frame: int | None = None
+    enable_preview_mode: bool = True
+    tracking_algorithm: str | None = None
+    tracking_detect_prompt: str | None = None
+    tracking_detect_pos_boxes: list = field(default_factory=list)
+    tracking_detect_neg_boxes: list = field(default_factory=list)
+    tracking_detect_anchor_frame: int | None = None
+    tracking_detect_direction: str | None = None
+    tracking_detect_frame_range: list = field(default_factory=lambda: [1, 2**31 - 1])
+    tracking_detect_confidence: float = 0.3
+    tracking_detect_mask_path: str | None = None
+    # edgetam 算法使用
     reverse_tracking_frames: int = 8
 
 
@@ -163,13 +172,10 @@ class WatermarkRemoveWork(BaseWorker):
         runtime_cfg = RuntimeConfig(
             progress_cb=progress_cb,
             ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
+            callback_func=None,
             should_cancel=cancel_requested,
         )
-        tracking_dict = {
-            "keyframes": tracking_data.keyframes,
-            "end_frame": tracking_data.end_frame,
-            "reverse_tracking_frames": tracking_data.reverse_tracking_frames,
-        }
+        tracking_dict = asdict(tracking_data)
 
         if file_type == "image":
             if p.model.model_name not in ["image_restoration"]:
@@ -206,6 +212,7 @@ class WatermarkRemoveWork(BaseWorker):
                     video_extra=VideoExtraModelPaths(
                         ppt_onnx_basedir=ppt_onnx_basedir,
                         tacker_onnx_dir=tacker_onnx_dir,
+                        object_segmentation_model_dir=segment_model_dir
                     ),
                     detection=detection_cfg,
                     mask=VideoMaskConfig(
@@ -213,6 +220,9 @@ class WatermarkRemoveWork(BaseWorker):
                         refine_type=p.model.model_name,
                         dilate_num=int(p.model.mask_dilate),
                         use_cache_mask=(detect.video_watermark_format == "static_watermark"),
+                        video_watermark_ai_detect_strategy=detect.video_watermark_ai_detect_strategy,
+                        video_watermark_ai_detect_anchor_frame=detect.video_watermark_ai_detect_anchor_frame,
+                        video_watermark_ai_detect_frame_range=detect.video_watermark_ai_detect_frame_range,
                         watermark_tracking_data=tracking_dict,
                     ),
                     runtime=RuntimeConfig(
@@ -235,6 +245,7 @@ class WatermarkRemoveWork(BaseWorker):
                         progress_cb=progress_cb,
                         ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
                         should_cancel=cancel_requested,
+                        callback_func=None,
                     ),
                 )
                 self._get_video_instance().process_video_without_mask(input_path, output_file, config=restoration_cfg)

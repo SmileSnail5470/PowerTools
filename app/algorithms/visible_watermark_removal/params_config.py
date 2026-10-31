@@ -87,15 +87,14 @@ class MaskConfig:
     dilate_num: int = 2
 
 
-TrackingAlgorithm = Literal["edgetam", "sam3"]
-
-
 @dataclass(slots=True)
 class VideoMaskConfig(MaskConfig):
     refine_type: str = "coordfill"
     use_cache_mask: bool = False
+    video_watermark_ai_detect_strategy: str = "tracking"
+    video_watermark_ai_detect_frame_range: list = field(default_factory=lambda: [1, 2**31 - 1])
+    video_watermark_ai_detect_anchor_frame: int = 1
     watermark_tracking_data: dict = field(default_factory=dict)
-    tracking_algorithm: TrackingAlgorithm = "sam3"
 
 
 @dataclass(slots=True)

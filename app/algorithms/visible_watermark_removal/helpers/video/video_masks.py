@@ -77,11 +77,13 @@ class MaskPreparer:
         mapping: dict[str, str] = {}
         mask_config = self.config.mask
         mask_result = None
+        frame_files = sorted(frame_files, key=lambda p: int(Path(p).stem))
         if mask_config.use_cache_mask and not mask_config.mask_path:
-            mask = self._postprocess_mask(self._segment_frame(frame_files[0]))
+            mask = self._postprocess_mask(self._segment_frame(frame_files[mask_config.video_watermark_ai_detect_anchor_frame-1]))
+            start_frame_idx, end_frame_idx = mask_config.video_watermark_ai_detect_frame_range
             shared_mask_path = mask_dir / "mask.png"
             Image.fromarray(mask).convert("L").save(shared_mask_path)
-            mapping.update({str(frame_file): str(shared_mask_path) for frame_file in frame_files})
+            mapping.update({str(frame_file): str(shared_mask_path) for frame_file in frame_files[start_frame_idx-1:end_frame_idx]})
             mask_result = MaskPreparationResult(mask_dir, mapping)
         elif mask_config.mask_path and not Path(mask_config.mask_path).is_dir():
             shared_mask_path = mask_dir / "mask.png"
@@ -89,9 +91,7 @@ class MaskPreparer:
             mapping.update({str(frame_file): str(shared_mask_path) for frame_file in frame_files})
             mask_result = MaskPreparationResult(mask_dir, mapping)
         elif mask_config.mask_path and Path(mask_config.mask_path).is_dir():
-            external_masks = sorted(
-                path for path in Path(mask_config.mask_path).iterdir() if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
-            )
+            external_masks = sorted(path for path in Path(mask_config.mask_path).iterdir() if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES)
             if len(external_masks) != len(frame_files):
                 raise ValueError(f"Mask directory contains {len(external_masks)} image(s) for {len(frame_files)} video frame(s)")
             mapping.update({
@@ -100,42 +100,45 @@ class MaskPreparer:
             })
             mask_result = MaskPreparationResult(mask_dir, mapping)
         else:
-            tracking_data = mask_config.watermark_tracking_data
-            if not (
-                tracking_data
-                and tracking_data.get("keyframes")
-                and tracking_data.get("end_frame") is not None
-            ):
-                for frame_file in frame_files:
+            if mask_config.video_watermark_ai_detect_strategy == "frame_by_frame":
+                start_frame_idx, end_frame_idx = mask_config.video_watermark_ai_detect_frame_range
+                for frame_file in frame_files[start_frame_idx-1:end_frame_idx]:
                     self._save_mask(frame_file, self._segment_frame(frame_file), mask_dir, mapping)
                 mask_result = MaskPreparationResult(mask_dir, mapping)
             else:
-                self._prepare_tracked_masks(mask_dir, frame_files, mapping, tracking_data)
-                mask_result = MaskPreparationResult(mask_dir, mapping)
+                tracking_data = mask_config.watermark_tracking_data
+                if tracking_data["enable_preview_mode"]:
+                    tracking_mask_dir = tracking_data["tracking_detect_mask_path"]
+                    tracking_mask_files = sorted((p for p in tracking_mask_dir.iterdir() if p.is_file()), key=lambda p: p.stem)
+                    frame_files = sorted(frame_files, key=lambda x: Path(x).stem)
+                    mapping.update({str(frame): str(mask) for frame, mask in zip(frame_files, tracking_mask_files, strict=True)})
+                    mask_result = MaskPreparationResult(tracking_mask_dir, mapping)
+                else:
+                    mask_dir = tracking_data["tracking_detect_mask_path"] or mask_dir
+                    self._prepare_tracked_masks(mask_dir, frame_files, mapping, tracking_data)
+                    mask_result = MaskPreparationResult(mask_dir, mapping)
         return mask_result
 
     def _prepare_tracked_masks(self, mask_dir: Path, frame_files: list[Path], mapping: dict[str, str], tracking_data: dict) -> None:
+        tracking_algorithm = tracking_data["tracking_algorithm"]
+        if tracking_algorithm == "edgetam":
+            self._prepare_tracked_masks_edgetam(mask_dir, frame_files, mapping, tracking_data)
+        else:
+            self._prepare_tracked_masks_sam3(mask_dir, frame_files, mapping, tracking_data)
+
+    def _prepare_tracked_masks_edgetam(self, mask_dir: Path, frame_files: list[Path], mapping: dict[str, str], tracking_data: dict) -> None:
         config = self.config
-        keyframes = tracking_data.get("keyframes")
-        end_frame = tracking_data.get("end_frame")
-        tracking_enabled = tracking_data.get("tracking_enabled")
         model_dir = config.video_extra.tacker_onnx_dir
-        algorithm = config.mask.tracking_algorithm
-        reverse_tracking_frames = max(0, int(tracking_data.get("reverse_tracking_frames", 8) or 0))
+        tracking_detect_anchor_frame = int(tracking_data["tracking_detect_anchor_frame"])
+        tracking_detect_direction = tracking_data["tracking_detect_direction"]
+        tracking_detect_frame_range = tracking_data["tracking_detect_frame_range"]
+        start_frame_idx, end_frame_idx = tracking_detect_frame_range[0], tracking_detect_frame_range[1]
+        reverse_tracking_frames = max(0, int(tracking_data.get("reverse_tracking_frames", 8)))
         logger.info(
-            "Start track mask with keyframes %s and end frame %s, tracking_enabled %s, "
-            "reverse_tracking_frames %d, algorithm %s",
-            keyframes, end_frame, tracking_enabled, reverse_tracking_frames, algorithm,
+            "Start fast track mask with anchorframe %s and start frame %d to end frame %d and track direction %s, reverse_tracking_frames %d",
+            tracking_detect_anchor_frame, start_frame_idx, end_frame_idx, tracking_detect_direction, reverse_tracking_frames,
         )
         total_frames = len(frame_files)
-        effective_end = end_frame if end_frame else total_frames
-        if not tracking_enabled:
-            first_keyframe_index = keyframes[0] - 1 if keyframes else 0
-            start_index = max(0, first_keyframe_index)
-            end_index = min(effective_end, total_frames)
-            for frame_file in frame_files[start_index:end_index]:
-                self._save_mask(frame_file, self._segment_frame(frame_file), mask_dir, mapping)
-            return
 
         def segment_tracking_frame(frame_file: Path) -> tuple[np.ndarray, str]:
             mask = self._segment_frame(frame_file)
@@ -150,7 +153,7 @@ class MaskPreparer:
                 return
             try:
                 with tempfile.TemporaryDirectory(prefix="track_reverse_frames_") as frames_tmp, \
-                     tempfile.TemporaryDirectory(prefix="track_reverse_masks_") as masks_tmp:
+                        tempfile.TemporaryDirectory(prefix="track_reverse_masks_") as masks_tmp:
                     for frame_file in reverse_frames:
                         shutil.copy2(frame_file, Path(frames_tmp) / frame_file.name)
                     logger.info(
@@ -264,3 +267,6 @@ class MaskPreparer:
                         release = getattr(tracker, "release", None)
                         if callable(release):
                             release()
+
+    def _prepare_tracked_masks_sam3(self, mask_dir: Path, frame_files: list[Path], mapping: dict[str, str], tracking_data: dict) -> None:
+        pass
