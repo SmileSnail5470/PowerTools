@@ -8,11 +8,14 @@ from PySide6.QtWidgets import (
     QCheckBox, QDialog, QFileDialog, QFrame, QGraphicsOpacityEffect, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
     QProgressBar, QSizePolicy, QSlider, QSpinBox, QStyle, QStyleOptionButton, QVBoxLayout, QWidget
 )
-from app.ui.library.qfluentwidgets import FluentIcon, Theme, getFont, setFont
+from app.ui.library.qfluentwidgets import FluentIcon, Theme, getFont, setFont, MessageBox
 from app.ui.common.utils import global_backend_info_cache
 from app.utils.image_io import open_video_capture
 from app.ui.common.config import cfg
 from app.ui.widgets.image_preview_widget import ScrollBar
+from app.controllers.task_manager import global_task_manager
+from app.workers.watermark_remove import VideoTrackingParams as VideoDetectorParams
+from app.workers.video_object_detector_work import VideoObjectDetectorWorker
 
 
 class PromptModeCheckBox(QCheckBox):
@@ -591,6 +594,7 @@ class VideoObjectDetectorWidget(QDialog):
         self.is_playing = False
         self._task_running = False
         self._task_progress = 0
+        self._active_future = None
         self._playback_compact = False
         self._playback_legend_labels = []
         self._prompt_mode_checks: dict[str, tuple[QCheckBox, QCheckBox]] = {}
@@ -2017,51 +2021,171 @@ class VideoObjectDetectorWidget(QDialog):
         if self.current_model == "sam3":
             direction = next((k for k, btn in self.direction_buttons.items() if btn.isChecked()), "forward")
             text_enabled, box_enabled = self._prompt_mode_checks["sam3"]
+            prompts = list(self.canvas._prompts) if box_enabled.isChecked() else []
+            pos_boxes = [p[0] for p in prompts if p[1] == "pos"]
+            neg_boxes = [p[0] for p in prompts if p[1] == "neg"]
+            text_prompt = self.prompt_input.text().strip() if text_enabled.isChecked() else None
+            save_path = self.save_path_input.text().strip() or None
             return {
-                "model": "sam3",
-                "text_prompt_enabled": text_enabled.isChecked(),
-                "box_prompt_enabled": box_enabled.isChecked(),
-                "text_prompt": self.prompt_input.text().strip() if text_enabled.isChecked() else "",
-                "prompts": list(self.canvas._prompts) if box_enabled.isChecked() else [],
-                "anchor_frame": self.anchor_spin.value(),
-                "direction": direction,
-                "frame_range": (self.range_start.value(), self.range_end.value()),
-                "detection_sensitivity": self.detection_sensitivity,
-                "save_path": self.save_path_input.text().strip(),
+                "tracking_algorithm": "sam3",
+                "tracking_detect_prompt": text_prompt,
+                "tracking_detect_pos_boxes": pos_boxes,
+                "tracking_detect_neg_boxes": neg_boxes,
+                "tracking_detect_anchor_frame": self.anchor_spin.value(),
+                "tracking_detect_direction": direction,
+                "tracking_detect_frame_range": [self.range_start.value(), self.range_end.value()],
+                "tracking_detect_confidence": round(self.detection_sensitivity, 2),
+                "tracking_detect_mask_path": save_path,
             }
         else:
             direction = next((k for k, btn in self.edge_direction_buttons.items() if btn.isChecked()), "forward")
             text_enabled, box_enabled = self._prompt_mode_checks["edgetam"]
+            prompts = list(self.canvas._prompts) if box_enabled.isChecked() else []
+            pos_boxes = [p[0] for p in prompts if p[1] == "pos"]
+            neg_boxes = [p[0] for p in prompts if p[1] == "neg"]
+            text_prompt = self.edge_text_input.text().strip() if text_enabled.isChecked() else None
+            save_path = self.edge_save_path_input.text().strip() or None
             return {
-                "model": "edgetam",
-                "text_prompt_enabled": text_enabled.isChecked(),
-                "box_prompt_enabled": box_enabled.isChecked(),
-                "watermark_text": self.edge_text_input.text().strip() if text_enabled.isChecked() else "",
-                "prompts": list(self.canvas._prompts) if box_enabled.isChecked() else [],
-                "anchor_frame": self.edge_anchor_spin.value(),
-                "direction": direction,
-                "frame_range": (self.edge_range_start.value(), self.edge_range_end.value()),
-                "save_path": self.edge_save_path_input.text().strip(),
+                "tracking_algorithm": "edgetam",
+                "tracking_detect_prompt": text_prompt,
+                "tracking_detect_pos_boxes": pos_boxes,
+                "tracking_detect_neg_boxes": neg_boxes,
+                "tracking_detect_anchor_frame": self.edge_anchor_spin.value(),
+                "tracking_detect_direction": direction,
+                "tracking_detect_frame_range": [self.edge_range_start.value(), self.edge_range_end.value()],
+                "tracking_detect_confidence": 0.3,
+                "tracking_detect_mask_path": save_path,
             }
 
-    def get_results(self):
+    def _build_tracking_params(self) -> VideoDetectorParams:
+        raw = self._get_current_algo_params()
+        return VideoDetectorParams(
+            tracking_algorithm=raw.get("tracking_algorithm"),
+            tracking_detect_prompt=raw.get("tracking_detect_prompt"),
+            tracking_detect_pos_boxes=raw.get("tracking_detect_pos_boxes", []),
+            tracking_detect_neg_boxes=raw.get("tracking_detect_neg_boxes", []),
+            tracking_detect_anchor_frame=raw.get("tracking_detect_anchor_frame"),
+            tracking_detect_direction=raw.get("tracking_detect_direction"),
+            tracking_detect_frame_range=raw.get("tracking_detect_frame_range", [1, 2**31 - 1]),
+            tracking_detect_confidence=raw.get("tracking_detect_confidence", 0.3),
+            tracking_detect_mask_path=raw.get("tracking_detect_mask_path"),
+        )
+
+    def get_results(self) -> VideoDetectorParams | None:
         return getattr(self, "_last_run_result", None)
 
     def _show_run_mode_dialog(self):
+        if not self.file_path:
+            MessageBox(title=self.tr("提醒"), content=self.tr("请先加载视频文件"), parent=self).exec()
+            return
         dialog = RunModeDialog(self)
         if dialog.exec() != QDialog.Accepted:
             return
         mode = dialog.selected_mode()
+        params = self._build_tracking_params()
         if mode == "foreground":
-            params = self._get_current_algo_params()
-            save_path = params.get("save_path", self._default_save_path())
-            self._last_run_result = save_path
-            self.set_task_running(True)
-            self._set_label_status(self.canvas_status, self.tr("●  任务启动"), "ready")
-        elif mode == "background":
-            params = self._get_current_algo_params()
+            params.enable_preview_mode = True
+            self._run_foreground(params)
+        else:
+            params.enable_preview_mode = False
             self._last_run_result = params
             self.close()
+
+    def _run_foreground(self, params: "VideoDetectorParams") -> None:
+        if params.tracking_detect_anchor_frame is None:
+            MessageBox(title=self.tr("提醒"), content=self.tr("请设置起始关键帧"), parent=self).exec()
+            return
+        self._cancel_active_future()
+        backend_type, hardware_name = global_backend_info_cache.get()
+        self.set_task_running(True, backend_type=backend_type, hardware_name=hardware_name)
+        self._set_label_status(self.canvas_status, self.tr("●  任务启动"), "ready")
+        self._update_result_card_state(self.tr("运行中"), "indigoBadge")
+        worker = VideoObjectDetectorWorker(
+            file_path=self.file_path,
+            params=params,
+            total_frames=self.total_frames,
+        )
+        func, args, kwargs = worker.to_worker()
+        future = global_task_manager.submit(func, *args, **kwargs)
+        self._active_future = future
+
+        future.progress.connect(self._on_task_progress)
+        future.finished.connect(self._on_task_finished)
+        future.failed.connect(self._on_task_failed)
+        future.cancelled.connect(self._on_task_cancelled)
+        self.taskTerminateRequested.connect(lambda: self._cancel_active_future())
+
+    def _cancel_active_future(self) -> None:
+        future = getattr(self, "_active_future", None)
+        if future is not None and not future.done:
+            global_task_manager.cancel(future.job_id)
+        self._active_future = None
+
+    def _on_task_progress(self, value, msg) -> None:
+        if isinstance(value, int):
+            self.set_task_progress(value)
+            self._update_result_card_state(self.tr("处理中 {0}/{1} 帧").format(value, self.total_frames), "indigoBadge",)
+        elif value == "SegmentDone":
+            self._set_label_status(self.canvas_status, self.tr("●  分割完成，开始跟踪"), "ready")
+        elif value == "TrackDone":
+            self._set_label_status(self.canvas_status, self.tr("●  跟踪完成，生成掩码中"), "ready")
+
+    def _on_task_finished(self, result) -> None:
+        self.set_task_running(False)
+        output_path = result if isinstance(result, str) else (result.get("output_path") if isinstance(result, dict) else None)
+        self._last_run_result = VideoDetectorParams(
+            enable_preview_mode=False,
+            tracking_detect_mask_path=output_path,
+        )
+        self._set_label_status(self.canvas_status, self.tr("●  检测完成"), "ready")
+        self._update_result_card_state(self.tr("检测完成"), "successBadge")
+        if output_path:
+            self.notify_result_video("mask", output_path, self.current_model)
+        self.task_status_label.setText(self.tr("已完成"))
+        self.task_status_label.setObjectName("taskStatusLabelDone")
+        self.task_status_label.style().unpolish(self.task_status_label)
+        self.task_status_label.style().polish(self.task_status_label)
+
+    def _on_task_failed(self, error) -> None:
+        self.set_task_running(False)
+        self._set_label_status(self.canvas_status, self.tr("●  任务失败"), "error")
+        self._update_result_card_state(self.tr("任务失败"), "warningBadge")
+        self.task_status_label.setText(self.tr("失败"))
+        self.task_status_label.setObjectName("taskStatusLabelTerminated")
+        self.task_status_label.style().unpolish(self.task_status_label)
+        self.task_status_label.style().polish(self.task_status_label)
+        MessageBox(title=self.tr("任务失败"), content=str(error), parent=self).exec()
+
+    def _on_task_cancelled(self) -> None:
+        self.set_task_running(False)
+        self._set_label_status(self.canvas_status, self.tr("●  任务已取消"), "warning")
+
+    def _update_result_card_state(self, text: str, badge_object: str) -> None:
+        label = getattr(self, "result_state_label", None)
+        if label is None:
+            return
+        label.setText(text)
+        label.setObjectName(badge_object)
+        label.style().unpolish(label)
+        label.style().polish(label)
+        frame_label = getattr(self, "result_frame_label", None)
+        if frame_label is not None:
+            anchor = None
+            if self.current_model == "sam3":
+                anchor = getattr(self, "anchor_spin", None)
+            else:
+                anchor = getattr(self, "edge_anchor_spin", None)
+            frame_num = anchor.value() if anchor else self.current_frame
+            frame_label.setText(self.tr("第 {0} 帧起始检测").format(frame_num))
+        obj_label = getattr(self, "result_objects_value", None)
+        if obj_label is not None:
+            if self.current_model == "sam3":
+                text_enabled, _ = self._prompt_mode_checks.get("sam3", (None, None))
+                prompt_text = self.prompt_input.text().strip() if (text_enabled and text_enabled.isChecked()) else "—"
+            else:
+                text_enabled, _ = self._prompt_mode_checks.get("edgetam", (None, None))
+                prompt_text = self.edge_text_input.text().strip() if (text_enabled and text_enabled.isChecked()) else "—"
+            obj_label.setText(prompt_text or "—")
 
     def _show_inference_notice(self):
         self._show_run_mode_dialog()

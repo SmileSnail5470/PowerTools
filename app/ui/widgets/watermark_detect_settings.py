@@ -13,6 +13,7 @@ from app.ui.common.config import cfg
 from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
 from app.ui.widgets.watermark_manual_select_widget import WatermarkMaskTool
 from app.ui.widgets.video_object_detector_widget import VideoFrameCanvas, VideoObjectDetectorWidget
+from app.workers.watermark_remove import VideoTrackingParams
 from app.utils.image_io import open_video_capture
 
 
@@ -198,7 +199,7 @@ class WatermarkDetectSettings(QWidget):
     watermarkAIDetectPosBoxes = Signal(list)             # 水印检测范围 boxes -- 正提示框
     watermarkAIDetectNegBoxes = Signal(list)             # 水印检测范围 boxes -- 负提示框
     watermarkAIDetectConfidence = Signal(float)          # 水印置信度
-    videoWatermarkTrackingData = Signal(dict)            # 跟踪数据: {keyframes, end_frame, tracking_enabled, reverse_tracking_frames}
+    videoWatermarkTrackingData = Signal(object)          # 跟踪数据（VideoTrackingParams 实例）
 
 
     def __init__(self, parent=None):
@@ -1067,8 +1068,10 @@ class WatermarkDetectSettings(QWidget):
             return
         dialog = VideoObjectDetectorWidget(file_path=self.file_path, parent=self.window())
         dialog.exec()
-        tracking_data = dialog.get_results()
-        self._on_tracking_data_ready(tracking_data)
+        result = dialog.get_results()
+        if result is None:
+            return
+        self._on_tracking_data_ready(result)
 
     def _open_video_preview(self, initial_frame):
         if not self.file_path:
@@ -1090,4 +1093,6 @@ class WatermarkDetectSettings(QWidget):
         dialog.exec()
 
     def _on_tracking_data_ready(self, data):
+        if not isinstance(data, VideoTrackingParams):
+            return
         self.videoWatermarkTrackingData.emit(data)

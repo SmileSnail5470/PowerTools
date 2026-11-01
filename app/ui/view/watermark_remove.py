@@ -31,7 +31,7 @@ from app.ui.common.task_status import TaskStatusModel
 from app.ui.common.utils import get_file_type, global_backend_info_cache
 from app.ui.common.config import cfg
 
-from app.workers.watermark_remove import WatermarkRemoveWork, WatermarkRemoveUIParams
+from app.workers.watermark_remove import WatermarkRemoveWork, WatermarkRemoveUIParams, VideoTrackingParams
 
 from app.license.globals import feature_gate
 
@@ -115,7 +115,7 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
                 watermark_detect_settings.set_file_path(file_path=file_path),
                 None if file_path else watermark_detect_settings.watermarkAIDetectPosBoxes.emit([]),
                 None if file_path else watermark_detect_settings.watermarkAIDetectNegBoxes.emit([]),
-                None if file_path else watermark_detect_settings.videoWatermarkTrackingData.emit({"keyframes": [], "end_frame": None, "reverse_tracking_frames": 8})
+                None if file_path else watermark_detect_settings.videoWatermarkTrackingData.emit(VideoTrackingParams()),
             )
         )
 

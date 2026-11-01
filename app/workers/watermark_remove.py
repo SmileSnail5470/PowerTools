@@ -34,7 +34,7 @@ class _IOParams:
 
 
 @dataclass
-class _VideoTrackingParams:
+class VideoTrackingParams:
     enable_preview_mode: bool = True
     tracking_algorithm: str | None = None
     tracking_detect_prompt: str | None = None
@@ -62,7 +62,7 @@ class _DetectParams:
     watermark_ai_detect_pos_boxes: list = field(default_factory=list)
     watermark_ai_detect_neg_boxes: list = field(default_factory=list)
     watermark_ai_detect_confidence: float = 0.3
-    video_watermark_tracking_data: _VideoTrackingParams = field(default_factory=_VideoTrackingParams)
+    video_watermark_tracking_data: VideoTrackingParams = field(default_factory=VideoTrackingParams)
 
 
 @dataclass
