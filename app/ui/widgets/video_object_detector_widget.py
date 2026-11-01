@@ -1,6 +1,7 @@
 import os
 import sys
 import cv2
+import numpy as np
 import tempfile
 from pathlib import Path
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal
@@ -1976,11 +1977,40 @@ class VideoObjectDetectorWidget(QDialog):
             missing_placeholder = self.tr("打开视频以预览画面")
         else:
             mask_frames = self.result_mask_frames[self.current_model]
-            if self.current_view == "mask" and mask_frames is not None:
+            if self.current_view in ("mask", "overlay") and mask_frames is not None:
                 mask_path = mask_frames.get(self.current_frame - 1)
                 mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE) if mask_path is not None else None
                 if mask is not None:
-                    rgb = cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB)
+                    if self.current_view == "mask":
+                        rgb = cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB)
+                    elif self.cap is not None and self.cap.isOpened():
+                        self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame - 1)
+                        success, frame = self.cap.read()
+                        if not success:
+                            self.canvas.set_frame(QImage(), self.tr("当前帧暂无检测结果"))
+                            self._set_label_status(self.canvas_status, self.tr("●  当前帧读取失败"), "error")
+                            self._update_frame_counter()
+                            self._update_frame_detection_summary()
+                            return
+                        if mask.shape != frame.shape[:2]:
+                            mask = cv2.resize(
+                                mask,
+                                (frame.shape[1], frame.shape[0]),
+                                interpolation=cv2.INTER_NEAREST,
+                            )
+                        overlay = frame.copy()
+                        selected = mask > 0
+                        overlay[selected] = (
+                            overlay[selected].astype(np.float32) * 0.55
+                            + np.array([241, 102, 99], dtype=np.float32) * 0.45
+                        ).astype(np.uint8)
+                        rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+                    else:
+                        self.canvas.set_frame(QImage(), self.tr("当前帧暂无检测结果"))
+                        self._set_label_status(self.canvas_status, self.tr("●  原视频读取失败"), "error")
+                        self._update_frame_counter()
+                        self._update_frame_detection_summary()
+                        return
                     height, width, channels = rgb.shape
                     image = QImage(rgb.data, width, height, channels * width, QImage.Format_RGB888).copy()
                     self.canvas.set_frame(image, show_detection_overlay=False, show_prompts=False)

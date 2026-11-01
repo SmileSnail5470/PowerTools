@@ -123,4 +123,4 @@ class VideoObjectDetectorWorker(BaseWorker):
             mask_result = MaskPreparer(video_cfg).prepare(mask_out_dir, frame_files)
 
         logger.info("VideoObjectDetectorWorker: finished, output=%s", mask_out_dir)
-        return mask_result.mask_dir
+        return str(mask_result.mask_dir)
