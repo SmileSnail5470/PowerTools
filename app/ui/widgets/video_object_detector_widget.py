@@ -1,6 +1,7 @@
 import os
 import sys
 import cv2
+import tempfile
 from pathlib import Path
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPainterPath, QPen, QPixmap
@@ -1795,7 +1796,7 @@ class VideoObjectDetectorWidget(QDialog):
     def _add_prompt_box_controls(self, layout: QVBoxLayout, model: str) -> None:
         layout.addSpacing(4)
         box_enabled = self._prompt_mode_checks[model][1]
-        layout.addWidget(self._section_title_with_toggle(self.tr("框选提示 (正框 / 负框)"), box_enabled))
+        layout.addWidget(self._section_title_with_toggle(self.tr("框选提示 (正框 / 负框)--非必须"), box_enabled))
         tool_row = QHBoxLayout()
         tool_row.setSpacing(8)
         positive_button = QPushButton(self.tr("正框 (去除的目标)"))
@@ -2100,37 +2101,55 @@ class VideoObjectDetectorWidget(QDialog):
         self.set_task_running(True, backend_type=backend_type, hardware_name=hardware_name)
         self._set_label_status(self.canvas_status, self.tr("●  任务启动"), "ready")
         self._update_result_card_state(self.tr("运行中"), "indigoBadge")
+
         worker = VideoObjectDetectorWorker(
             file_path=self.file_path,
             params=params,
-            total_frames=self.total_frames,
         )
         func, args, kwargs = worker.to_worker()
         future = global_task_manager.submit(func, *args, **kwargs)
         self._active_future = future
 
-        future.progress.connect(self._on_task_progress)
+        if params.tracking_detect_mask_path:
+            poll_dir = Path(params.tracking_detect_mask_path)
+        else:
+            cache_root = cfg.get(cfg.cachePath) or tempfile.gettempdir()
+            poll_dir = Path(cache_root) / "video_detector_masks" / Path(self.file_path).stem
+        self._poll_mask_dir = poll_dir
+
+        self._progress_timer = QTimer(self)
+        self._progress_timer.setInterval(2000)
+        self._progress_timer.timeout.connect(self._poll_mask_progress)
+        self._progress_timer.start()
+
         future.finished.connect(self._on_task_finished)
         future.failed.connect(self._on_task_failed)
         future.cancelled.connect(self._on_task_cancelled)
         self.taskTerminateRequested.connect(lambda: self._cancel_active_future())
 
+    def _poll_mask_progress(self) -> None:
+        poll_dir = getattr(self, "_poll_mask_dir", None)
+        if poll_dir is None or not poll_dir.exists():
+            return
+        count = sum(1 for p in poll_dir.iterdir() if p.suffix.lower() == ".png")
+        self.set_task_progress(count)
+        self._update_result_card_state(self.tr("处理中 {0}/{1} 帧").format(count, self.total_frames), "indigoBadge")
+
     def _cancel_active_future(self) -> None:
+        self._stop_progress_timer()
         future = getattr(self, "_active_future", None)
         if future is not None and not future.done:
             global_task_manager.cancel(future.job_id)
         self._active_future = None
 
-    def _on_task_progress(self, value, msg) -> None:
-        if isinstance(value, int):
-            self.set_task_progress(value)
-            self._update_result_card_state(self.tr("处理中 {0}/{1} 帧").format(value, self.total_frames), "indigoBadge",)
-        elif value == "SegmentDone":
-            self._set_label_status(self.canvas_status, self.tr("●  分割完成，开始跟踪"), "ready")
-        elif value == "TrackDone":
-            self._set_label_status(self.canvas_status, self.tr("●  跟踪完成，生成掩码中"), "ready")
+    def _stop_progress_timer(self) -> None:
+        timer = getattr(self, "_progress_timer", None)
+        if timer is not None:
+            timer.stop()
+        self._progress_timer = None
 
     def _on_task_finished(self, result) -> None:
+        self._stop_progress_timer()
         self.set_task_running(False)
         output_path = result if isinstance(result, str) else (result.get("output_path") if isinstance(result, dict) else None)
         self._last_run_result = VideoDetectorParams(
@@ -2147,6 +2166,7 @@ class VideoObjectDetectorWidget(QDialog):
         self.task_status_label.style().polish(self.task_status_label)
 
     def _on_task_failed(self, error) -> None:
+        self._stop_progress_timer()
         self.set_task_running(False)
         self._set_label_status(self.canvas_status, self.tr("●  任务失败"), "error")
         self._update_result_card_state(self.tr("任务失败"), "warningBadge")
@@ -2157,6 +2177,7 @@ class VideoObjectDetectorWidget(QDialog):
         MessageBox(title=self.tr("任务失败"), content=str(error), parent=self).exec()
 
     def _on_task_cancelled(self) -> None:
+        self._stop_progress_timer()
         self.set_task_running(False)
         self._set_label_status(self.canvas_status, self.tr("●  任务已取消"), "warning")
 

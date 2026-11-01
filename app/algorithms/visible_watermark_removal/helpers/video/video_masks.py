@@ -29,7 +29,7 @@ class MaskPreparationResult:
 
 
 class MaskPreparer:
-    def __init__(self, config: VideoWatermarkRemoveConfig, tracker_factory: Callable[[str, str], Tracker] | None = None) -> None:
+    def __init__(self, config: VideoWatermarkRemoveConfig) -> None:
         self.config = config
         self._segmentor: WatermarkSegment | None = None
 

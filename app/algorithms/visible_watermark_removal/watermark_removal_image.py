@@ -141,7 +141,7 @@ class WatermarkSegment():
             )
             mask = segment_instance.infer(
                 input_path=image_path,
-                text="watermark",
+                text=None,
                 threshold=self.watermark_ai_detect_confidence,
                 box=self.watermark_ai_detect_pos_boxes,
                 negative_box=self.watermark_ai_detect_neg_boxes
