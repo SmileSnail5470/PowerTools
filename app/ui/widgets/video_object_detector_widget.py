@@ -595,6 +595,7 @@ class VideoObjectDetectorWidget(QDialog):
         self.is_playing = False
         self._task_running = False
         self._task_progress = 0
+        self._task_total_frames = self.total_frames
         self._active_future = None
         self._playback_compact = False
         self._playback_legend_labels = []
@@ -603,6 +604,7 @@ class VideoObjectDetectorWidget(QDialog):
         self._prompt_box_controls: dict[str, list[QWidget]] = {}
         self._prompt_tool_buttons: dict[str, list[QPushButton]] = {"pos": [], "neg": []}
         self.result_video_captures: dict[str, dict[str, cv2.VideoCapture | None]] = {model: {"mask": None, "overlay": None} for model in ("sam3", "edgetam")}
+        self.result_mask_frames: dict[str, dict[int, Path] | None] = {model: None for model in ("sam3", "edgetam")}
         self._frame_detection_results: dict[int, tuple[float | None, dict[str, int]]] = {}
 
         self.setWindowTitle(self.tr("视频分割与跟踪工作台"))
@@ -852,7 +854,9 @@ class VideoObjectDetectorWidget(QDialog):
             self.video_resolution_label.setText("—")
             self.video_fps_label.setText("— fps")
         self.video_total_frames_label.setText(self.tr("共 {0} 帧").format(total))
-        self.task_frame_counter.setText(self.tr("{0}/{1} 帧").format(self._task_progress, total))
+        if not self._task_running:
+            self._task_total_frames = total
+        self.task_frame_counter.setText(self.tr("{0}/{1} 帧").format(self._task_progress, self._task_total_frames))
 
     @staticmethod
     def _toolbar_separator() -> QFrame:
@@ -895,11 +899,11 @@ class VideoObjectDetectorWidget(QDialog):
             self.device_tag.setToolTip(backend_type)
 
     def set_task_progress(self, current_frame: int):
-        self._task_progress = max(0, min(current_frame, self.total_frames))
-        percentage = (self._task_progress / self.total_frames * 100) if self.total_frames else 0
+        self._task_progress = max(0, min(current_frame, self._task_total_frames))
+        percentage = (self._task_progress / self._task_total_frames * 100) if self._task_total_frames else 0
         self.task_progress_bar.setValue(round(percentage))
         self.task_progress_percent.setText(f"{percentage:.1f}%")
-        self.task_frame_counter.setText(self.tr("{0}/{1} 帧").format(self._task_progress, self.total_frames))
+        self.task_frame_counter.setText(self.tr("{0}/{1} 帧").format(self._task_progress, self._task_total_frames))
 
     def _confirm_task_termination(self):
         if not self._task_running:
@@ -976,23 +980,33 @@ class VideoObjectDetectorWidget(QDialog):
             raise ValueError("model must be 'sam3' or 'edgetam'")
         path_value = None
         capture = None
+        mask_frames = None
         if file_path is not None:
             path = Path(file_path).expanduser()
-            if not path.is_file():
+            if path.is_dir() and view == "mask":
+                mask_frames = {
+                    int(mask_path.stem): mask_path
+                    for mask_path in path.iterdir()
+                    if mask_path.is_file() and mask_path.suffix.lower() == ".png" and mask_path.stem.isdigit()
+                }
+            elif not path.is_file():
                 message = self.tr("●  检测结果文件不存在: {0}").format(path)
                 self._set_label_status(self.canvas_status, message, "error")
                 raise FileNotFoundError(path)
-            path_value = str(path.resolve())
-            capture = cv2.VideoCapture(path_value)
-            if not capture.isOpened():
-                capture.release()
-                message = self.tr("●  无法打开检测结果视频: {0}").format(path)
-                self._set_label_status(self.canvas_status, message, "error")
-                raise ValueError(message)
+            else:
+                path_value = str(path.resolve())
+                capture = cv2.VideoCapture(path_value)
+                if not capture.isOpened():
+                    capture.release()
+                    message = self.tr("●  无法打开检测结果视频: {0}").format(path)
+                    self._set_label_status(self.canvas_status, message, "error")
+                    raise ValueError(message)
         old_capture = self.result_video_captures[result_model][view]
         if old_capture is not None:
             old_capture.release()
         self.result_video_captures[result_model][view] = capture
+        if view == "mask":
+            self.result_mask_frames[result_model] = mask_frames
         if result_model == self.current_model and view == self.current_view:
             self._update_frame()
 
@@ -1961,6 +1975,26 @@ class VideoObjectDetectorWidget(QDialog):
             capture = self.cap
             missing_placeholder = self.tr("打开视频以预览画面")
         else:
+            mask_frames = self.result_mask_frames[self.current_model]
+            if self.current_view == "mask" and mask_frames is not None:
+                mask_path = mask_frames.get(self.current_frame - 1)
+                mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE) if mask_path is not None else None
+                if mask is not None:
+                    rgb = cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB)
+                    height, width, channels = rgb.shape
+                    image = QImage(rgb.data, width, height, channels * width, QImage.Format_RGB888).copy()
+                    self.canvas.set_frame(image, show_detection_overlay=False, show_prompts=False)
+                else:
+                    self.canvas.set_frame(QImage(), self.tr("当前帧暂无检测结果"))
+                    if mask_path is not None:
+                        self._set_label_status(
+                            self.canvas_status,
+                            self.tr("●  检测结果掩码读取失败: {0}").format(mask_path),
+                            "error",
+                        )
+                self._update_frame_counter()
+                self._update_frame_detection_summary()
+                return
             capture = self.result_video_captures[self.current_model][self.current_view]
             if capture is None:
                 self.canvas.set_frame(QImage(), self.tr("检测完成后显示"))
@@ -2097,6 +2131,8 @@ class VideoObjectDetectorWidget(QDialog):
             MessageBox(title=self.tr("提醒"), content=self.tr("请设置起始关键帧"), parent=self).exec()
             return
         self._cancel_active_future()
+        start_frame, end_frame = params.tracking_detect_frame_range
+        self._task_total_frames = max(0, end_frame - start_frame + 1)
         backend_type, hardware_name = global_backend_info_cache.get()
         self.set_task_running(True, backend_type=backend_type, hardware_name=hardware_name)
         self._set_label_status(self.canvas_status, self.tr("●  任务启动"), "ready")
@@ -2133,7 +2169,7 @@ class VideoObjectDetectorWidget(QDialog):
             return
         count = sum(1 for p in poll_dir.iterdir() if p.suffix.lower() == ".png")
         self.set_task_progress(count)
-        self._update_result_card_state(self.tr("处理中 {0}/{1} 帧").format(count, self.total_frames), "indigoBadge")
+        self._update_result_card_state(self.tr("处理中 {0}/{1} 帧").format(self._task_progress, self._task_total_frames), "indigoBadge")
 
     def _cancel_active_future(self) -> None:
         self._stop_progress_timer()

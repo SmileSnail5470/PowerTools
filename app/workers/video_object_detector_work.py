@@ -26,6 +26,9 @@ class VideoObjectDetectorWorker(BaseWorker):
         super().__init__(file_path, params)
 
     def run_algorithm(self, progress_cb, cancel_requested, file_path: str, params: VideoTrackingParams) -> str:
+        os.environ["_feature_name_"] = "video_object_detector"
+        if "POWERTOOLS_TMPE_DIR" not in os.environ:
+            os.environ["POWERTOOLS_TMPE_DIR"] = cfg.get(cfg.cachePath)
         deps_path = cfg.get(cfg.localAIModelDeps)
         hw = _resolve_hardware_variant()
 
@@ -56,7 +59,7 @@ class VideoObjectDetectorWorker(BaseWorker):
 
         if params.tracking_detect_prompt:
             watermark_ai_detect_method = "semantic_detect"
-        if not params.tracking_detect_prompt and params.tracking_detect_pos_boxes:
+        elif not params.tracking_detect_prompt and params.tracking_detect_pos_boxes:
             watermark_ai_detect_method = "space_detect"
         else:
             raise ValueError("Either tracking_detect_prompt or tracking_detect_pos_boxes must be provided for detection.")
@@ -117,7 +120,7 @@ class VideoObjectDetectorWorker(BaseWorker):
             frame_files = list(extract_video_frames(file_path, Path(frames_tmp), runtime_cfg.ffmpeg_path).files)
             if cancel_requested and cancel_requested():
                 raise InterruptedError("Task cancelled before mask generation")
-            MaskPreparer(video_cfg).prepare(mask_out_dir, frame_files)
+            mask_result = MaskPreparer(video_cfg).prepare(mask_out_dir, frame_files)
 
         logger.info("VideoObjectDetectorWorker: finished, output=%s", mask_out_dir)
-        return str(mask_out_dir)
+        return mask_result.mask_dir

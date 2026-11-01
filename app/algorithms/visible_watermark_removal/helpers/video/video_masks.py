@@ -101,7 +101,7 @@ class MaskPreparer:
                 mask_result = MaskPreparationResult(mask_dir, mapping)
             else:
                 tracking_data = mask_config.watermark_tracking_data
-                if tracking_data["enable_preview_mode"]:
+                if not tracking_data["enable_preview_mode"]:
                     tracking_mask_dir = tracking_data["tracking_detect_mask_path"]
                     tracking_mask_files = sorted((p for p in tracking_mask_dir.iterdir() if p.is_file()), key=lambda p: p.stem)
                     frame_files = sorted(frame_files, key=lambda x: Path(x).stem)
@@ -174,7 +174,7 @@ class MaskPreparer:
 
     def _prepare_tracked_masks_sam3(self, mask_dir: Path, frame_files: list[Path], mapping: dict[str, str], tracking_data: dict) -> None:
         config = self.config
-        model_dir = config.video_extra.tacker_onnx_dir
+        model_dir = config.video_extra.object_segmentation_model_dir
         tracking_detect_prompt = tracking_data["tracking_detect_prompt"]
         tracking_detect_pos_boxes = tracking_data["tracking_detect_pos_boxes"]
         tracking_detect_neg_boxes = tracking_data["tracking_detect_neg_boxes"]
@@ -196,7 +196,7 @@ class MaskPreparer:
             max_frames = end_frame_idx - start_frame_idx
         # frame_files 和 mask_dir 里面的帧编号都是以索引 0 开始。
         tracker.infer(
-            input_path=frame_files,
+            input_path=str(frame_files[0].parent),
             output_path=str(mask_dir),
             text=tracking_detect_prompt if tracking_detect_prompt else None,
             threshold=tracking_detect_confidence,
