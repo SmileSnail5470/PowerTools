@@ -395,7 +395,7 @@ class WatermarkDetectSettings(QWidget):
                 page_layout.addWidget(self.create_label_group(self.tr("精准框选"), self.tr("在图片区手动框选检测区域")))
                 self.precise_select_btn = QPushButton(self.tr("🎯 开始框选"))
                 self.precise_select_btn.setObjectName("secondaryBtn")
-                self.precise_select_btn.clicked.connect(lambda _: self._watermark_area_selector())
+                self.precise_select_btn.clicked.connect(lambda _: self._watermark_area_selector(allow_negative_boxes=True))
                 page_layout.addWidget(self.precise_select_btn)
             else:
                 page_layout.addWidget(self.create_label_group(self.tr("水印区域选择 (可选)"), self.tr("限定检测区域，不选择则检测整张图片")))
@@ -1007,10 +1007,9 @@ class WatermarkDetectSettings(QWidget):
         self.frame_range_end.setRange(1, self.total_video_frames)
         self.frame_range_end.setValue(self.total_video_frames)
 
-    def _watermark_area_selector(self, single_area_only=False):
+    def _watermark_area_selector(self, single_area_only=False, allow_negative_boxes=False):
         if not self.file_path:
             return
-        allow_negative_boxes = not single_area_only
         area_selector = AreaSelectorDialog(
             file_path=self.file_path,
             single_area_only=single_area_only,

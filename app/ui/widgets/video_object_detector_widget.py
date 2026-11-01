@@ -5,8 +5,8 @@ from pathlib import Path
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
-    QDialog, QFileDialog, QFrame, QGraphicsOpacityEffect, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
-    QProgressBar, QSizePolicy, QSlider, QSpinBox, QVBoxLayout, QWidget
+    QCheckBox, QDialog, QFileDialog, QFrame, QGraphicsOpacityEffect, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
+    QProgressBar, QSizePolicy, QSlider, QSpinBox, QStyle, QStyleOptionButton, QVBoxLayout, QWidget
 )
 from app.ui.library.qfluentwidgets import FluentIcon, Theme, getFont, setFont
 from app.ui.common.utils import global_backend_info_cache
@@ -15,15 +15,38 @@ from app.ui.common.config import cfg
 from app.ui.widgets.image_preview_widget import ScrollBar
 
 
+class PromptModeCheckBox(QCheckBox):
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self.isChecked():
+            return
+        option = QStyleOptionButton()
+        option.initFrom(self)
+        indicator = self.style().subElementRect(QStyle.SubElement.SE_CheckBoxIndicator, option, self)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(QPen(Qt.white, 2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawLine(
+            QPointF(indicator.left() + 4, indicator.top() + 8),
+            QPointF(indicator.left() + 7, indicator.top() + 11),
+        )
+        painter.drawLine(
+            QPointF(indicator.left() + 7, indicator.top() + 11),
+            QPointF(indicator.left() + 12, indicator.top() + 5),
+        )
+        painter.end()
+
+
 class VideoFrameCanvas(QFrame):
     promptAdded = Signal(tuple)
     promptStateChanged = Signal(bool, bool)
 
-    def __init__(self, parent=None, need_hover_hint: bool = True):
+    def __init__(self, parent=None, need_hover_hint: bool = True, enable_prompts: bool = True):
         super().__init__(parent)
         self.setObjectName("videoCanvas")
         self.setMouseTracking(True)
         self.need_hover_hint = need_hover_hint
+        self.enable_prompts = enable_prompts
         self._frame = QImage()
         self._placeholder = self.tr("打开视频以预览画面")
         self._view_mode = "overlay"
@@ -79,7 +102,7 @@ class VideoFrameCanvas(QFrame):
         painter.save()
         painter.setClipPath(clip)
         painter.drawImage(target, self._frame)
-        if self._show_prompts:
+        if self.enable_prompts and self._show_prompts:
             for index, (prompt_rect, prompt_mode) in enumerate(self._prompts):
                 prompt = QRectF(
                     target.x() + prompt_rect.x() * target.width(),
@@ -129,7 +152,7 @@ class VideoFrameCanvas(QFrame):
         event.accept()
 
     def _paint_hover_hint(self, painter: QPainter):
-        if self._hint_opacity <= 0 or not self.need_hover_hint:
+        if self._hint_opacity <= 0 or not self.need_hover_hint or not self.enable_prompts:
             return
         hint_width = max(0, min(400, self.width() - 32))
         hint_rect = QRectF(self.rect().left() + 16, self.rect().bottom() - 48, hint_width, 32)
@@ -217,6 +240,9 @@ class VideoFrameCanvas(QFrame):
         self._emit_prompt_state()
 
     def mousePressEvent(self, event):
+        if not self.enable_prompts:
+            super().mousePressEvent(event)
+            return
         target = self._image_target_rect() if not self._frame.isNull() else QRectF()
         if event.button() == Qt.LeftButton and target.contains(event.position()):
             self.setFocus()
@@ -228,6 +254,9 @@ class VideoFrameCanvas(QFrame):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        if not self.enable_prompts:
+            super().mouseMoveEvent(event)
+            return
         if self._drag_start is not None:
             target = self._image_target_rect()
             position = self._clamp_to_target(QPointF(event.position()), target)
@@ -238,6 +267,9 @@ class VideoFrameCanvas(QFrame):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        if not self.enable_prompts:
+            super().mouseReleaseEvent(event)
+            return
         if event.button() == Qt.LeftButton and self._drag_start is not None:
             target = self._image_target_rect()
             position = self._clamp_to_target(QPointF(event.position()), target)
@@ -556,12 +588,15 @@ class VideoObjectDetectorWidget(QDialog):
         self.current_frame = 14
         self.current_model = "sam3"
         self.current_view = "original"
-        self.prompt_tool = "pos"
         self.is_playing = False
         self._task_running = False
         self._task_progress = 0
         self._playback_compact = False
         self._playback_legend_labels = []
+        self._prompt_mode_checks: dict[str, tuple[QCheckBox, QCheckBox]] = {}
+        self._prompt_text_controls: dict[str, list[QWidget]] = {}
+        self._prompt_box_controls: dict[str, list[QWidget]] = {}
+        self._prompt_tool_buttons: dict[str, list[QPushButton]] = {"pos": [], "neg": []}
         self.result_video_captures: dict[str, dict[str, cv2.VideoCapture | None]] = {model: {"mask": None, "overlay": None} for model in ("sam3", "edgetam")}
         self._frame_detection_results: dict[int, tuple[float | None, dict[str, int]]] = {}
 
@@ -1164,7 +1199,8 @@ class VideoObjectDetectorWidget(QDialog):
         sam_layout = QVBoxLayout(self.sam3_params)
         sam_layout.setContentsMargins(0, 0, 0, 0)
         sam_layout.setSpacing(8)
-        sam_layout.addWidget(self._section_title(self.tr("文本提示"), self.tr("多目标检测")))
+        self.sam3_text_enabled, self.sam3_box_enabled = self._add_prompt_mode_switches("sam3")
+        sam_layout.addWidget(self._section_title_with_toggle(self.tr("文本提示"), self.sam3_text_enabled))
 
         self.prompt_input = QLineEdit("watermark")
         self.prompt_input.setObjectName("promptInput")
@@ -1190,32 +1226,10 @@ class VideoObjectDetectorWidget(QDialog):
             chips_layout.addWidget(chip)
         chips_layout.addStretch()
         sam_layout.addWidget(chips_row)
+        self._prompt_text_controls["sam3"] = [self.prompt_input, chips_row]
 
         sam_layout.addWidget(self._info_pill(self.tr("文本提示在传播时会持续检测同类目标，可能增加计算量。")))
-
-        sam_layout.addSpacing(4)
-        sam_layout.addWidget(self._section_title(self.tr("框选提示 (正框 / 负框)")))
-        tool_row = QHBoxLayout()
-        tool_row.setSpacing(8)
-        self.positive_btn = QPushButton(self.tr("正框 (去除的目标)"))
-        self.negative_btn = QPushButton(self.tr("负框 (保留的目标)"))
-        self.positive_btn.setObjectName("positiveButton")
-        self.negative_btn.setObjectName("negativeButton")
-        self.positive_btn.setCheckable(True)
-        self.negative_btn.setCheckable(True)
-        self.positive_btn.setIcon(self._square_plus_minus_icon(True))
-        self.negative_btn.setIcon(self._square_plus_minus_icon(False))
-        self.positive_btn.setIconSize(QSize(14, 14))
-        self.negative_btn.setIconSize(QSize(14, 14))
-        self.positive_btn.setFixedHeight(34)
-        self.negative_btn.setFixedHeight(34)
-        self.positive_btn.setCursor(Qt.PointingHandCursor)
-        self.negative_btn.setCursor(Qt.PointingHandCursor)
-        self.positive_btn.clicked.connect(lambda: self._select_prompt_tool("pos"))
-        self.negative_btn.clicked.connect(lambda: self._select_prompt_tool("neg"))
-        tool_row.addWidget(self.positive_btn)
-        tool_row.addWidget(self.negative_btn)
-        sam_layout.addLayout(tool_row)
+        self._add_prompt_box_controls(sam_layout, "sam3")
 
         self._add_anchor_frame_setting(sam_layout, "anchor_spin", "anchor_button", "anchorFrameInput")
         self._add_tracking_direction_setting(sam_layout, "direction_buttons")
@@ -1238,7 +1252,33 @@ class VideoObjectDetectorWidget(QDialog):
         edge_layout = QVBoxLayout(self.edgetam_params)
         edge_layout.setContentsMargins(0, 0, 0, 0)
         edge_layout.setSpacing(8)
-        edge_layout.addWidget(self._pill_label(self.tr("ⓘ 快速检测需要先提供可靠初始掩码，不通过文本搜索目标。"), "warningBox", wrap=False))
+        edge_layout.addWidget(self._pill_label(self.tr("ⓘ EdgeTAM 根据起始掩码跟踪目标，水印文本用于描述目标。"), "warningBox", wrap=False))
+        self.edgetam_text_enabled, self.edgetam_box_enabled = self._add_prompt_mode_switches("edgetam")
+        edge_layout.addWidget(self._section_title_with_toggle(self.tr("文本提示"), self.edgetam_text_enabled))
+        self.edge_text_input = QLineEdit("watermark")
+        self.edge_text_input.setObjectName("promptInput")
+        setFont(self.edge_text_input, 12)
+        self.edge_text_input.setPlaceholderText(self.tr("输入目标类别，例如 watermark"))
+        self.edge_text_input.setClearButtonEnabled(True)
+        self.edge_text_input.setFixedHeight(34)
+        edge_layout.addWidget(self.edge_text_input)
+        edge_chips_row = QWidget()
+        edge_chips_layout = QHBoxLayout(edge_chips_row)
+        edge_chips_layout.setContentsMargins(0, 0, 0, 0)
+        edge_chips_layout.setSpacing(6)
+        for chip_text, chip_value in (
+            (self.tr("水印"), "watermark"),
+            (self.tr("字幕"), "subtitle"),
+            (self.tr("LOGO"), "logo"),
+        ):
+            chip = self._prompt_chip(chip_text, chip_value, self.edge_text_input)
+            setFont(chip, 10)
+            edge_chips_layout.addWidget(chip)
+        edge_chips_layout.addStretch()
+        edge_layout.addWidget(edge_chips_row)
+        self._prompt_text_controls["edgetam"] = [self.edge_text_input, edge_chips_row]
+        edge_layout.addWidget(self._info_pill(self.tr("EdgeTAM 根据起始掩码跟踪目标，文本用于描述当前跟踪目标。")))
+        self._add_prompt_box_controls(edge_layout, "edgetam")
         self._add_anchor_frame_setting(edge_layout, "edge_anchor_spin", "edge_anchor_button", "anchorFrameInput")
         self._add_tracking_direction_setting(edge_layout, "edge_direction_buttons")
         self._add_frame_range_setting(edge_layout, "edge_range_start", "edge_range_end")
@@ -1302,7 +1342,7 @@ class VideoObjectDetectorWidget(QDialog):
         self.delete_prompt_button.setToolTip(self.tr("删除选中的提示框"))
         self.delete_prompt_button.setEnabled(False)
         prompt_actions_layout.addWidget(self.delete_prompt_button)
-
+        self.prompt_actions = prompt_actions
         self.canvas_status = QLabel(self.tr("●  状态: 已分割 (Normal)"))
         self.canvas_status.setObjectName("canvasStatus")
         setFont(self.canvas_status, 12, QFont.Medium)
@@ -1477,20 +1517,21 @@ class VideoObjectDetectorWidget(QDialog):
         layout.addWidget(self.issue_scroll, 1)
         return panel
 
-    def _prompt_chip(self, text: str, value: str) -> QPushButton:
+    def _prompt_chip(self, text: str, value: str, target_input: QLineEdit | None = None) -> QPushButton:
         chip = QPushButton(text)
         chip.setObjectName("promptChip")
         chip.setCursor(Qt.PointingHandCursor)
-        chip.clicked.connect(lambda _checked=False, t=value: self._append_prompt_text(t))
+        chip.clicked.connect(lambda _checked=False, t=value, target=target_input: self._append_prompt_text(t, target))
         return chip
 
-    def _append_prompt_text(self, text: str):
-        current = self.prompt_input.text().strip()
+    def _append_prompt_text(self, text: str, target_input: QLineEdit | None = None):
+        target_input = target_input or self.prompt_input
+        current = target_input.text().strip()
         tokens = [t.strip() for t in current.split(",") if t.strip()]
         if text in tokens:
             return
         tokens.append(text)
-        self.prompt_input.setText(", ".join(tokens))
+        target_input.setText(", ".join(tokens))
 
     def _section_title(self, text: str, badge: str = ""):
         row = QWidget()
@@ -1507,21 +1548,6 @@ class VideoObjectDetectorWidget(QDialog):
             setFont(badge_label, 10)
             layout.addWidget(badge_label)
         return row
-
-    def _square_plus_minus_icon(self, positive: bool) -> QIcon:
-        pixmap = QPixmap(18, 18)
-        pixmap.fill(Qt.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor("#111827"))
-        painter.drawRect(2, 2, 14, 14)
-        painter.setPen(QPen(QColor("#ffffff"), 2, Qt.SolidLine))
-        painter.drawLine(5, 9, 13, 9)
-        if positive:
-            painter.drawLine(9, 5, 9, 13)
-        painter.end()
-        return QIcon(pixmap)
 
     def _color_title_icon(self, primary: str, secondary: str, accent: str) -> QPixmap:
         pixmap = QPixmap(16, 16)
@@ -1628,6 +1654,7 @@ class VideoObjectDetectorWidget(QDialog):
     def _apply_styles(self):
         self.setStyleSheet(VIDEO_OBJECT_DETECTOR_STYLESHEET)
         self._select_prompt_tool("pos")
+        self._update_prompt_control_state()
 
     def _select_model(self, model: str):
         if model not in ("sam3", "edgetam"):
@@ -1638,6 +1665,7 @@ class VideoObjectDetectorWidget(QDialog):
         self.sam3_params.setVisible(model == "sam3")
         self.edgetam_params.setVisible(model == "edgetam")
         self.result_model_badge.setText(self.tr("精确检测输出" if model == "sam3" else "快速检测输出"))
+        self._update_prompt_control_state()
         self._update_frame()
 
     def _select_view(self, mode: str):
@@ -1647,6 +1675,7 @@ class VideoObjectDetectorWidget(QDialog):
         for key, button in self.view_buttons.items():
             button.setChecked(key == mode)
         self.canvas.set_view_mode(mode)
+        self._update_prompt_control_state()
         self._update_frame()
 
     def set_frame_detection_result(self, frame: int, score: float | None, objects: dict[str, int]):
@@ -1670,23 +1699,6 @@ class VideoObjectDetectorWidget(QDialog):
         self.result_objects_value.setText(object_text or self.tr("未检测到对象"))
         self.result_count_value.setText(str(object_count))
         self.result_state_label.setText(self.tr("检测完成"))
-
-    def _select_prompt_tool(self, tool: str):
-        if tool not in ("pos", "neg"):
-            return
-        self.prompt_tool = tool
-        self.positive_btn.setChecked(tool == "pos")
-        self.negative_btn.setChecked(tool == "neg")
-        self.canvas.set_prompt_mode(tool)
-
-    def _on_prompt_added(self, prompt):
-        prompt_mode = prompt[1]
-        label = self.tr("正向") if prompt_mode == "pos" else self.tr("负向")
-        self._set_label_status(self.canvas_status, self.tr("●  已添加{0}画面提示").format(label), "ready")
-
-    def _update_prompt_actions(self, can_undo: bool, can_delete: bool):
-        self.undo_prompt_button.setEnabled(can_undo)
-        self.delete_prompt_button.setEnabled(can_delete)
 
     def _on_range_start_changed(self, frame: int, range_end: QSpinBox | None = None):
         if range_end is None:
@@ -1759,6 +1771,120 @@ class VideoObjectDetectorWidget(QDialog):
         for buttons in button_groups:
             for key, button in buttons.items():
                 button.setChecked(key == direction)
+
+    def _add_prompt_mode_switches(self, model: str) -> tuple[QCheckBox, QCheckBox]:
+        text_enabled = PromptModeCheckBox(self.tr("启用"))
+        text_enabled.setObjectName("promptModeToggle")
+        text_enabled.setChecked(True)
+        box_enabled = PromptModeCheckBox(self.tr("启用"))
+        box_enabled.setObjectName("promptModeToggle")
+        box_enabled.setChecked(False)
+        self._prompt_mode_checks[model] = (text_enabled, box_enabled)
+        text_enabled.clicked.connect(
+            lambda checked, selected_model=model: self._on_prompt_mode_toggled(selected_model, "text", checked)
+        )
+        box_enabled.clicked.connect(
+            lambda checked, selected_model=model: self._on_prompt_mode_toggled(selected_model, "box", checked)
+        )
+        return text_enabled, box_enabled
+
+    def _add_prompt_box_controls(self, layout: QVBoxLayout, model: str) -> None:
+        layout.addSpacing(4)
+        box_enabled = self._prompt_mode_checks[model][1]
+        layout.addWidget(self._section_title_with_toggle(self.tr("框选提示 (正框 / 负框)"), box_enabled))
+        tool_row = QHBoxLayout()
+        tool_row.setSpacing(8)
+        positive_button = QPushButton(self.tr("正框 (去除的目标)"))
+        negative_button = QPushButton(self.tr("负框 (保留的目标)"))
+        positive_button.setObjectName("positiveButton")
+        negative_button.setObjectName("negativeButton")
+        for button, mode, positive in (
+            (positive_button, "pos", True),
+            (negative_button, "neg", False),
+        ):
+            button.setCheckable(True)
+            button.setIcon(self._square_plus_minus_icon(positive))
+            button.setIconSize(QSize(14, 14))
+            button.setFixedHeight(34)
+            button.setCursor(Qt.PointingHandCursor)
+            button.clicked.connect(
+                lambda _checked=False, selected_mode=mode: self._select_prompt_tool(selected_mode)
+            )
+            self._prompt_tool_buttons[mode].append(button)
+            tool_row.addWidget(button)
+        layout.addLayout(tool_row)
+        self._prompt_box_controls[model] = [positive_button, negative_button]
+
+    def _section_title_with_toggle(self, text: str, toggle: QCheckBox) -> QWidget:
+        row = QWidget()
+        row.setObjectName("sectionTitleRow")
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        label = QLabel(text)
+        label.setObjectName("sectionTitle")
+        setFont(label, 12, QFont.DemiBold)
+        layout.addWidget(label)
+        layout.addStretch()
+        layout.addWidget(toggle)
+        return row
+
+    def _on_prompt_mode_toggled(self, model: str, mode: str, checked: bool) -> None:
+        text_enabled, box_enabled = self._prompt_mode_checks[model]
+        if not checked:
+            if mode == "text":
+                text_input = self.prompt_input if model == "sam3" else self.edge_text_input
+                text_input.clear()
+            else:
+                self.canvas.clear_prompts()
+            other_switch = box_enabled if mode == "text" else text_enabled
+            if not other_switch.isChecked():
+                other_switch.setChecked(True)
+        self._update_prompt_control_state()
+
+    def _update_prompt_control_state(self) -> None:
+        if not hasattr(self, "canvas"):
+            return
+        text_enabled, box_enabled = self._prompt_mode_checks[self.current_model]
+        for control in self._prompt_text_controls.get(self.current_model, []):
+            control.setEnabled(text_enabled.isChecked())
+        for control in self._prompt_box_controls.get(self.current_model, []):
+            control.setEnabled(box_enabled.isChecked())
+        prompts_enabled = box_enabled.isChecked() and self.current_view == "original"
+        self.canvas.enable_prompts = prompts_enabled
+        self.prompt_actions.setVisible(prompts_enabled)
+        self.canvas.update()
+
+    def _select_prompt_tool(self, tool: str) -> None:
+        if tool not in self._prompt_tool_buttons:
+            return
+        self.canvas.set_prompt_mode(tool)
+        for mode, buttons in self._prompt_tool_buttons.items():
+            for button in buttons:
+                button.setChecked(mode == tool)
+
+    def _on_prompt_added(self, prompt) -> None:
+        prompt_mode = prompt[1]
+        label = self.tr("正向") if prompt_mode == "pos" else self.tr("负向")
+        self._set_label_status(self.canvas_status, self.tr("●  已添加{0}画面提示").format(label), "ready")
+
+    def _update_prompt_actions(self, can_undo: bool, can_delete: bool) -> None:
+        self.undo_prompt_button.setEnabled(can_undo)
+        self.delete_prompt_button.setEnabled(can_delete)
+
+    def _square_plus_minus_icon(self, positive: bool) -> QIcon:
+        pixmap = QPixmap(18, 18)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#111827"))
+        painter.drawRect(2, 2, 14, 14)
+        painter.setPen(QPen(QColor("#ffffff"), 2, Qt.SolidLine))
+        painter.drawLine(5, 9, 13, 9)
+        if positive:
+            painter.drawLine(9, 5, 9, 13)
+        painter.end()
+        return QIcon(pixmap)
 
     @staticmethod
     def _set_button_icon(button: QPushButton, icon: FluentIcon, dark: bool = False):
@@ -1890,10 +2016,13 @@ class VideoObjectDetectorWidget(QDialog):
     def _get_current_algo_params(self) -> dict:
         if self.current_model == "sam3":
             direction = next((k for k, btn in self.direction_buttons.items() if btn.isChecked()), "forward")
+            text_enabled, box_enabled = self._prompt_mode_checks["sam3"]
             return {
                 "model": "sam3",
-                "text_prompt": self.prompt_input.text().strip(),
-                "prompts": list(self.canvas._prompts),
+                "text_prompt_enabled": text_enabled.isChecked(),
+                "box_prompt_enabled": box_enabled.isChecked(),
+                "text_prompt": self.prompt_input.text().strip() if text_enabled.isChecked() else "",
+                "prompts": list(self.canvas._prompts) if box_enabled.isChecked() else [],
                 "anchor_frame": self.anchor_spin.value(),
                 "direction": direction,
                 "frame_range": (self.range_start.value(), self.range_end.value()),
@@ -1902,9 +2031,13 @@ class VideoObjectDetectorWidget(QDialog):
             }
         else:
             direction = next((k for k, btn in self.edge_direction_buttons.items() if btn.isChecked()), "forward")
+            text_enabled, box_enabled = self._prompt_mode_checks["edgetam"]
             return {
                 "model": "edgetam",
-                "prompts": list(self.canvas._prompts),
+                "text_prompt_enabled": text_enabled.isChecked(),
+                "box_prompt_enabled": box_enabled.isChecked(),
+                "watermark_text": self.edge_text_input.text().strip() if text_enabled.isChecked() else "",
+                "prompts": list(self.canvas._prompts) if box_enabled.isChecked() else [],
                 "anchor_frame": self.edge_anchor_spin.value(),
                 "direction": direction,
                 "frame_range": (self.edge_range_start.value(), self.edge_range_end.value()),
@@ -2538,6 +2671,24 @@ VIDEO_OBJECT_DETECTOR_STYLESHEET = """
             }
             #inlineLabel { color: #64748b; font-size: 12px; }
 
+            QCheckBox#promptModeToggle {
+                color: #334155;
+                spacing: 6px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QCheckBox#promptModeToggle::indicator {
+                width: 16px;
+                height: 16px;
+                border-radius: 5px;
+                background: #f8fafc;
+                border: 1px solid #cbd5e1;
+            }
+            QCheckBox#promptModeToggle::indicator:checked {
+                background: #c4b5fd;
+                border-color: #a78bfa;
+            }
+
             QPushButton#positiveButton, QPushButton#negativeButton {
                 border-radius: 12px;
                 padding: 0 10px;
@@ -2545,12 +2696,6 @@ VIDEO_OBJECT_DETECTOR_STYLESHEET = """
                 color: #334155;
                 background: #f8fafc;
                 border: 1px solid #e2e8f0;
-            }
-            QPushButton#positiveButton {
-                qproperty-iconSize: 14px;
-            }
-            QPushButton#negativeButton {
-                qproperty-iconSize: 14px;
             }
             QPushButton#positiveButton:checked {
                 color: #047857;
