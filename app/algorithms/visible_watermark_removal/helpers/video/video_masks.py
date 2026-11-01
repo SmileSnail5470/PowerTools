@@ -6,7 +6,7 @@ import numpy as np
 from PIL import Image
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Callable, Optional, Protocol
 from app.algorithms.tracker.mask_tracker_edgetam import MaskTrackerEdgeTAM
 from app.algorithms.private.object_segmentation.video.inference import VideoObjectSegmentationInference
 from app.algorithms.visible_watermark_removal.params_config import VideoWatermarkRemoveConfig
@@ -133,127 +133,44 @@ class MaskPreparer:
             tracking_detect_anchor_frame, start_frame_idx, end_frame_idx, tracking_detect_direction, reverse_tracking_frames,
         )
         total_frames = len(frame_files)
-
-        def segment_tracking_frame(frame_file: Path) -> tuple[np.ndarray, str]:
-            mask = self._segment_frame(frame_file)
-            return mask, self._save_mask(frame_file, mask, mask_dir, mapping)
-
-        def merge_reverse_transition_masks(tracker: Tracker, segment_frames: list[Path], fail_frame_idx: int, reference_mask_path: str) -> None:
-            if reverse_tracking_frames <= 0 or fail_frame_idx <= 0:
-                return
-            reverse_start_index = max(0, fail_frame_idx - reverse_tracking_frames)
-            reverse_frames = segment_frames[reverse_start_index:fail_frame_idx + 1]
-            if len(reverse_frames) <= 1:
-                return
-            try:
-                with tempfile.TemporaryDirectory(prefix="track_reverse_frames_") as frames_tmp, \
-                        tempfile.TemporaryDirectory(prefix="track_reverse_masks_") as masks_tmp:
-                    for frame_file in reverse_frames:
-                        shutil.copy2(frame_file, Path(frames_tmp) / frame_file.name)
-                    logger.info(
-                        "Reverse tracker from frame %s over %d previous frames to repair transition",
-                        reverse_frames[-1].name, len(reverse_frames) - 1,
-                    )
-                    reverse_fail_idx = tracker.inference(reference_mask_path, frames_tmp, reverse=True, output_dir=masks_tmp)
-                    reverse_traversal = list(reversed(reverse_frames))
-                    reliable_frames = (reverse_traversal if reverse_fail_idx == -1 else reverse_traversal[:reverse_fail_idx])
-                    merged_count = 0
-                    for frame_file in reliable_frames:
-                        reverse_mask_path = Path(masks_tmp) / frame_file.name
-                        if not reverse_mask_path.exists():
-                            continue
-                        reverse_mask = np.asarray(Image.open(reverse_mask_path).convert("L"), dtype=np.uint8)
-                        output_mask_path = mask_dir / frame_file.name
-                        if output_mask_path.exists():
-                            forward_mask = np.asarray(Image.open(output_mask_path).convert("L"), dtype=np.uint8)
-                            merged_mask = np.maximum(forward_mask, reverse_mask)
-                        else:
-                            merged_mask = reverse_mask
-                        Image.fromarray(merged_mask).convert("L").save(output_mask_path)
-                        mapping[str(frame_file)] = str(output_mask_path)
-                        merged_count += 1
-                    logger.info(
-                        "Reverse tracker repair completed at frame %s: merged %d frames%s",
-                        reverse_frames[-1].name,
-                        merged_count,
-                        " before reverse tracking became unreliable" if reverse_fail_idx != -1 else "",
-                    )
-            except Exception:
-                logger.exception("Reverse tracker repair failed at frame %s; continuing with forward restart", reverse_frames[-1].name)
-
-        segment_end = end_frame_idx
         keyframe_index = tracking_detect_anchor_frame - 1
         if keyframe_index < 0 or keyframe_index >= total_frames:
             raise Exception("Anchor frame exceed total_frames")
+
+        def on_fail_frame(frame_file: Path) -> Optional[str]:
+            mask = self._segment_frame(frame_file)
+            if np.count_nonzero(mask) == 0:
+                return None
+            return self._save_mask(frame_file, mask, mask_dir, mapping)
+
         keyframe_file = frame_files[keyframe_index]
-        keyframe_mask, keyframe_mask_path = segment_tracking_frame(keyframe_file)
-        segment_frame_start = keyframe_index + 1
-        segment_frame_end = min(segment_end - 1, total_frames)
-        if segment_frame_start >= segment_frame_end:
-            raise Exception("segment start frame >= segment end frame")
-        if np.count_nonzero(keyframe_mask) == 0:
-            tracking_state = "ABSENT"
-            current_reference_mask_path = None
-            current_reference_frame = None
-            logger.info("No mask at keyframe %s; entering ABSENT state", keyframe_file.name)
-        else:
-            tracking_state = "TRACKING"
-            current_reference_mask_path = keyframe_mask_path
-            current_reference_frame = keyframe_file
-        while segment_frame_start < segment_frame_end:
-            if tracking_state == "ABSENT":
-                probe_frame = frame_files[segment_frame_start]
-                probe_mask, probe_mask_path = segment_tracking_frame(probe_frame)
-                segment_frame_start += 1
-                if np.count_nonzero(probe_mask) == 0:
-                    logger.info("Mask remains absent at frame %s", probe_frame.name)
-                    continue
-                current_reference_mask_path = probe_mask_path
-                current_reference_frame = probe_frame
-                logger.info("Mask reacquired at frame %s; restarting tracker", probe_frame.name)
-                tracking_state = "TRACKING"
-                continue
-            remaining_frames = frame_files[segment_frame_start:segment_frame_end]
-            if not remaining_frames:
-                break
-            segment_frames = [current_reference_frame] + remaining_frames
-            with tempfile.TemporaryDirectory(prefix="track_seg_") as segment_frames_dir:
-                for frame_file in segment_frames:
-                    shutil.copy2(frame_file, Path(segment_frames_dir) / frame_file.name)
-                tracker = MaskTrackerEdgeTAM(model_dir=model_dir)
-                try:
-                    fail_frame_idx = tracker.inference(current_reference_mask_path, segment_frames_dir)
-                    if fail_frame_idx == -1:
-                        for frame_file in remaining_frames:
-                            tracked_mask_path = mask_dir / frame_file.name
-                            mapping[str(frame_file)] = str(tracked_mask_path)
-                        break
-                    successful_count = max(0, fail_frame_idx - 1)
-                    for frame_file in remaining_frames[:successful_count]:
-                        tracked_mask_path = mask_dir / frame_file.name
-                        mapping[str(frame_file)] = str(tracked_mask_path)
-                    failed_frame_offset = successful_count
-                    if failed_frame_offset >= len(remaining_frames):
-                        break
-                    failed_frame = remaining_frames[failed_frame_offset]
-                    logger.warning("Tracking failed at frame %s; verifying with segmentation", failed_frame.name)
-                    verified_mask, verified_mask_path = segment_tracking_frame(failed_frame)
-                    segment_frame_start += failed_frame_offset + 1
-                    if np.count_nonzero(verified_mask) == 0:
-                        tracking_state = "ABSENT"
-                        current_reference_mask_path = None
-                        current_reference_frame = None
-                        logger.info("No mask found at frame %s; entering ABSENT state", failed_frame.name)
-                        continue
-                    merge_reverse_transition_masks(tracker, segment_frames, fail_frame_idx, verified_mask_path)
-                    current_reference_mask_path = verified_mask_path
-                    current_reference_frame = failed_frame
-                    logger.info("Mask verified at frame %s; restarting tracker", failed_frame.name)
-                    tracking_state = "TRACKING"
-                finally:
-                    release = getattr(tracker, "release", None)
-                    if callable(release):
-                        release()
+        keyframe_mask = self._segment_frame(keyframe_file)
+        self._save_mask(keyframe_file, keyframe_mask, mask_dir, mapping)
+
+        def run_pass(ordered_frames: list[Path], label: str) -> None:
+            if len(ordered_frames) < 2:
+                logger.info("%s tracking pass skipped: no frames to propagate", label)
+                return
+            logger.info("%s tracking pass: %s → %s (%d frames)", label, ordered_frames[0].name, ordered_frames[-1].name, len(ordered_frames))
+            tracker = MaskTrackerEdgeTAM(model_dir=model_dir)
+            try:
+                result = tracker.track(
+                    ordered_frames=ordered_frames,
+                    output_dir=mask_dir,
+                    on_fail_frame=on_fail_frame,
+                    reverse_tracking_frames=reverse_tracking_frames,
+                )
+                mapping.update(result)
+            finally:
+                release = getattr(tracker, "release", None)
+                if callable(release):
+                    release()
+
+        if tracking_detect_direction in ("forward", "both"):
+            run_pass(frame_files[keyframe_index: end_frame_idx], "Forward")
+
+        if tracking_detect_direction in ("backward", "both"):
+            run_pass(list(reversed(frame_files[start_frame_idx - 1: keyframe_index + 1])), "Backward")
 
     def _prepare_tracked_masks_sam3(self, mask_dir: Path, frame_files: list[Path], mapping: dict[str, str], tracking_data: dict) -> None:
         config = self.config

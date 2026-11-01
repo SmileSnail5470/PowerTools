@@ -1,12 +1,14 @@
 import json
 import logging
 import os
+import tempfile
 from collections import deque
+from pathlib import Path
+from typing import Callable, List, Optional, Tuple
 import cv2
 import numpy as np
 from PIL import Image
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 from app.algorithms import general_provider, general_session, general_inference_session, ORTEnvironment
 ORTEnvironment.initialize()
 
@@ -299,18 +301,55 @@ class MaskTrackerEdgeTAM:
         for k in keys_to_remove:
             del bank[k]
 
-    def inference(self, mask_path, frames_dir, reverse: bool = False, output_dir: Optional[str] = None):
+    def inference(self, mask_path: str, frames_dir: str, reverse: bool = False, output_dir: Optional[str] = None, direction: str = "forward") -> int:
+        if direction not in ("forward", "backward", "both"):
+            raise ValueError(f"direction must be 'forward', 'backward', or 'both', got {direction!r}")
+        if direction == "forward" and reverse:
+            direction = "backward"
+        if direction == "both":
+            return self._inference_both(mask_path, frames_dir, output_dir)
+        _reverse = direction == "backward"
+        mask_out = output_dir or os.path.dirname(mask_path)
         frames_list = sorted(
             (
                 os.path.join(frames_dir, item)
                 for item in os.listdir(frames_dir)
                 if os.path.isfile(os.path.join(frames_dir, item))
             ),
-            reverse=reverse,
+            reverse=_reverse,
         )
+        return self._run_single_pass(mask_path, frames_list, output_dir=mask_out)
+
+    def _inference_both(self, mask_path: str, frames_dir: str, output_dir: Optional[str] = None) -> int:
+        mask_out = output_dir or os.path.dirname(mask_path)
+        os.makedirs(mask_out, exist_ok=True)
+        frames_fwd = sorted(
+            os.path.join(frames_dir, item)
+            for item in os.listdir(frames_dir)
+            if os.path.isfile(os.path.join(frames_dir, item))
+        )
+        frames_bwd = list(reversed(frames_fwd))
+        with tempfile.TemporaryDirectory(prefix="edgetam_fwd_") as fwd_tmp:
+            fwd_result = self._run_single_pass(mask_path, frames_fwd, output_dir=fwd_tmp)
+            fwd_masks = {os.path.basename(p): np.asarray(Image.open(p).convert("L"), dtype=np.uint8) for p in Path(fwd_tmp).glob("*.png")}
+        with tempfile.TemporaryDirectory(prefix="edgetam_bwd_") as bwd_tmp:
+            self._run_single_pass(mask_path, frames_bwd, output_dir=bwd_tmp)
+            bwd_masks = {os.path.basename(p): np.asarray(Image.open(p).convert("L"), dtype=np.uint8) for p in Path(bwd_tmp).glob("*.png")}
+        all_names = set(fwd_masks) | set(bwd_masks)
+        for name in all_names:
+            if name in fwd_masks and name in bwd_masks:
+                merged = np.maximum(fwd_masks[name], bwd_masks[name])
+            elif name in fwd_masks:
+                merged = fwd_masks[name]
+            else:
+                merged = bwd_masks[name]
+            Image.fromarray(merged).convert("L").save(os.path.join(mask_out, name))
+        return fwd_result
+
+    def _run_single_pass(self, mask_path: str, frames_list: List[str], output_dir: str) -> int:
         assert len(frames_list) >= 1
         bank = {}
-        mask_out = output_dir or os.path.dirname(mask_path)
+        mask_out = output_dir
         os.makedirs(mask_out, exist_ok=True)
         image, (height0, width0) = self._load_frame(frames_list[0])
         mask = self._load_mask(mask_path)
@@ -392,3 +431,137 @@ class MaskTrackerEdgeTAM:
     def _mask_to_orig(self, mask_s, out_hw):
         mask = _resize_bilinear(mask_s.astype(np.float32), out_hw)
         return mask > 0.5
+
+    def track(self, ordered_frames: List[Path], output_dir: Path,  on_fail_frame: Callable[[Path], Optional[str]], reverse_tracking_frames: int = 8) -> dict[str, str]:
+        if len(ordered_frames) < 2:
+            return {}
+        mapping: dict[str, str] = {}
+        reference_frame = ordered_frames[0]
+        target_frames = ordered_frames[1:]
+        anchor_mask_path = str(output_dir / reference_frame.name)
+        anchor_mask = np.asarray(Image.open(anchor_mask_path).convert("L"), dtype=np.uint8)
+
+        if np.count_nonzero(anchor_mask) == 0:
+            tracking_state = "ABSENT"
+            current_reference_mask_path = None
+            current_reference_frame = None
+            logging.getLogger("subprocess").info("No mask at keyframe %s; entering ABSENT state", reference_frame.name)
+        else:
+            tracking_state = "TRACKING"
+            current_reference_mask_path = anchor_mask_path
+            current_reference_frame = reference_frame
+
+        seg_start = 0
+        seg_end = len(target_frames)
+
+        while seg_start < seg_end:
+            if tracking_state == "ABSENT":
+                probe_frame = target_frames[seg_start]
+                probe_mask_path = on_fail_frame(probe_frame)
+                seg_start += 1
+                if probe_mask_path is None:
+                    logging.getLogger("subprocess").info("Mask remains absent at frame %s", probe_frame.name)
+                    continue
+                current_reference_mask_path = probe_mask_path
+                current_reference_frame = probe_frame
+                logging.getLogger("subprocess").info("Mask reacquired at frame %s; restarting tracker", probe_frame.name)
+                tracking_state = "TRACKING"
+                continue
+            remaining_frames = target_frames[seg_start:seg_end]
+            if not remaining_frames:
+                break
+            segment_frames = [current_reference_frame] + remaining_frames
+            fail_frame_idx = self._run_single_pass(
+                mask_path=current_reference_mask_path,
+                frames_list=[str(f) for f in segment_frames],
+                output_dir=str(output_dir),
+            )
+            if fail_frame_idx == -1:
+                for frame_file in remaining_frames:
+                    mapping[str(frame_file)] = str(output_dir / frame_file.name)
+                break
+            successful_count = max(0, fail_frame_idx - 1)
+            for frame_file in remaining_frames[:successful_count]:
+                mapping[str(frame_file)] = str(output_dir / frame_file.name)
+            failed_frame_offset = successful_count
+            if failed_frame_offset >= len(remaining_frames):
+                break
+            failed_frame = remaining_frames[failed_frame_offset]
+            logging.getLogger("subprocess").warning("Tracking failed at frame %s; verifying with segmentation", failed_frame.name)
+            verified_mask_path = on_fail_frame(failed_frame)
+            seg_start += failed_frame_offset + 1
+            if verified_mask_path is None:
+                tracking_state = "ABSENT"
+                current_reference_mask_path = None
+                current_reference_frame = None
+                logging.getLogger("subprocess").info("No mask found at frame %s; entering ABSENT state", failed_frame.name)
+                continue
+            self._repair_transition(
+                segment_frames=segment_frames,
+                fail_frame_idx=fail_frame_idx,
+                reference_mask_path=verified_mask_path,
+                output_dir=output_dir,
+                mapping=mapping,
+                reverse_tracking_frames=reverse_tracking_frames,
+            )
+            current_reference_mask_path = verified_mask_path
+            current_reference_frame = failed_frame
+            logging.getLogger("subprocess").info("Mask verified at frame %s; restarting tracker", failed_frame.name)
+            tracking_state = "TRACKING"
+        return mapping
+
+    def _repair_transition(
+        self,
+        segment_frames: List[Path],
+        fail_frame_idx: int,
+        reference_mask_path: str,
+        output_dir: Path,
+        mapping: dict[str, str],
+        reverse_tracking_frames: int,
+    ) -> None:
+        if reverse_tracking_frames <= 0 or fail_frame_idx <= 0:
+            return
+        reverse_start_index = max(0, fail_frame_idx - reverse_tracking_frames)
+        reverse_frames = segment_frames[reverse_start_index: fail_frame_idx + 1]
+        if len(reverse_frames) <= 1:
+            return
+        reversed_frames_list = [str(f) for f in reversed(reverse_frames)]
+        try:
+            with tempfile.TemporaryDirectory(prefix="track_reverse_masks_") as masks_tmp:
+                logging.getLogger("subprocess").info(
+                    "Reverse tracker from frame %s over %d previous frames to repair transition",
+                    reverse_frames[-1].name, len(reverse_frames) - 1,
+                )
+                reverse_fail_idx = self._run_single_pass(
+                    mask_path=reference_mask_path,
+                    frames_list=reversed_frames_list,
+                    output_dir=masks_tmp,
+                )
+                reverse_traversal = [Path(p) for p in reversed_frames_list[1:]]
+                reliable_frames = (reverse_traversal if reverse_fail_idx == -1 else reverse_traversal[:reverse_fail_idx - 1])
+                merged_count = 0
+                for frame_file in reliable_frames:
+                    reverse_mask_path = Path(masks_tmp) / frame_file.name
+                    if not reverse_mask_path.exists():
+                        continue
+                    reverse_mask = np.asarray(Image.open(reverse_mask_path).convert("L"), dtype=np.uint8)
+                    output_mask_path = output_dir / frame_file.name
+                    if output_mask_path.exists():
+                        forward_mask = np.asarray(Image.open(output_mask_path).convert("L"), dtype=np.uint8)
+                        merged_mask = np.maximum(forward_mask, reverse_mask)
+                    else:
+                        merged_mask = reverse_mask
+                    Image.fromarray(merged_mask).convert("L").save(output_mask_path)
+                    mapping[str(frame_file)] = str(output_mask_path)
+                    merged_count += 1
+                logging.getLogger("subprocess").info(
+                    "Reverse tracker repair completed at frame %s: merged %d frames%s",
+                    reverse_frames[-1].name,
+                    merged_count,
+                    " before reverse tracking became unreliable" if reverse_fail_idx != -1 else "",
+                )
+        except Exception:
+            logging.getLogger("subprocess").exception(
+                "Reverse tracker repair failed at frame %s; continuing with forward restart",
+                reverse_frames[-1].name,
+            )
