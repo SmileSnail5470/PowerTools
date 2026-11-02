@@ -770,7 +770,6 @@ class VideoObjectDetectorWidget(QDialog):
         self._frame_segment_dialog: FrameSegmentationDialog | None = None
         self._frame_segment_original: np.ndarray | None = None
         self._playback_compact = False
-        self._playback_legend_labels = []
         self._prompt_mode_checks: dict[str, tuple[QCheckBox, QCheckBox]] = {}
         self._prompt_text_controls: dict[str, list[QWidget]] = {}
         self._prompt_box_controls: dict[str, list[QWidget]] = {}
@@ -1238,7 +1237,7 @@ class VideoObjectDetectorWidget(QDialog):
         setattr(self, spin_attr, anchor_spin)
         anchor_row.addWidget(anchor_spin)
 
-        anchor_button = QPushButton(self.tr("设当前帧为起始帧"))
+        anchor_button = QPushButton(self.tr("设当前帧为起始关键帧"))
         anchor_button.setObjectName("neutralButton")
         self._set_button_icon(anchor_button, FluentIcon.PIN)
         anchor_button.setFixedHeight(30)
@@ -1595,9 +1594,6 @@ class VideoObjectDetectorWidget(QDialog):
         self.frame_counter.setToolTip(self.tr("Frame -- / --"))
         controls.addWidget(self.frame_counter)
         controls.addStretch()
-        controls.addWidget(self._legend_dot("#10b981", self.tr("正常 (--)")))
-        controls.addWidget(self._legend_dot("#f59e0b", self.tr("需要检查 (--)")))
-        controls.addWidget(self._legend_dot("#475569", self.tr("未处理 (--)")))
         playback_layout.addLayout(controls)
         layout.addWidget(playback)
         return center
@@ -1810,21 +1806,6 @@ class VideoObjectDetectorWidget(QDialog):
         dot.setStyleSheet(f"background-color: {color}; border-radius: {size / 2:g}px;")
         return dot
 
-    def _legend_dot(self, color: str, text: str):
-        item = QWidget()
-        layout = QHBoxLayout(item)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(5)
-        layout.addWidget(self._color_dot(color, 9))
-        label = QLabel(text)
-        label.setObjectName("legendText")
-        setFont(label, 12)
-        label.setToolTip(text)
-        self._playback_legend_labels.append(label)
-        layout.addWidget(label)
-        item.setToolTip(text)
-        return item
-
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, "preview_panel"):
@@ -1835,8 +1816,6 @@ class VideoObjectDetectorWidget(QDialog):
         if self._playback_compact == compact:
             return
         self._playback_compact = compact
-        for label in self._playback_legend_labels:
-            label.setVisible(not compact)
         self._update_frame_counter()
 
     def _update_frame_counter(self):
@@ -3506,8 +3485,6 @@ VIDEO_OBJECT_DETECTOR_STYLESHEET = """
                 padding: 4px 10px;
                 font-size: 12px;
             }
-            #legendText { color: #cbd5e1; font-size: 12px; }
-
             #objectCard, #warningCard { border-radius: 14px; }
             #objectCard { background: #f8fafc; border: 1px solid #e2e8f0; }
             #objectCard:hover { border-color: #a5b4fc; }
