@@ -212,7 +212,7 @@ class VideoWatermarkRemover:
     @staticmethod
     def _build_engine(config: VideoEngineRemoveConfig) -> tuple[EngineConfig, WatermarkRemovalPlugin]:
         engine_config = config.engine
-        mask_config = config.mask or MaskConfig(refine_type="lama")
+        mask_config = config.mask
         runtime = config.runtime
         engine = EngineConfig(
             prompt=engine_config.prompt,

@@ -260,6 +260,7 @@ class WatermarkRemoveWork(BaseWorker):
                     keyframe_stride=2,
                     is_static_watermark=(detect.video_watermark_format == "static_watermark"),
                     mask_path=detect.manual_watermark_mask_path,
+                    auto_detect_mask=detect.video_watermark_ai_detect_strategy=="tracking",
                 ),
                 segment=segment_paths,
                 inpaint=inpaint_paths,
@@ -268,6 +269,21 @@ class WatermarkRemoveWork(BaseWorker):
                     progress_cb=progress_cb,
                     ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
                     should_cancel=cancel_requested,
+                ),
+                video_extra=VideoExtraModelPaths(
+                    ppt_onnx_basedir=os.path.join(self.deps_path, _resolve_hardware_variant(), "video_inpainting", "ppt"),
+                    tacker_onnx_dir=os.path.join(self.deps_path, _resolve_hardware_variant(), "tracker"),
+                    object_segmentation_model_dir=segment_model_dir
+                ),
+                mask=VideoMaskConfig(
+                    mask_path=detect.manual_watermark_mask_path,
+                    refine_type="object_remove",
+                    dilate_num=int(p.model.mask_dilate),
+                    use_cache_mask=(detect.video_watermark_format == "static_watermark"),
+                    video_watermark_ai_detect_strategy=detect.video_watermark_ai_detect_strategy,
+                    video_watermark_ai_detect_anchor_frame=detect.video_watermark_ai_detect_anchor_frame,
+                    video_watermark_ai_detect_frame_range=detect.video_watermark_ai_detect_frame_range,
+                    watermark_tracking_data=tracking_dict,
                 ),
             )
             self._get_video_instance().process_video_engine(input_path, output_file, config=engine_remove_cfg)

@@ -148,7 +148,7 @@ class VideoEngineRemoveConfig:
     detection: DetectionConfig = field(default_factory=DetectionConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     video_extra: VideoExtraModelPaths | None = None
-    mask: VideoMaskConfig | None = None
+    mask: MaskConfig | VideoMaskConfig | None = None
 
 
 @dataclass(slots=True)

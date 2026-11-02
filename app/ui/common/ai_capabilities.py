@@ -11,7 +11,7 @@ MODEL_DIR_SIZES = {
     "cpu": {
         "blind_watermark_addition": 1027,
         "visible_watermark_removal": 2464,
-        "segment": 857,
+        "object_segmentation": 1228,
         "ocr": 207,
         "tracker": 119,
         "video_inpainting/ppt": 250,
@@ -24,7 +24,7 @@ MODEL_DIR_SIZES = {
     "gpu": {
         "blind_watermark_addition": 1027,
         "visible_watermark_removal": 2369,
-        "segment": 1610,
+        "object_segmentation": 1228,
         "ocr": 207,
         "tracker": 119,
         "video_inpainting/ppt": 175,
@@ -54,9 +54,9 @@ AI_CAPABILITIES = (
         "description": "智能检测并去除图片、视频中的可见水印、台标与字幕",
         "cfg_attr": "localWatermarkRemoveEnabled",
         "media": {
-            MEDIA_IMAGE: ["visible_watermark_removal", "segment", "image_edit/general_edit", "image_restoration/general_restoration", "image_edit/object_remove"],
+            MEDIA_IMAGE: ["visible_watermark_removal", "object_segmentation", "image_edit/general_edit", "image_restoration/general_restoration", "image_edit/object_remove"],
             MEDIA_VIDEO: [
-                "visible_watermark_removal", "segment", "image_edit/general_edit", "image_restoration/general_restoration", 
+                "visible_watermark_removal", "object_segmentation", "image_edit/general_edit", "image_restoration/general_restoration", 
                 "video_inpainting/ppt", "tracker", "video_engine", "image_edit/object_remove"
             ],
         },
