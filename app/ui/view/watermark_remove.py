@@ -1127,14 +1127,19 @@ class PreviewWidget(QWidget):
         watermark_remove_params.param_changed.connect(self._on_param_changed)
                 
     def _on_param_changed(self, key, value):
-        if key != "model.model_name":
-            return
-        if value in ["image_restoration", "video_engine"]:
-            self.status_info_widget.model.set_pipeline_steps(names=[self.tr('准备任务'), self.tr('去除水印'), self.tr('导出文件')])
-            self.navigation.set_item_visible(index=1, visible=False)
-        else:
+        need_mask_preview = True
+        if key == "model.model_name":
+            if value in ["image_restoration"]:
+                need_mask_preview = False
+        if key == "detect.video_watermark_ai_detect_strategy":
+            if value != "tracking":
+                need_mask_preview = False
+        if need_mask_preview:
             self.status_info_widget.model.set_pipeline_steps(names=[self.tr('准备任务'), self.tr('检测水印'), self.tr('去除水印'), self.tr('导出文件')])
             self.navigation.set_item_visible(index=1, visible=True)
+        else:
+            self.status_info_widget.model.set_pipeline_steps(names=[self.tr('准备任务'), self.tr('去除水印'), self.tr('导出文件')])
+            self.navigation.set_item_visible(index=1, visible=False)
 
     def update_init_preview(self, file_path):
         self.image_navigation_widget.clear_images()

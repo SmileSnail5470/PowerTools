@@ -254,6 +254,12 @@ class WatermarkRemoveWork(BaseWorker):
                 )
                 self._get_video_instance().process_video_without_mask(input_path, output_file, config=restoration_cfg)
         else:
+            if detect.video_watermark_format == "static_watermark":
+                auto_detect_mask = True
+            elif detect.video_watermark_ai_detect_strategy != "tracking":
+                auto_detect_mask = False
+            else:
+                auto_detect_mask = True
             engine_remove_cfg = VideoEngineRemoveConfig(
                 engine=VideoEngineConfig(
                     model_paths=VideoEngineModelPaths(
@@ -264,7 +270,7 @@ class WatermarkRemoveWork(BaseWorker):
                     keyframe_stride=2,
                     is_static_watermark=(detect.video_watermark_format == "static_watermark"),
                     mask_path=detect.manual_watermark_mask_path,
-                    auto_detect_mask=detect.video_watermark_ai_detect_strategy=="tracking" and detect.video_watermark_format=="dynamic_watermark",
+                    auto_detect_mask=auto_detect_mask,
                 ),
                 segment=segment_paths,
                 inpaint=inpaint_paths,
@@ -281,7 +287,7 @@ class WatermarkRemoveWork(BaseWorker):
                 ),
                 mask=VideoMaskConfig(
                     mask_path=detect.manual_watermark_mask_path,
-                    refine_type="object_remove",
+                    refine_type="object_removal",
                     dilate_num=int(p.model.mask_dilate),
                     use_cache_mask=(detect.video_watermark_format == "static_watermark"),
                     video_watermark_ai_detect_strategy=detect.video_watermark_ai_detect_strategy,
