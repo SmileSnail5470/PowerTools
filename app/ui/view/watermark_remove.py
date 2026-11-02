@@ -1,9 +1,10 @@
 import os
 import sys
-from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
+import cv2
+from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, QSize
 from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QLabel, QHBoxLayout, QStackedWidget, QLineEdit, QFileDialog, QStackedLayout, 
-    QSlider, QButtonGroup, QPushButton, QFrame, QTextEdit
+    QSlider, QButtonGroup, QPushButton, QFrame, QTextEdit, QSpinBox
 )
 from PySide6.QtGui import QFont, QColor, QAction
 
@@ -22,7 +23,7 @@ from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
 from app.ui.widgets.custom_navigation import CustomNavigation
-from app.ui.widgets.watermark_detect_settings import WatermarkDetectSettings
+from app.ui.widgets.watermark_detect_settings import WatermarkDetectSettings, WatermarkVideoPreviewDialog
 
 from app.ui.common.event_bus import global_event_bus
 from app.controllers.task_manager import global_task_manager
@@ -32,6 +33,7 @@ from app.ui.common.utils import get_file_type, global_backend_info_cache
 from app.ui.common.config import cfg
 
 from app.workers.watermark_remove import WatermarkRemoveWork, WatermarkRemoveUIParams, VideoTrackingParams
+from app.utils.image_io import open_video_capture
 
 from app.license.globals import feature_gate
 
@@ -596,6 +598,195 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         setFont(prompt_edit, 13)
         bind_widget_to_param(prompt_edit, "textChanged", watermark_remove_params, "model.restoration_prompt", transform=lambda: prompt_edit.toPlainText())
         layout.addWidget(prompt_edit)
+
+        frame_range_container = QWidget(container)
+        frame_range_container.setStyleSheet("""
+            #labelTitle { color: #0F172A; }
+            QSpinBox#frameRangeInput {
+                padding: 0 18px 0 10px;
+                border-radius: 10px;
+                color: #1e293b;
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                font-size: 12px;
+                selection-background-color: #6366f1;
+            }
+            QSpinBox#frameRangeInput:hover {
+                background: #fff;
+                border-color: #cbd5e1;
+            }
+            QSpinBox#frameRangeInput:focus {
+                background: #fff;
+                border-color: #818cf8;
+            }
+            QSpinBox#frameRangeInput::up-button,
+            QSpinBox#frameRangeInput::down-button {
+                subcontrol-origin: border;
+                width: 13px;
+                height: 12px;
+                border: none;
+                background: transparent;
+            }
+            QSpinBox#frameRangeInput::up-button {
+                subcontrol-position: top right;
+                top: 2px;
+                right: 2px;
+            }
+            QSpinBox#frameRangeInput::down-button {
+                subcontrol-position: bottom right;
+                bottom: 2px;
+                right: 2px;
+            }
+            QSpinBox#frameRangeInput::up-arrow {
+                image: url(:/qfluentwidgets/images/icons/CareUpSolid_black.svg);
+                width: 7px;
+                height: 7px;
+            }
+            QSpinBox#frameRangeInput::down-arrow {
+                image: url(:/qfluentwidgets/images/icons/CareDownSolid_black.svg);
+                width: 7px;
+                height: 7px;
+            }
+            #previewBtn {
+                background: #F1F5F9;
+                border: 1px solid #E2E8F0;
+                border-radius: 10px;
+                padding: 0;
+            }
+            #previewBtn:hover {
+                background: #E2E8F0;
+                border-color: #CBD5E1;
+            }
+            #previewBtn:pressed { background: #CBD5E1; }
+        """)
+        frame_range_layout = QVBoxLayout(frame_range_container)
+        frame_range_layout.setContentsMargins(0, 0, 0, 0)
+        frame_range_layout.setSpacing(4)
+        range_title = QLabel(self.tr("处理帧范围"))
+        range_title.setObjectName("labelTitle")
+        setFont(range_title, 13, QFont.DemiBold)
+        frame_range_layout.addWidget(range_title)
+
+        range_inputs_layout = QHBoxLayout()
+        range_inputs_layout.setContentsMargins(0, 0, 0, 0)
+        range_inputs_layout.setSpacing(8)
+        range_start = QSpinBox()
+        range_start.setObjectName("frameRangeInput")
+        range_start.setRange(1, 1)
+        range_start.setValue(1)
+        range_start.setFixedHeight(30)
+        range_start.setKeyboardTracking(False)
+        range_end = QSpinBox()
+        range_end.setObjectName("frameRangeInput")
+        range_end.setRange(1, 1)
+        range_end.setValue(1)
+        range_end.setFixedHeight(30)
+        range_end.setKeyboardTracking(False)
+        range_inputs_layout.addWidget(range_start, 1)
+        range_label = QLabel(self.tr("至"))
+        range_label.setObjectName("inlineLabel")
+        range_inputs_layout.addWidget(range_label, 0, Qt.AlignmentFlag.AlignCenter)
+        range_inputs_layout.addWidget(range_end, 1)
+
+        preview_button = QPushButton()
+        preview_button.setObjectName("previewBtn")
+        preview_button.setIcon(FluentIcon.VIDEO.icon())
+        preview_button.setIconSize(QSize(16, 16))
+        preview_button.setFixedSize(36, 30)
+        preview_button.setToolTip(self.tr("预览视频"))
+        preview_button.setAccessibleName(self.tr("预览视频"))
+        preview_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        range_inputs_layout.addWidget(preview_button)
+        frame_range_layout.addLayout(range_inputs_layout)
+        frame_range_container.setVisible(False)
+        layout.addWidget(frame_range_container)
+
+        bind_widget_to_param(
+            range_start,
+            "valueChanged",
+            watermark_remove_params,
+            "model.video_watermark_ai_detect_frame_range",
+            transform=lambda _value: [range_start.value(), range_end.value()],
+        )
+        bind_widget_to_param(
+            range_end,
+            "valueChanged",
+            watermark_remove_params,
+            "model.video_watermark_ai_detect_frame_range",
+            transform=lambda _value: [range_start.value(), range_end.value()],
+        )
+
+        frame_range_state = {"file_path": None, "total_frames": 1}
+
+        def _open_frame_range_preview(_checked=False):
+            file_path = frame_range_state["file_path"]
+            if not file_path:
+                return
+            dialog = WatermarkVideoPreviewDialog(
+                file_path=file_path,
+                total_frames=frame_range_state["total_frames"],
+                initial_frame=range_start.value(),
+                parent=self.window(),
+            )
+            if not dialog.capture.isOpened():
+                dialog.capture.release()
+                MessageBox(
+                    title=self.tr("无法读取视频"),
+                    content=self.tr("无法打开视频预览，请检查文件格式或文件是否损坏。"),
+                    parent=self.window(),
+                ).exec()
+                return
+            dialog.exec()
+
+        def _update_frame_range(file_path):
+            if not file_path:
+                frame_range_state["file_path"] = None
+                frame_range_container.setVisible(False)
+                return
+
+            video_path = file_path
+            if os.path.isdir(video_path):
+                input_files = os.listdir(video_path)
+                if not input_files:
+                    frame_range_state["file_path"] = None
+                    frame_range_container.setVisible(False)
+                    return
+                video_path = os.path.join(video_path, input_files[0])
+
+            is_video = get_file_type(video_path) == "video"
+            frame_range_container.setVisible(is_video)
+            if not is_video:
+                frame_range_state["file_path"] = None
+                return
+
+            capture = open_video_capture(video_path)
+            if not capture.isOpened():
+                capture.release()
+                total_frames = 1
+                MessageBox(
+                    title=self.tr("无法读取视频"),
+                    content=self.tr("无法获取视频帧数，请检查文件格式或文件是否损坏。"),
+                    parent=self.window(),
+                ).exec()
+            else:
+                reported_frames = capture.get(cv2.CAP_PROP_FRAME_COUNT)
+                capture.release()
+                total_frames = max(1, int(reported_frames)) if reported_frames > 0 else 1
+
+            frame_range_state["file_path"] = video_path
+            frame_range_state["total_frames"] = total_frames
+            range_start.setRange(1, total_frames)
+            range_start.setValue(1)
+            range_end.setRange(1, total_frames)
+            range_end.setValue(total_frames)
+            watermark_remove_params.set_param(
+                "model.video_watermark_ai_detect_frame_range",
+                [range_start.value(), range_end.value()],
+            )
+
+        preview_button.clicked.connect(_open_frame_range_preview)
+        global_event_bus.watermarkRemove_InputFileUpdate.connect(_update_frame_range)
+        _update_frame_range(watermark_remove_params.get_param("io.input_path"))
 
         type_cards[0].clicked.emit(type_cards[0].key)
         return container

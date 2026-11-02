@@ -1174,7 +1174,7 @@ class VideoObjectDetectorWidget(QDialog):
                 raise FileNotFoundError(path)
             else:
                 path_value = str(path.resolve())
-                capture = cv2.VideoCapture(path_value)
+                capture = open_video_capture(path_value)
                 if not capture.isOpened():
                     capture.release()
                     message = self.tr("●  无法打开检测结果视频: {0}").format(path)

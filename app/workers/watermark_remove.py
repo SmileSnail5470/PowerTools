@@ -72,6 +72,7 @@ class _ModelParams:
     # restoration 模型参数
     restoration_watermark_type: str = "general"
     restoration_prompt: str = ""
+    video_watermark_ai_detect_frame_range: list = field(default_factory=lambda: [1, 2**31 - 1])
 
 
 @dataclass
@@ -242,6 +243,7 @@ class WatermarkRemoveWork(BaseWorker):
                         refine_type=p.model.model_name,
                         restoration_prompt=p.model.restoration_prompt,
                         restoration_watermark_type=p.model.restoration_watermark_type,
+                        video_watermark_ai_detect_frame_range=p.model.video_watermark_ai_detect_frame_range
                     ),
                     runtime=RuntimeConfig(
                         progress_cb=progress_cb,

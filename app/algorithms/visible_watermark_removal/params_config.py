@@ -102,6 +102,7 @@ class RestorationConfig:
     refine_type: str = "image_restoration"
     restoration_prompt: str = ""
     restoration_watermark_type: str = "general"
+    video_watermark_ai_detect_frame_range: list = field(default_factory=lambda: [1, 2**31 - 1])
 
 @dataclass(slots=True)
 class VideoEngineConfig:
