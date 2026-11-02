@@ -1,6 +1,7 @@
 import logging
 import os
 import tempfile
+import numpy as np
 from dataclasses import asdict
 from pathlib import Path
 from app.workers.work_base import BaseWorker, _resolve_hardware_variant
@@ -17,8 +18,45 @@ from app.algorithms.visible_watermark_removal.params_config import (
     VideoMaskConfig,
     VideoWatermarkRemoveConfig,
 )
+from app.algorithms.private.object_segmentation.image.inference import ObjectSegmentationInference
 
 logger = logging.getLogger("VideoObjectDetectorWorker")
+
+
+def segment_video_frame(
+    frame_path: str,
+    text: str | None,
+    threshold: float,
+    positive_boxes: list,
+    negative_boxes: list,
+    *,
+    progress_cb=None,
+    cancel_requested=None,
+) -> np.ndarray:
+    os.environ["_feature_name_"] = "video_object_detector"
+    if "POWERTOOLS_TMPE_DIR" not in os.environ:
+        os.environ["POWERTOOLS_TMPE_DIR"] = cfg.get(cfg.cachePath)
+    if cancel_requested and cancel_requested():
+        raise InterruptedError("Task was cancelled before frame segmentation")
+    deps_path = cfg.get(cfg.localAIModelDeps)
+    hw = _resolve_hardware_variant()
+    model_dir = os.path.join(deps_path, hw, "object_segmentation")
+
+    inference = ObjectSegmentationInference(
+        model_dir=model_dir,
+        low_memory=True,
+        threshold=threshold,
+    )
+    mask = inference.infer(
+        input_path=frame_path,
+        text=text,
+        threshold=threshold,
+        box=positive_boxes,
+        negative_box=negative_boxes,
+    )
+    if cancel_requested and cancel_requested():
+        raise InterruptedError("Task was cancelled after frame segmentation")
+    return mask
 
 
 class VideoObjectDetectorWorker(BaseWorker):

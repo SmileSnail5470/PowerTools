@@ -1,5 +1,7 @@
 import os
 import sys
+import hashlib
+import time
 import cv2
 import numpy as np
 import tempfile
@@ -17,7 +19,7 @@ from app.ui.common.config import cfg
 from app.ui.widgets.image_preview_widget import ScrollBar
 from app.controllers.task_manager import global_task_manager
 from app.workers.watermark_remove import VideoTrackingParams as VideoDetectorParams
-from app.workers.video_object_detector_work import VideoObjectDetectorWorker
+from app.workers.video_object_detector_work import VideoObjectDetectorWorker, segment_video_frame
 
 
 class PromptModeCheckBox(QCheckBox):
@@ -581,6 +583,172 @@ class RunModeDialog(QDialog):
         self.accept()
 
 
+class _FrameSegmentationPreview(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._image = QImage()
+        self.setObjectName("frameSegmentationPreview")
+        self.setAlignment(Qt.AlignCenter)
+        self.setMinimumSize(620, 340)
+
+    def set_image(self, image: QImage):
+        self._image = image
+        self._update_pixmap()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_pixmap()
+
+    def _update_pixmap(self):
+        if not self._image.isNull():
+            self.setPixmap(QPixmap.fromImage(self._image).scaled(
+                self.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation,
+            ))
+
+
+class FrameSegmentationDialog(QDialog):
+    cancelRequested = Signal()
+
+    def __init__(self, frame_number: int, parent=None):
+        super().__init__(parent)
+        self.setObjectName("frameSegmentationDialog")
+        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setWindowTitle(self.tr("当前帧分割"))
+        self.setModal(True)
+        self.setMinimumWidth(720)
+        self._running = True
+        self._cancel_requested = False
+        self._started_at = time.monotonic()
+        self.mask: np.ndarray | None = None
+        self.error: str | None = None
+        self._elapsed_timer = QTimer(self)
+        self._elapsed_timer.setInterval(100)
+        self._elapsed_timer.timeout.connect(self._update_elapsed)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(24, 22, 24, 20)
+        root.setSpacing(14)
+
+        heading = QHBoxLayout()
+        icon = QLabel("✦")
+        icon.setObjectName("frameSegmentationIcon")
+        icon.setAlignment(Qt.AlignCenter)
+        icon.setFixedSize(38, 38)
+        heading.addWidget(icon)
+        heading_text = QVBoxLayout()
+        title = QLabel(self.tr("分割第 {0} 帧").format(frame_number))
+        title.setObjectName("frameSegmentationTitle")
+        setFont(title, 16, QFont.Bold)
+        heading_text.addWidget(title)
+        self.status_label = QLabel(self.tr("正在运行分割算法…"))
+        self.status_label.setObjectName("frameSegmentationStatus")
+        setFont(self.status_label, 11)
+        heading_text.addWidget(self.status_label)
+        heading.addLayout(heading_text, 1)
+        root.addLayout(heading)
+
+        self.progress = QProgressBar()
+        self.progress.setObjectName("frameSegmentationProgress")
+        self.progress.setRange(0, 0)
+        self.progress.setTextVisible(False)
+        self.progress.setFixedHeight(7)
+        root.addWidget(self.progress)
+
+        self.preview = _FrameSegmentationPreview()
+        self.preview.hide()
+        root.addWidget(self.preview, 1)
+
+        self.error_label = QLabel()
+        self.error_label.setObjectName("frameSegmentationError")
+        self.error_label.setWordWrap(True)
+        self.error_label.hide()
+        root.addWidget(self.error_label)
+
+        footer = QHBoxLayout()
+        self.elapsed_label = QLabel(self.tr("耗时: 00:00"))
+        self.elapsed_label.setObjectName("frameSegmentationElapsed")
+        setFont(self.elapsed_label, 11)
+        footer.addWidget(self.elapsed_label)
+        footer.addStretch()
+        self.cancel_button = QPushButton(self.tr("终止任务"))
+        self.cancel_button.setObjectName("frameSegmentationCancel")
+        self.cancel_button.setFixedHeight(36)
+        self.cancel_button.clicked.connect(self._on_cancel_clicked)
+        footer.addWidget(self.cancel_button)
+        self.keep_button = QPushButton(self.tr("不替换"))
+        self.keep_button.setObjectName("frameSegmentationKeep")
+        self.keep_button.setFixedHeight(36)
+        self.keep_button.clicked.connect(self.reject)
+        self.keep_button.hide()
+        footer.addWidget(self.keep_button)
+        self.replace_button = QPushButton(self.tr("替换当前帧"))
+        self.replace_button.setObjectName("frameSegmentationReplace")
+        self.replace_button.setFixedHeight(36)
+        self.replace_button.clicked.connect(self.accept)
+        self.replace_button.hide()
+        footer.addWidget(self.replace_button)
+        root.addLayout(footer)
+
+        self.setStyleSheet(FRAME_SEGMENTATION_DIALOG_STYLESHEET)
+        self._elapsed_timer.start()
+        self._update_elapsed()
+
+    def _update_elapsed(self):
+        seconds = max(0, int(time.monotonic() - self._started_at))
+        minutes, seconds = divmod(seconds, 60)
+        self.elapsed_label.setText(self.tr("耗时: {0:02d}:{1:02d}").format(minutes, seconds))
+
+    def _on_cancel_clicked(self):
+        if not self._running:
+            self.reject()
+            return
+        if self._cancel_requested:
+            return
+        self._cancel_requested = True
+        self.cancel_button.setText(self.tr("正在终止…"))
+        self.cancel_button.setEnabled(False)
+        self.cancelRequested.emit()
+
+    def reject(self):
+        if self._running:
+            self._on_cancel_clicked()
+            return
+        super().reject()
+
+    def show_result(self, image: QImage, mask: np.ndarray):
+        self._running = False
+        self.mask = mask
+        self._elapsed_timer.stop()
+        self.progress.hide()
+        self.status_label.setText(self.tr("分割完成，请预览并选择是否替换"))
+        self.preview.set_image(image)
+        self.preview.show()
+        self.cancel_button.hide()
+        self.keep_button.show()
+        self.replace_button.show()
+        self.adjustSize()
+
+    def show_error(self, error: Exception):
+        self._running = False
+        self.error = str(error)
+        self._elapsed_timer.stop()
+        self.progress.hide()
+        self.status_label.setText(self.tr("分割失败"))
+        self.error_label.setText(self.error)
+        self.error_label.show()
+        self.cancel_button.setText(self.tr("关闭"))
+        self.cancel_button.setEnabled(True)
+        self.adjustSize()
+
+    def finish_cancelled(self):
+        self._running = False
+        self._elapsed_timer.stop()
+        super().reject()
+
+
 class VideoObjectDetectorWidget(QDialog):
     taskTerminateRequested = Signal()
 
@@ -598,6 +766,9 @@ class VideoObjectDetectorWidget(QDialog):
         self._task_progress = 0
         self._task_total_frames = self.total_frames
         self._active_future = None
+        self._frame_segment_future = None
+        self._frame_segment_dialog: FrameSegmentationDialog | None = None
+        self._frame_segment_original: np.ndarray | None = None
         self._playback_compact = False
         self._playback_legend_labels = []
         self._prompt_mode_checks: dict[str, tuple[QCheckBox, QCheckBox]] = {}
@@ -1229,6 +1400,7 @@ class VideoObjectDetectorWidget(QDialog):
         self.prompt_input.setClearButtonEnabled(True)
         self.prompt_input.setFixedHeight(34)
         self.prompt_input.setCursorPosition(0)
+        self.prompt_input.textChanged.connect(self._update_detection_object_label)
         sam_layout.addWidget(self.prompt_input)
 
         chips_row = QWidget()
@@ -1281,6 +1453,7 @@ class VideoObjectDetectorWidget(QDialog):
         self.edge_text_input.setPlaceholderText(self.tr("输入目标类别，例如 watermark"))
         self.edge_text_input.setClearButtonEnabled(True)
         self.edge_text_input.setFixedHeight(34)
+        self.edge_text_input.textChanged.connect(self._update_detection_object_label)
         edge_layout.addWidget(self.edge_text_input)
         edge_chips_row = QWidget()
         edge_chips_layout = QHBoxLayout(edge_chips_row)
@@ -1481,9 +1654,7 @@ class VideoObjectDetectorWidget(QDialog):
         result_header.addWidget(result_state)
         self.result_state_label = result_state
         result_layout.addLayout(result_header)
-        result_layout.addWidget(self._detail_row(self.tr("检测分数:"), "—", "result_score_value"))
         result_layout.addWidget(self._detail_row(self.tr("检测对象:"), self.tr("watermark"), "result_objects_value"))
-        result_layout.addWidget(self._detail_row(self.tr("对象数量:"), "—", "result_count_value"))
         result_divider = QFrame()
         result_divider.setObjectName("cardDivider")
         result_divider.setFixedHeight(1)
@@ -1495,7 +1666,7 @@ class VideoObjectDetectorWidget(QDialog):
         resegment.setObjectName("smallNeutralButton")
         self._set_button_icon(resegment, FluentIcon.SYNC)
         resegment.setFixedHeight(32)
-        resegment.clicked.connect(self._show_inference_notice)
+        resegment.clicked.connect(self._segment_current_frame)
         result_actions.addWidget(resegment, 0, 0)
         result_layout.addLayout(result_actions)
         layout.addWidget(result_card)
@@ -1705,20 +1876,26 @@ class VideoObjectDetectorWidget(QDialog):
 
     def _update_frame_detection_summary(self):
         self.result_frame_label.setText(self.tr("第 {0} 帧检测结果").format(self.current_frame))
+        self._update_detection_object_label()
         result = self._frame_detection_results.get(self.current_frame)
         if result is None:
-            self.result_score_value.setText("检测完成后显示")
-            self.result_objects_value.setText(self.tr("检测完成后显示"))
-            self.result_count_value.setText("检测完成后显示")
-            self.result_state_label.setText(self.tr("待检测"))
+            mask_frames = self.result_mask_frames[self.current_model]
+            has_frame_mask = mask_frames is not None and self.current_frame - 1 in mask_frames
+            self.result_state_label.setText(self.tr("分割完成" if has_frame_mask else "待检测"))
             return
-        score, objects = result
-        self.result_score_value.setText("—" if score is None else f"{score:.3f}")
-        object_count = sum(max(0, count) for count in objects.values())
-        object_text = "、".join(f"{name} × {count}" for name, count in objects.items() if count > 0)
-        self.result_objects_value.setText(object_text or self.tr("未检测到对象"))
-        self.result_count_value.setText(str(object_count))
         self.result_state_label.setText(self.tr("检测完成"))
+
+    def _update_detection_object_label(self) -> None:
+        label = getattr(self, "result_objects_value", None)
+        if label is None:
+            return
+        if self.current_model == "sam3":
+            text_enabled, _ = self._prompt_mode_checks.get("sam3", (None, None))
+            prompt_text = self.prompt_input.text().strip() if (text_enabled and text_enabled.isChecked()) else ""
+        else:
+            text_enabled, _ = self._prompt_mode_checks.get("edgetam", (None, None))
+            prompt_text = self.edge_text_input.text().strip() if (text_enabled and text_enabled.isChecked()) else ""
+        label.setText(prompt_text or "—")
 
     def _on_range_start_changed(self, frame: int, range_end: QSpinBox | None = None):
         if range_end is None:
@@ -1762,7 +1939,7 @@ class VideoObjectDetectorWidget(QDialog):
         repair = QPushButton(self.tr("修复当前帧"))
         repair.setObjectName("amberButton")
         repair.setFixedHeight(36)
-        repair.clicked.connect(self._show_inference_notice)
+        repair.clicked.connect(self._segment_current_frame)
         actions.addWidget(jump)
         actions.addWidget(repair)
         card_layout.addLayout(actions)
@@ -1869,6 +2046,7 @@ class VideoObjectDetectorWidget(QDialog):
             control.setEnabled(text_enabled.isChecked())
         for control in self._prompt_box_controls.get(self.current_model, []):
             control.setEnabled(box_enabled.isChecked())
+        self._update_detection_object_label()
         prompts_enabled = box_enabled.isChecked() and self.current_view == "original"
         self.canvas.enable_prompts = prompts_enabled
         self.prompt_actions.setVisible(prompts_enabled)
@@ -1977,9 +2155,9 @@ class VideoObjectDetectorWidget(QDialog):
             missing_placeholder = self.tr("打开视频以预览画面")
         else:
             mask_frames = self.result_mask_frames[self.current_model]
-            if self.current_view in ("mask", "overlay") and mask_frames is not None:
-                mask_path = mask_frames.get(self.current_frame - 1)
-                mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE) if mask_path is not None else None
+            mask_path = mask_frames.get(self.current_frame - 1) if mask_frames is not None else None
+            if self.current_view in ("mask", "overlay") and mask_path is not None:
+                mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
                 if mask is not None:
                     if self.current_view == "mask":
                         rgb = cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB)
@@ -2264,18 +2442,215 @@ class VideoObjectDetectorWidget(QDialog):
                 anchor = getattr(self, "edge_anchor_spin", None)
             frame_num = anchor.value() if anchor else self.current_frame
             frame_label.setText(self.tr("第 {0} 帧起始检测").format(frame_num))
-        obj_label = getattr(self, "result_objects_value", None)
-        if obj_label is not None:
-            if self.current_model == "sam3":
-                text_enabled, _ = self._prompt_mode_checks.get("sam3", (None, None))
-                prompt_text = self.prompt_input.text().strip() if (text_enabled and text_enabled.isChecked()) else "—"
-            else:
-                text_enabled, _ = self._prompt_mode_checks.get("edgetam", (None, None))
-                prompt_text = self.edge_text_input.text().strip() if (text_enabled and text_enabled.isChecked()) else "—"
-            obj_label.setText(prompt_text or "—")
+        self._update_detection_object_label()
 
     def _show_inference_notice(self):
         self._show_run_mode_dialog()
+
+    def _segment_current_frame(self):
+        if not self.file_path:
+            MessageBox(title=self.tr("提醒"), content=self.tr("请先加载视频文件"), parent=self).exec()
+            return
+        params = self._build_tracking_params()
+        self._cancel_active_future()
+        positive_boxes = params.tracking_detect_pos_boxes
+        negative_boxes = params.tracking_detect_neg_boxes
+        text_prompt = params.tracking_detect_prompt
+        if not text_prompt and not positive_boxes and not negative_boxes:
+            MessageBox(title=self.tr("提醒"), content=self.tr("请启用文本提示或添加框选提示后再进行分割。"), parent=self).exec()
+            return
+        capture = None
+        try:
+            capture = open_video_capture(self.file_path)
+            if not capture.isOpened():
+                raise OSError(self.tr("无法打开视频文件"))
+            if not capture.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame - 1):
+                raise OSError(self.tr("无法定位到当前帧"))
+            success, frame = capture.read()
+            if not success or frame is None:
+                raise OSError(self.tr("无法读取当前帧"))
+        except (OSError, cv2.error) as error:
+            MessageBox(title=self.tr("读取失败"), content=str(error), parent=self).exec()
+            return
+        finally:
+            if capture is not None:
+                capture.release()
+
+        success, encoded_frame = cv2.imencode(".png", frame)
+        if not success:
+            MessageBox(title=self.tr("读取失败"), content=self.tr("无法保存当前帧用于分割。"), parent=self).exec()
+            return
+        descriptor, frame_path = tempfile.mkstemp(prefix="video_frame_segment_", suffix=".png")
+        try:
+            with os.fdopen(descriptor, "wb") as frame_file:
+                frame_file.write(encoded_frame.tobytes())
+        except OSError as error:
+            try:
+                os.unlink(frame_path)
+            except FileNotFoundError:
+                pass
+            MessageBox(title=self.tr("读取失败"), content=str(error), parent=self).exec()
+            return
+
+        model = self.current_model
+        frame_number = self.current_frame
+        dialog = FrameSegmentationDialog(frame_number, self)
+        self._frame_segment_dialog = dialog
+        self._frame_segment_original = frame.copy()
+        self._set_label_status(self.canvas_status, self.tr("●  当前帧分割中"), "ready")
+
+        dialog.cancelRequested.connect(self._cancel_frame_segmentation)
+        try:
+            future = global_task_manager.submit(
+                segment_video_frame,
+                frame_path,
+                text_prompt,
+                params.tracking_detect_confidence,
+                positive_boxes,
+                negative_boxes,
+            )
+        except RuntimeError as error:
+            self._remove_frame_segmentation_input(frame_path)
+            self._frame_segment_dialog = None
+            self._frame_segment_original = None
+            dialog.deleteLater()
+            MessageBox(title=self.tr("分割失败"), content=str(error), parent=self).exec()
+            self._set_label_status(self.canvas_status, self.tr("●  当前帧分割失败"), "error")
+            return
+        self._frame_segment_future = future
+        future.finished.connect(self._on_frame_segmentation_finished)
+        future.failed.connect(self._on_frame_segmentation_failed)
+        future.cancelled.connect(self._on_frame_segmentation_cancelled)
+
+        result = dialog.exec()
+        if future.cancelled_requested():
+            QTimer.singleShot(3000, lambda path=frame_path: self._remove_frame_segmentation_input(path))
+        else:
+            self._remove_frame_segmentation_input(frame_path)
+        self._frame_segment_future = None
+        self._frame_segment_dialog = None
+        self._frame_segment_original = None
+
+        if result != QDialog.Accepted:
+            if dialog.error:
+                self._set_label_status(self.canvas_status, self.tr("●  当前帧分割失败"), "error")
+            elif dialog.mask is not None:
+                self._set_label_status(self.canvas_status, self.tr("●  已保留原帧结果"), "ready")
+            return
+        if dialog.mask is None:
+            MessageBox(title=self.tr("分割失败"), content=self.tr("分割结果为空，未替换当前帧。"), parent=self).exec()
+            return
+        try:
+            self._replace_current_frame_mask(
+                model,
+                frame_number,
+                dialog.mask,
+                params.tracking_detect_mask_path,
+            )
+        except (OSError, RuntimeError, ValueError, cv2.error) as error:
+            MessageBox(title=self.tr("替换失败"), content=str(error), parent=self).exec()
+            self._set_label_status(self.canvas_status, self.tr("●  当前帧结果替换失败"), "error")
+            return
+        self._update_frame_detection_summary()
+        if model == self.current_model:
+            self._update_frame()
+        self._set_label_status(self.canvas_status, self.tr("●  当前帧结果已替换"), "ready")
+
+    @staticmethod
+    def _remove_frame_segmentation_input(frame_path: str):
+        try:
+            os.unlink(frame_path)
+        except FileNotFoundError:
+            pass
+
+    def _cancel_frame_segmentation(self):
+        future = self._frame_segment_future
+        if future is not None and not future.done:
+            global_task_manager.cancel(future.job_id)
+
+    def _on_frame_segmentation_finished(self, result):
+        dialog = self._frame_segment_dialog
+        original = self._frame_segment_original
+        if dialog is None or original is None:
+            return
+        try:
+            if not isinstance(result, np.ndarray) or result.ndim != 2:
+                raise ValueError(self.tr("分割算法未返回有效掩码"))
+            if result.shape != original.shape[:2]:
+                raise ValueError(self.tr("分割掩码尺寸与当前帧不一致"))
+            dialog.show_result(self._compose_frame_segmentation_preview(original, result), result)
+        except (ValueError, cv2.error) as error:
+            dialog.show_error(error)
+
+    def _on_frame_segmentation_failed(self, error):
+        dialog = self._frame_segment_dialog
+        if dialog is not None:
+            dialog.show_error(error)
+
+    def _on_frame_segmentation_cancelled(self):
+        dialog = self._frame_segment_dialog
+        if dialog is not None:
+            dialog.finish_cancelled()
+        self._set_label_status(self.canvas_status, self.tr("●  当前帧分割已终止"), "warning")
+
+    @staticmethod
+    def _compose_frame_segmentation_preview(frame: np.ndarray, mask: np.ndarray) -> QImage:
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        selected = mask > 0
+        color = np.asarray([99, 102, 241], dtype=np.float32)
+        rgb[selected] = (rgb[selected].astype(np.float32) * 0.5 + color * 0.5).astype(np.uint8)
+        height, width, channels = rgb.shape
+        return QImage(rgb.data, width, height, channels * width, QImage.Format_RGB888).copy()
+
+    def _replace_current_frame_mask(
+        self,
+        model: str,
+        frame_number: int,
+        mask: np.ndarray,
+        configured_mask_path: str | None = None,
+    ):
+        cache_root = cfg.get(cfg.cachePath) or tempfile.gettempdir()
+        video_path = str(Path(self.file_path).expanduser().resolve())
+        video_id = hashlib.sha256(video_path.encode("utf-8")).hexdigest()[:16]
+        frame_filename = f"{frame_number - 1:06d}.png"
+        target = (
+            Path(cache_root)
+            / "VideoSegmentation"
+            / "frame_overrides"
+            / video_id
+            / model
+            / frame_filename
+        )
+        success, encoded = cv2.imencode(".png", mask)
+        if not success:
+            raise RuntimeError(self.tr("无法保存当前帧分割掩码"))
+
+        targets = [target]
+        if configured_mask_path:
+            configured_directory = Path(configured_mask_path).expanduser()
+            if configured_directory.exists() and not configured_directory.is_dir():
+                raise ValueError(self.tr("掩码结果路径不是目录: {0}").format(configured_directory))
+            targets.append(configured_directory / frame_filename)
+
+        for output_path in targets:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            descriptor, temporary_path = tempfile.mkstemp(
+                prefix=".frame-mask-",
+                suffix=".png",
+                dir=output_path.parent,
+            )
+            try:
+                with os.fdopen(descriptor, "wb") as output_file:
+                    output_file.write(encoded.tobytes())
+                os.replace(temporary_path, output_path)
+            finally:
+                if os.path.exists(temporary_path):
+                    os.unlink(temporary_path)
+
+        existing_frames = self.result_mask_frames[model]
+        updated_frames = dict(existing_frames) if existing_frames is not None else {}
+        updated_frames[frame_number - 1] = target
+        self.result_mask_frames[model] = updated_frames
 
     def closeEvent(self, event):
         self._stop_playback()
@@ -3140,4 +3515,82 @@ TERMINATE_DIALOG_STYLESHEET = """
             }
             QPushButton#terminateConfirmButton:hover { background: #b91c1c; }
             QPushButton#terminateConfirmButton:pressed { background: #991b1b; }
+"""
+
+FRAME_SEGMENTATION_DIALOG_STYLESHEET = """
+            QDialog#frameSegmentationDialog {
+                background: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: 18px;
+            }
+            #frameSegmentationIcon {
+                color: #ffffff;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #818cf8, stop:1 #4f46e5);
+                border-radius: 12px;
+                font-size: 19px;
+            }
+            #frameSegmentationTitle {
+                color: #0f172a;
+                background: transparent;
+            }
+            #frameSegmentationStatus {
+                color: #64748b;
+                background: transparent;
+            }
+            QProgressBar#frameSegmentationProgress {
+                background: #e2e8f0;
+                border: none;
+                border-radius: 3px;
+            }
+            QProgressBar#frameSegmentationProgress::chunk {
+                background: #6366f1;
+                border-radius: 3px;
+            }
+            #frameSegmentationPreview {
+                color: #94a3b8;
+                background: #0f172a;
+                border: 1px solid #1e293b;
+                border-radius: 14px;
+            }
+            #frameSegmentationError {
+                color: #b91c1c;
+                background: #fef2f2;
+                border: 1px solid #fecaca;
+                border-radius: 10px;
+                padding: 10px 12px;
+            }
+            #frameSegmentationElapsed {
+                color: #64748b;
+                background: transparent;
+            }
+            QPushButton#frameSegmentationCancel,
+            QPushButton#frameSegmentationKeep {
+                color: #334155;
+                background: #f1f5f9;
+                border: 1px solid #e2e8f0;
+                border-radius: 9px;
+                padding: 0 15px;
+                font-weight: 600;
+            }
+            QPushButton#frameSegmentationCancel:hover,
+            QPushButton#frameSegmentationKeep:hover {
+                background: #e2e8f0;
+            }
+            QPushButton#frameSegmentationCancel:disabled {
+                color: #94a3b8;
+                background: #f8fafc;
+            }
+            QPushButton#frameSegmentationReplace {
+                color: #ffffff;
+                background: #4f46e5;
+                border: 1px solid #4f46e5;
+                border-radius: 9px;
+                padding: 0 16px;
+                font-weight: 600;
+            }
+            QPushButton#frameSegmentationReplace:hover {
+                background: #4338ca;
+                border-color: #4338ca;
+            }
 """
