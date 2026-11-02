@@ -696,6 +696,14 @@ class FrameSegmentationDialog(QDialog):
         self._elapsed_timer.start()
         self._update_elapsed()
 
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        painter.setPen(QPen(QColor("#e2e8f0"), 1))
+        painter.setBrush(QColor("#ffffff"))
+        painter.drawRoundedRect(rect, 18, 18)
+
     def _update_elapsed(self):
         seconds = max(0, int(time.monotonic() - self._started_at))
         minutes, seconds = divmod(seconds, 60)
@@ -924,7 +932,7 @@ class VideoObjectDetectorWidget(QDialog):
         self.task_status_label = QLabel(self.tr("未运行"))
         self.task_status_label.setObjectName("taskStatusLabel")
         progress_layout.addWidget(self.task_status_label)
-        self.task_progress_percent = QLabel("0.0%")
+        self.task_progress_percent = QLabel("0%")
         self.task_progress_percent.setObjectName("taskProgressPercent")
         self.task_progress_percent.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.task_progress_percent.setMinimumWidth(38)
@@ -1073,7 +1081,7 @@ class VideoObjectDetectorWidget(QDialog):
         self._task_progress = max(0, min(current_frame, self._task_total_frames))
         percentage = (self._task_progress / self._task_total_frames * 100) if self._task_total_frames else 0
         self.task_progress_bar.setValue(round(percentage))
-        self.task_progress_percent.setText(f"{percentage:.1f}%")
+        self.task_progress_percent.setText(f"{int(percentage)}%")
         self.task_frame_counter.setText(self.tr("{0}/{1} 帧").format(self._task_progress, self._task_total_frames))
 
     def _confirm_task_termination(self):
@@ -1260,7 +1268,7 @@ class VideoObjectDetectorWidget(QDialog):
         for key, text, tip in (
             ("forward", "向前", "从【起始关键帧】开始向前查找目标"),
             ("backward", "向后", "从【起始关键帧】开始向后查找目标"),
-            ("bidirectional", "双向", "从【起始关键帧】开始向两边查找目标"),
+            ("both", "双向", "从【起始关键帧】开始向两边查找目标"),
         ):
             button = QPushButton(self.tr(text))
             button.setCheckable(True)
@@ -2877,6 +2885,11 @@ VIDEO_OBJECT_DETECTOR_STYLESHEET = """
                 font-size: 11px;
                 font-weight: 600;
             }
+            #taskStatusLabelDone {
+                color: #15803d;
+                font-size: 11px;
+                font-weight: 600;
+            }
             #taskStatusLabelTerminated {
                 color: #dc2626;
                 font-size: 11px;
@@ -3548,9 +3561,8 @@ TERMINATE_DIALOG_STYLESHEET = """
 
 FRAME_SEGMENTATION_DIALOG_STYLESHEET = """
             QDialog#frameSegmentationDialog {
-                background: #ffffff;
-                border: 1px solid #e2e8f0;
-                border-radius: 18px;
+                background: transparent;
+                border: none;
             }
             #frameSegmentationIcon {
                 color: #ffffff;
