@@ -104,8 +104,8 @@ class MaskPreparer:
                 if tracking_data["enable_preview_mode"]:
                     tracking_mask_dir = tracking_data["tracking_detect_mask_path"]
                     tracking_mask_files = sorted((p for p in tracking_mask_dir.iterdir() if p.is_file()), key=lambda p: p.stem)
-                    frame_files = sorted(frame_files, key=lambda x: Path(x).stem)
-                    mapping.update({str(frame): str(mask) for frame, mask in zip(frame_files, tracking_mask_files, strict=True)})
+                    mask_index = {p.stem: str(p) for p in Path(tracking_mask_files).glob("*.png")}
+                    mapping.update({str(f): str(mask_index[s]) for f in frame_files if (s := Path(f).stem) in mask_index})
                     mask_result = MaskPreparationResult(tracking_mask_dir, mapping)
                 else:
                     mask_dir = tracking_data["tracking_detect_mask_path"] or mask_dir

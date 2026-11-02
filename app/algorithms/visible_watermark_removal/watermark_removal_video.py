@@ -193,7 +193,7 @@ class VideoWatermarkRemover:
                 runtime=RuntimeConfig(),
             )
             image_remover = ImageWatermarkRemove()
-            for completed, frame_file in enumerate(frame_files[start_frame_idx:end_frame_idx], start=1):
+            for completed, frame_file in enumerate(frame_files[start_frame_idx-1:end_frame_idx], start=1):
                 output_path = processed_frames_dir / frame_file.name
                 image_remover.run_without_mask(str(frame_file), str(output_path), config=frame_config)
                 if callback:
