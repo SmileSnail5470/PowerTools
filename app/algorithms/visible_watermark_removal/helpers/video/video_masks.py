@@ -101,7 +101,7 @@ class MaskPreparer:
                 mask_result = MaskPreparationResult(mask_dir, mapping)
             else:
                 tracking_data = mask_config.watermark_tracking_data
-                if not tracking_data["enable_preview_mode"]:
+                if tracking_data["enable_preview_mode"]:
                     tracking_mask_dir = tracking_data["tracking_detect_mask_path"]
                     tracking_mask_files = sorted((p for p in tracking_mask_dir.iterdir() if p.is_file()), key=lambda p: p.stem)
                     frame_files = sorted(frame_files, key=lambda x: Path(x).stem)

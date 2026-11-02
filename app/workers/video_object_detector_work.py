@@ -123,6 +123,7 @@ class VideoObjectDetectorWorker(BaseWorker):
             mask_out_dir = Path(cache_root) / "video_detector_masks" / Path(file_path).stem
             mask_out_dir.mkdir(parents=True, exist_ok=True)
         tracking_data["tracking_detect_mask_path"] = mask_out_dir
+        tracking_data["enable_preview_mode"] = False  # 临时设置为 False 以运行实际的算法
 
         video_cfg = VideoWatermarkRemoveConfig(
             segment=segment_paths,

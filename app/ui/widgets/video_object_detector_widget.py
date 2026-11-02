@@ -1284,11 +1284,13 @@ class VideoObjectDetectorWidget(QDialog):
         range_start.setValue(1)
         range_start.setObjectName("frameRangeInput")
         range_start.setFixedHeight(30)
+        range_start.setKeyboardTracking(False)
         range_end = QSpinBox()
         range_end.setRange(1, self.total_frames)
         range_end.setValue(self.total_frames)
         range_end.setObjectName("frameRangeInput")
         range_end.setFixedHeight(30)
+        range_end.setKeyboardTracking(False)
         setattr(self, start_attr, range_start)
         setattr(self, end_attr, range_end)
         range_start.valueChanged.connect(lambda frame, end=range_end: self._on_range_start_changed(frame, end))
@@ -2340,11 +2342,34 @@ class VideoObjectDetectorWidget(QDialog):
             return
         self._cancel_active_future()
         start_frame, end_frame = params.tracking_detect_frame_range
-        self._task_total_frames = max(0, end_frame - start_frame + 1)
+        if params.tracking_detect_anchor_frame < start_frame or params.tracking_detect_anchor_frame > end_frame:
+            MessageBox(title=self.tr("提醒"), content=self.tr("设置的关键帧必须在帧检测范围内"), parent=self).exec()
+            return
+        anchor_frame = params.tracking_detect_anchor_frame
+        if params.tracking_detect_direction == "forward":
+            progress_start_frame = anchor_frame
+            progress_end_frame = end_frame
+        elif params.tracking_detect_direction == "backward":
+            progress_start_frame = start_frame
+            progress_end_frame = anchor_frame
+        else:
+            progress_start_frame = start_frame
+            progress_end_frame = end_frame
+        expected_frame_indices = set(range(progress_start_frame - 1, progress_end_frame))
+        self._task_total_frames = len(expected_frame_indices)
+        self._task_progress_frame_indices = expected_frame_indices
         backend_type, hardware_name = global_backend_info_cache.get()
         self.set_task_running(True, backend_type=backend_type, hardware_name=hardware_name)
         self._set_label_status(self.canvas_status, self.tr("●  任务启动"), "ready")
         self._update_result_card_state(self.tr("运行中"), "indigoBadge")
+
+        if params.tracking_detect_mask_path:
+            poll_dir = Path(params.tracking_detect_mask_path)
+        else:
+            cache_root = cfg.get(cfg.cachePath) or tempfile.gettempdir()
+            poll_dir = Path(cache_root) / "video_detector_masks" / Path(self.file_path).stem
+        self._poll_mask_dir = poll_dir
+        self._poll_mask_baseline = self._mask_progress_snapshot(poll_dir, expected_frame_indices)
 
         worker = VideoObjectDetectorWorker(
             file_path=self.file_path,
@@ -2353,13 +2378,6 @@ class VideoObjectDetectorWidget(QDialog):
         func, args, kwargs = worker.to_worker()
         future = global_task_manager.submit(func, *args, **kwargs)
         self._active_future = future
-
-        if params.tracking_detect_mask_path:
-            poll_dir = Path(params.tracking_detect_mask_path)
-        else:
-            cache_root = cfg.get(cfg.cachePath) or tempfile.gettempdir()
-            poll_dir = Path(cache_root) / "video_detector_masks" / Path(self.file_path).stem
-        self._poll_mask_dir = poll_dir
 
         self._progress_timer = QTimer(self)
         self._progress_timer.setInterval(2000)
@@ -2375,9 +2393,42 @@ class VideoObjectDetectorWidget(QDialog):
         poll_dir = getattr(self, "_poll_mask_dir", None)
         if poll_dir is None or not poll_dir.exists():
             return
-        count = sum(1 for p in poll_dir.iterdir() if p.suffix.lower() == ".png")
+        expected_indices = getattr(self, "_task_progress_frame_indices", set())
+        baseline = getattr(self, "_poll_mask_baseline", {})
+        count = 0
+        for path in poll_dir.iterdir():
+            if path.suffix.lower() != ".png" or not path.stem.isdigit():
+                continue
+            frame_index = int(path.stem)
+            if frame_index not in expected_indices:
+                continue
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            previous = baseline.get(frame_index)
+            if previous is None or (stat.st_mtime_ns, stat.st_size) != previous:
+                count += 1
         self.set_task_progress(count)
         self._update_result_card_state(self.tr("处理中 {0}/{1} 帧").format(self._task_progress, self._task_total_frames), "indigoBadge")
+
+    @staticmethod
+    def _mask_progress_snapshot(mask_dir: Path, frame_indices: set[int]) -> dict[int, tuple[int, int]]:
+        if not mask_dir.is_dir():
+            return {}
+        snapshot = {}
+        for path in mask_dir.iterdir():
+            if path.suffix.lower() != ".png" or not path.stem.isdigit():
+                continue
+            frame_index = int(path.stem)
+            if frame_index not in frame_indices:
+                continue
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            snapshot[frame_index] = (stat.st_mtime_ns, stat.st_size)
+        return snapshot
 
     def _cancel_active_future(self) -> None:
         self._stop_progress_timer()
@@ -2394,6 +2445,7 @@ class VideoObjectDetectorWidget(QDialog):
 
     def _on_task_finished(self, result) -> None:
         self._stop_progress_timer()
+        self.set_task_progress(self._task_total_frames)
         self.set_task_running(False)
         output_path = result if isinstance(result, str) else (result.get("output_path") if isinstance(result, dict) else None)
         self._last_run_result = VideoDetectorParams(
