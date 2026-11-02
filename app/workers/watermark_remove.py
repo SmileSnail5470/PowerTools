@@ -93,6 +93,8 @@ class WatermarkRemoveUIParams:
             return ""
         if self.detect.watermark_detect_type == "manual_detect":
             return ""
+        if self.detect.video_watermark_ai_detect_strategy == "tracking" and self.detect.video_watermark_format == "dynamic_watermark":
+            return ""
         if self.detect.watermark_ai_detect_method == "semantic_detect" and not self.detect.watermark_ai_detect_prompt:
             return "已选【语义检测】请输入水印语义检测提示词"
         if self.detect.watermark_ai_detect_method == "space_detect" and not self.detect.watermark_ai_detect_pos_boxes:
@@ -260,7 +262,7 @@ class WatermarkRemoveWork(BaseWorker):
                     keyframe_stride=2,
                     is_static_watermark=(detect.video_watermark_format == "static_watermark"),
                     mask_path=detect.manual_watermark_mask_path,
-                    auto_detect_mask=detect.video_watermark_ai_detect_strategy=="tracking",
+                    auto_detect_mask=detect.video_watermark_ai_detect_strategy=="tracking" and detect.video_watermark_format=="dynamic_watermark",
                 ),
                 segment=segment_paths,
                 inpaint=inpaint_paths,

@@ -193,7 +193,8 @@ class MaskPreparer:
         elif tracking_detect_direction == "backward":
             max_frames = tracking_detect_anchor_frame - start_frame_idx
         else:
-            max_frames = end_frame_idx - start_frame_idx
+            max_frames = (end_frame_idx - start_frame_idx) // 2
+            tracking_detect_anchor_frame = (end_frame_idx + start_frame_idx) // 2
         # frame_files 和 mask_dir 里面的帧编号都是以索引 0 开始。
         tracker.infer(
             input_path=str(frame_files[0].parent),

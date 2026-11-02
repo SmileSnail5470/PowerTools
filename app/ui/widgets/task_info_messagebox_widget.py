@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QGridLayout, QScrollArea
@@ -96,7 +97,7 @@ class TaskInfoMessageBox(MessageBoxBase):
                 if p.detect.video_watermark_format == "dynamic_watermark":
                     params.append((self.tr("水印检测策略"), value_map.get(p.detect.video_watermark_ai_detect_strategy, p.detect.video_watermark_ai_detect_strategy)))
                     if p.detect.video_watermark_ai_detect_strategy == "tracking":
-                        params.append((self.tr("水印跟踪检测参数"), value_map.get(p.detect.video_watermark_tracking_data, p.detect.video_watermark_tracking_data)))
+                        params.append((self.tr("水印跟踪检测参数"), asdict(p.detect.video_watermark_tracking_data)))
                         need_image_detect_params = False
                     else:
                         params.append((self.tr("检测帧范围"), value_map.get(p.detect.video_watermark_ai_detect_frame_range, p.detect.video_watermark_ai_detect_frame_range)))

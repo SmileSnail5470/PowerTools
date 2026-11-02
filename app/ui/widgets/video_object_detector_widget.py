@@ -851,7 +851,7 @@ class VideoObjectDetectorWidget(QDialog):
 
         header = QFrame()
         header.setObjectName("topBar")
-        header.setFixedHeight(64)
+        header.setFixedHeight(56)
         header_layout = QGridLayout(header)
         header_layout.setContentsMargins(24, 0, 24, 0)
         header_layout.setHorizontalSpacing(16)
@@ -1283,7 +1283,15 @@ class VideoObjectDetectorWidget(QDialog):
 
     def _add_frame_range_setting(self, layout: QVBoxLayout, start_attr: str, end_attr: str):
         layout.addSpacing(4)
-        layout.addWidget(self._section_title(self.tr("处理帧范围")))
+        header = QVBoxLayout()
+        header.setSpacing(0)
+        header.addWidget(self._section_title(self.tr("处理帧范围")))
+        commit_hit = QLabel(self.tr("输入后按 Enter 或点击其它位置以确认修改"))
+        commit_hit.setObjectName("sensitivityDescription")
+        setFont(commit_hit, 10)
+        header.addWidget(commit_hit)
+        layout.addLayout(header)
+
         range_row = QHBoxLayout()
         range_row.setSpacing(8)
         range_start = QSpinBox()
