@@ -1444,10 +1444,10 @@ class VideoObjectDetectorWidget(QDialog):
         self._add_tracking_direction_setting(sam_layout, "direction_buttons")
         self._add_frame_range_setting(sam_layout, "range_start", "range_end")
         self._add_detection_sensitivity_setting(sam_layout)
-        sam_layout.addSpacing(6)
+        sam_layout.addSpacing(4)
         sam_layout.addWidget(self._build_save_path_section("save_path_input"))
 
-        sam_layout.addSpacing(6)
+        sam_layout.addSpacing(4)
         self.run_sam3_button = QPushButton(self.tr("开始跟踪检测（精确检测）"))
         self.run_sam3_button.setObjectName("primaryButton")
         self._set_button_icon(self.run_sam3_button, FluentIcon.ROBOT, dark=True)
@@ -1493,10 +1493,10 @@ class VideoObjectDetectorWidget(QDialog):
         self._add_tracking_direction_setting(edge_layout, "edge_direction_buttons")
         self._add_frame_range_setting(edge_layout, "edge_range_start", "edge_range_end")
 
-        edge_layout.addSpacing(6)
+        edge_layout.addSpacing(4)
         edge_layout.addWidget(self._build_save_path_section("edge_save_path_input"))
 
-        edge_layout.addSpacing(6)
+        edge_layout.addSpacing(4)
         self.run_edgetam_button = QPushButton(self.tr("开始跟踪检测（快速跟踪）"))
         self.run_edgetam_button.setObjectName("violetButton")
         self._set_button_icon(self.run_edgetam_button, FluentIcon.VIDEO, dark=True)
@@ -2443,10 +2443,10 @@ class VideoObjectDetectorWidget(QDialog):
         self.set_task_progress(self._task_total_frames)
         self.set_task_running(False)
         output_path = result if isinstance(result, str) else (result.get("output_path") if isinstance(result, dict) else None)
-        self._last_run_result = VideoDetectorParams(
-            enable_preview_mode=True,
-            tracking_detect_mask_path=output_path,
-        )
+        self._last_run_result = self._build_tracking_params()
+        self._last_run_result.enable_preview_mode = True
+        self._last_run_result.tracking_detect_mask_path = output_path
+
         self._set_label_status(self.canvas_status, self.tr("●  检测完成"), "ready")
         self._update_result_card_state(self.tr("检测完成"), "successBadge")
         if output_path:

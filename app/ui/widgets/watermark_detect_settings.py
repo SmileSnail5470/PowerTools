@@ -190,7 +190,7 @@ class WatermarkDetectSettings(QWidget):
     watermarkDetectType = Signal(str)                    # AI检测/人工检测
     videoWatermarkFormat = Signal(str)                   # 静态水印/动态水印
     videoWatermarkAIDetectStrategy = Signal(str)         # 逐帧检测/跟踪检测
-    videoWatermarkAIDetectFrameRange = Signal(int, int)  # 检测帧范围
+    videoWatermarkAIDetectFrameRange = Signal(list)      # 检测帧范围
     videoWatermarkAIDetectAnchorFrame = Signal(int)      # 检测关键帧
     manualWatermarktMaskPath = Signal(str)               # 手动标注 Mask 路径
     maskDirectoryChanged = Signal(str)                   # 人工指定 Mask 路径
@@ -969,7 +969,7 @@ class WatermarkDetectSettings(QWidget):
         self.watermarkAIDetectConfidence.emit(float_val)
 
     def _emit_video_detect_frame_range(self, _value):
-        self.videoWatermarkAIDetectFrameRange.emit(self.frame_range_start.value(), self.frame_range_end.value())
+        self.videoWatermarkAIDetectFrameRange.emit([self.frame_range_start.value(), self.frame_range_end.value()])
 
     def set_file_path(self, file_path):
         if not file_path:

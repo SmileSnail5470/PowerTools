@@ -779,10 +779,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
             range_start.setValue(1)
             range_end.setRange(1, total_frames)
             range_end.setValue(total_frames)
-            watermark_remove_params.set_param(
-                "model.video_watermark_ai_detect_frame_range",
-                [range_start.value(), range_end.value()],
-            )
+            watermark_remove_params.set_param("model.video_watermark_ai_detect_frame_range", [range_start.value(), range_end.value()])
 
         preview_button.clicked.connect(_open_frame_range_preview)
         global_event_bus.watermarkRemove_InputFileUpdate.connect(_update_frame_range)
