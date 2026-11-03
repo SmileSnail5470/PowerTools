@@ -215,7 +215,7 @@ class VideoWatermarkRemover:
         engine_config = config.engine
         mask_config = config.mask
         runtime = config.runtime
-        if mask_config.video_watermark_ai_detect_strategy == "frame_by_frame":
+        if mask_config.video_watermark_ai_detect_strategy == "frame_by_frame" or mask_config.use_cache_mask:
             detect_frame_range = mask_config.video_watermark_ai_detect_frame_range
         else:
             detect_frame_range = mask_config.watermark_tracking_data["tracking_detect_frame_range"]

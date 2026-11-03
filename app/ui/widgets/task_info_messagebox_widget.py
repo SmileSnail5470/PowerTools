@@ -100,10 +100,10 @@ class TaskInfoMessageBox(MessageBoxBase):
                         params.append((self.tr("水印跟踪检测参数"), asdict(p.detect.video_watermark_tracking_data)))
                         need_image_detect_params = False
                     else:
-                        params.append((self.tr("检测帧范围"), value_map.get(p.detect.video_watermark_ai_detect_frame_range, p.detect.video_watermark_ai_detect_frame_range)))
+                        params.append((self.tr("检测帧范围"), p.detect.video_watermark_ai_detect_frame_range))
                 else:
-                    params.append((self.tr("检测关键帧"), value_map.get(p.detect.video_watermark_ai_detect_anchor_frame, p.detect.video_watermark_ai_detect_anchor_frame)))
-                    params.append((self.tr("检测帧范围"), value_map.get(p.detect.video_watermark_ai_detect_frame_range, p.detect.video_watermark_ai_detect_frame_range)))
+                    params.append((self.tr("检测关键帧"), p.detect.video_watermark_ai_detect_anchor_frame))
+                    params.append((self.tr("检测帧范围"), p.detect.video_watermark_ai_detect_frame_range))
             if need_image_detect_params:
                 params.append((self.tr("水印检测方法"), value_map.get(p.detect.watermark_ai_detect_method, p.detect.watermark_ai_detect_method)))
                 if p.detect.watermark_ai_detect_method == "semantic_detect":
