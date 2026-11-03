@@ -91,9 +91,8 @@ class BlindWatermarkRemoveWork(BaseWorker):
         if file_type == "video":
             video_config = EngineConfig(
                 prompt="",
-                task_type="general_edit",
                 rife_model_path=os.path.join(self.deps_path, _resolve_hardware_variant(), "video_engine"),
-                keyframe_stride=0,
+                keyframe_stride=2,
                 ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN", ""),
                 should_cancel=cancel_requested,
             )
