@@ -350,7 +350,7 @@ class FileSelectorCard(HeaderCardWidget):
         self.viewLayout.setContentsMargins(10, 10, 10, 10)
         self.viewLayout.addLayout(main_layout)
 
-        single_file_selector = FileSelectorWidget(self)
+        single_file_selector = FileSelectorWidget(self, format_text_value=self.tr("支持 JPG, PNG 格式"))
         single_file_selector.item_selected.connect(
             lambda file_path: global_event_bus.imageRestoration_InputFileUpdate.emit(file_path)
         )

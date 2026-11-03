@@ -448,8 +448,7 @@ class WatermarkContentCard(HeaderCardWidget):
         setFont(text_label_1, 13)
         text_label_1.setStyleSheet("color: #888888;")  # 设置为浅灰色
         image_settings_layout.addWidget(text_label_1)
-        FileUploadWidget.format_text_value = self.tr("支持 JPG, PNG 格式")
-        upload_file_selector = FileSelectorWidget()
+        upload_file_selector = FileSelectorWidget(format_text_value=self.tr("支持 JPG, PNG 格式"))
         bind_widget_to_param(upload_file_selector, "item_selected", watermark_add_params, "visible.watermark_image", transform=None)
         upload_file_selector.layout_add_height.connect(lambda x: self.adjust_stacked_height(x))
         image_settings_layout.addWidget(upload_file_selector)

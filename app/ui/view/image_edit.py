@@ -94,7 +94,7 @@ class ReferenceImageCard(HeaderCardWidget):
         self.viewLayout.setContentsMargins(10, 10, 10, 10)
         self.viewLayout.addLayout(main_layout)
 
-        self.file_selector = FileSelectorWidget(self)
+        self.file_selector = FileSelectorWidget(self, format_text_value=self.tr("支持 JPG, PNG 格式"))
         self.file_selector.item_selected.connect(self._on_file_selected)
         bind_widget_to_param(self.file_selector, "item_selected", image_edit_params, "io.input_path", transform=None)
         main_layout.addWidget(self.file_selector)

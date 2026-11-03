@@ -54,7 +54,7 @@ class FileSelectorCard(HeaderCardWidget):
         self.viewLayout.setContentsMargins(10, 10, 10, 10)
         self.viewLayout.addLayout(main_layout)
 
-        singleFileSelector = FileSelectorWidget(self)
+        singleFileSelector = FileSelectorWidget(self, format_text_value=self.tr("支持 JPG, PNG格式"))
         singleFileSelector.item_selected.connect(lambda file_path: global_event_bus.OCR_InputFileUpdate.emit(file_path))
         bind_widget_to_param(singleFileSelector, "item_selected", ocr_params, "io.input_path", transform=None)
         batchFilesSelector = DirectorySelectorWidget(self)
