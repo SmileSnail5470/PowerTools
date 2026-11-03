@@ -90,6 +90,7 @@ class BlindWatermarkRemoveWork(BaseWorker):
 
         if file_type == "video":
             video_config = EngineConfig(
+                detect_frame_range=None,
                 prompt="",
                 rife_model_path=os.path.join(self.deps_path, _resolve_hardware_variant(), "video_engine"),
                 keyframe_stride=2,

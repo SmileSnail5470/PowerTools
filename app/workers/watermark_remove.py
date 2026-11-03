@@ -271,6 +271,7 @@ class WatermarkRemoveWork(BaseWorker):
                     is_static_watermark=(detect.video_watermark_format == "static_watermark"),
                     mask_path=detect.manual_watermark_mask_path,
                     auto_detect_mask=auto_detect_mask,
+                    temporal_stabilize=True
                 ),
                 segment=segment_paths,
                 inpaint=inpaint_paths,

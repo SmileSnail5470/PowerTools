@@ -199,7 +199,7 @@ class TaskInfoMessageBox(MessageBoxBase):
 
     def _build_blind_watermark_remove(self, layout: QVBoxLayout):
         p: BlindWatermarkRemoveUIParams = self._p
-        model_map = {"reverse_edit": "智能消除"}
+        model_map = {"reverse_edit": "智能消除", "video_engine": "关键帧级去除"}
         layout.addWidget(self._section_input(p.io.input_path))
         params = [
             (self.tr("去除模型"),     model_map.get(p.model.model_name, p.model.model_name)),

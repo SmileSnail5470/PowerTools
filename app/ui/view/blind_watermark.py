@@ -18,6 +18,7 @@ from app.ui.widgets.file_selector_widget import FileSelectorWidget
 from app.ui.widgets.directory_selector_widget import DirectorySelectorWidget
 from app.ui.widgets.custom_card_group_widget import StyleCard
 from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget
+from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
 from app.ui.widgets.toggle_switch_widget import ToggleSwitch
@@ -39,6 +40,12 @@ blind_watermark_remove_params = LayeredTaskParams(params=BlindWatermarkRemoveUIP
 blind_watermark_remove_task_status_model = TaskStatusModel()
 # 当前批次已提交的任务 future，用于支持一次性取消
 blind_watermark_remove_active_futures = []
+
+
+def _first_supported_media_path(path):
+    if not os.path.isdir(path):
+        return path
+    return next((os.path.join(path, name) for name in os.listdir(path) if get_file_type(os.path.join(path, name))),"")
 
 
 class FileSelectorCard(HeaderCardWidget):
@@ -289,7 +296,6 @@ class ModelSelectCard(HeaderCardWidget):
         self.tab_video = QPushButton(self.tr("视频模型"))
         setFont(self.tab_video, fontSize=14, weight=QFont.DemiBold)
         self.tab_video.setCheckable(True)
-        self.tab_video.setEnabled(False)  # 暂不支持视频模型
         self.tab_group.addButton(self.tab_image, 0)
         self.tab_group.addButton(self.tab_video, 1)
         tab_layout.addWidget(self.tab_image)
@@ -316,32 +322,43 @@ class ModelSelectCard(HeaderCardWidget):
         self.image_cards = [reverse_edit_card]
         self.all_cards.extend(self.image_cards)
 
-        # 视频模型列表（占位）
+        # 视频模型列表
         video_container = QWidget()
         video_layout = QVBoxLayout(video_container)
         video_layout.setContentsMargins(0, 6, 0, 6)
         video_layout.setSpacing(0)
 
-        video_placeholder = QLabel(self.tr("视频暗水印去除模型开发中，敬请期待..."))
-        video_placeholder.setStyleSheet("color: #999999; padding: 20px;")
-        video_placeholder.setAlignment(Qt.AlignCenter)
-        video_layout.addWidget(video_placeholder)
+        keyframe_remove_card = StyleCard("#fbc2eb", self.tr("关键帧级去除"), self.tr("对视频关键帧进行暗水印去除，并补帧生成完整视频"))
+        keyframe_remove_card.set_name("video_engine")
+        video_layout.addWidget(keyframe_remove_card)
         video_layout.addStretch()
         self.stacked_widget.addWidget(video_container)
 
-        self.video_cards = []
+        self.video_cards = [keyframe_remove_card]
+        self.all_cards.extend(self.video_cards)
 
         for card in self.all_cards:
             card.mousePressEvent = lambda event, c=card: self._on_card_clicked(c)
 
         self.tab_image.toggled.connect(lambda checked: self._on_tab_changed(0, checked))
         self.tab_video.toggled.connect(lambda checked: self._on_tab_changed(1, checked))
+        global_event_bus.blindWatermarkRemove_InputFileUpdate.connect(self._on_input_file_updated)
 
         bind_widget_to_param(self, "model_name", blind_watermark_remove_params, "model.model_name", transform=None)
         self.select_first_interactive()
         global_event_bus.License_update.connect(self.select_first_interactive)
         global_event_bus.blindWatermarkRemove_TaskFinishedByModel.connect(self._on_task_finished_by_model)
         main_layout.addStretch()
+
+    def _on_input_file_updated(self, file_path):
+        if not file_path:
+            return
+        file_path = _first_supported_media_path(file_path)
+        file_type = get_file_type(file_path) if file_path else None
+        if file_type == "video":
+            self.tab_video.setChecked(True)
+        elif file_type == "image":
+            self.tab_image.setChecked(True)
 
     def _on_tab_changed(self, index, checked):
         if not checked:
@@ -475,15 +492,17 @@ class PreviewWidget(QWidget):
         self.stack = QStackedLayout()
         self.stack.setContentsMargins(0, 0, 0, 0)
 
-        self.placeholder_widget = QLabel(self.tr("请选择图片文件进行暗水印去除预览"), parent=self)
+        self.placeholder_widget = QLabel(self.tr("请选择图片或视频文件进行暗水印去除预览"), parent=self)
         self.placeholder_widget.setStyleSheet("color: #888888;")
         setFont(self.placeholder_widget, 20)
         self.placeholder_widget.setAlignment(Qt.AlignCenter)
 
         self.image_viewer = SyncImageViewer(img1="", img2="", parent=self)
+        self.video_viewer = SyncVideoViewer(self)
 
         self.stack.addWidget(self.placeholder_widget)
         self.stack.addWidget(self.image_viewer)
+        self.stack.addWidget(self.video_viewer)
 
         main_layout.addLayout(self.stack, 1)
 
@@ -512,23 +531,33 @@ class PreviewWidget(QWidget):
     def update_init_preview(self, file_path):
         self.image_navigation_widget.clear_images()
         self.image_viewer.init_scene()
+        self.video_viewer.init_scene()
         self.files_preview_info = {}
         self.media_type = "image"
         if not file_path:
+            self.placeholder_widget.setText(self.tr("请选择图片或视频文件进行暗水印去除预览"))
             self.stack.setCurrentIndex(0)
             blind_watermark_remove_task_status_model.reset()
             return
         if os.path.isdir(file_path):
-            tmp_file_path = os.path.join(file_path, os.listdir(file_path)[0])
             self.status_info_widget.show_batch_pipeline_widget()
+            tmp_file_path = _first_supported_media_path(file_path)
         else:
             tmp_file_path = file_path
             self.status_info_widget.show_pipeline_widget()
+        if not tmp_file_path:
+            self.placeholder_widget.setText(self.tr("目录中没有支持的图片或视频"))
+            self.stack.setCurrentIndex(0)
+            blind_watermark_remove_task_status_model.reset()
+            return
         file_type = get_file_type(tmp_file_path)
-        ext = tmp_file_path.lower().split(".")[-1]
+        ext = os.path.splitext(tmp_file_path)[1].lower().lstrip(".")
         if file_type == "image":
             self.stack.setCurrentIndex(1)
             self.media_type = "image"
+        elif file_type == "video":
+            self.stack.setCurrentIndex(2)
+            self.media_type = "video"
         else:
             self.placeholder_widget.setText(self.tr(f"不支持的文件类型: {ext}"))
             self.stack.setCurrentIndex(0)
@@ -544,6 +573,8 @@ class PreviewWidget(QWidget):
         out = self.files_preview_info.get(path)
         if self.media_type == "image" and out:
             self.image_viewer.set_images(img1=path, img2=out)
+        elif self.media_type == "video" and out:
+            self.video_viewer.setVideos(main_path=path, sub_path=out)
 
     def _cancel_tasks(self):
         cancelled = 0
