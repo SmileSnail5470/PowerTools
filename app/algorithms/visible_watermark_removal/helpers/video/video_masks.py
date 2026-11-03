@@ -102,9 +102,9 @@ class MaskPreparer:
             else:
                 tracking_data = mask_config.watermark_tracking_data
                 if tracking_data["enable_preview_mode"]:
-                    tracking_mask_dir = tracking_data["tracking_detect_mask_path"]
+                    tracking_mask_dir = Path(tracking_data["tracking_detect_mask_path"])
                     tracking_mask_files = sorted((p for p in tracking_mask_dir.iterdir() if p.is_file()), key=lambda p: p.stem)
-                    mask_index = {p.stem: str(p) for p in Path(tracking_mask_files).glob("*.png")}
+                    mask_index = {p.stem: str(p) for p in tracking_mask_files}
                     mapping.update({str(f): str(mask_index[s]) for f in frame_files if (s := Path(f).stem) in mask_index})
                     mask_result = MaskPreparationResult(tracking_mask_dir, mapping)
                 else:

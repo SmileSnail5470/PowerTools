@@ -2444,7 +2444,7 @@ class VideoObjectDetectorWidget(QDialog):
         self.set_task_running(False)
         output_path = result if isinstance(result, str) else (result.get("output_path") if isinstance(result, dict) else None)
         self._last_run_result = VideoDetectorParams(
-            enable_preview_mode=False,
+            enable_preview_mode=True,
             tracking_detect_mask_path=output_path,
         )
         self._set_label_status(self.canvas_status, self.tr("●  检测完成"), "ready")
