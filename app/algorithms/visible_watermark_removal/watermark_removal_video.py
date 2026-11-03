@@ -229,6 +229,8 @@ class VideoWatermarkRemover:
             should_cancel=runtime.should_cancel,
             is_static_watermark=engine_config.is_static_watermark,
             progress_cb=runtime.progress_cb,
+            temporal_stabilize=engine_config.temporal_stabilize,
+            temporal_mask_dilate=max(0, int(mask_config.dilate_num)) + 6,
         )
         plugin_config = WatermarkRemovalPluginConfig(
             segment=config.segment,

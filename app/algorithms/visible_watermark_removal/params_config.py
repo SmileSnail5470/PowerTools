@@ -113,6 +113,7 @@ class VideoEngineConfig:
     is_static_watermark: bool = False
     mask_path: str = ""
     auto_detect_mask: bool = False
+    temporal_stabilize: bool = True
 
 
 @dataclass(slots=True)
