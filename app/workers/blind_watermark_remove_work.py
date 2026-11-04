@@ -50,9 +50,9 @@ class BlindWatermarkRemoveWork(BaseWorker):
     _instance_model_dir = None
 
     @classmethod
-    def _get_instance(cls, model_dir, use_color_fix=True):
+    def _get_instance(cls, model_dir, ocr_model_path=None, use_color_fix=True):
         if cls._instance is None or cls._instance_model_dir != model_dir:
-            cls._instance = ReverseEditInference(model_dir=model_dir, use_color_fix=use_color_fix)
+            cls._instance = ReverseEditInference(model_dir=model_dir, ocr_model_path=ocr_model_path, use_color_fix=use_color_fix)
             cls._instance_model_dir = model_dir
         return cls._instance
 
@@ -79,6 +79,7 @@ class BlindWatermarkRemoveWork(BaseWorker):
             raise Exception(f"Reject process {input_path}")
 
         model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "reverse_edit")
+        ocr_model_path = os.path.join(self.deps_path, _resolve_hardware_variant(), "ocr", "pp_ocr_det.encmodel")
         output_dir = output_path
         os.makedirs(output_dir, exist_ok=True)
         output_file = os.path.join(
@@ -106,6 +107,7 @@ class BlindWatermarkRemoveWork(BaseWorker):
                 config=video_config,
                 plugin_kwargs={
                     "model_dir": model_dir,
+                    "ocr_model_path": ocr_model_path,
                     "prompt": "",
                     "edit_prompt": None,
                     "use_color_fix": use_color_fix,
@@ -119,7 +121,7 @@ class BlindWatermarkRemoveWork(BaseWorker):
         else:
             if progress_cb:
                 progress_cb("BlindWatermarkRemoveStart", "")
-            inference = self._get_instance(model_dir=model_dir, use_color_fix=use_color_fix)
+            inference = self._get_instance(model_dir=model_dir, ocr_model_path=ocr_model_path, use_color_fix=use_color_fix)
             inference.use_color_fix = use_color_fix
             inference.infer(
                 input_path=input_path,

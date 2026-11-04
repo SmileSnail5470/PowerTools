@@ -139,11 +139,10 @@ class ProcessRegionCard(HeaderCardWidget):
         self._file_path = file_path or ""
         blind_watermark_remove_params.set_param("settings.reserve_region", None)
         self.region_info_label.setText(self.tr("未选择区域，将处理整张图片"))
-        can_select = bool(
-            self._file_path
-            and os.path.isfile(self._file_path)
-            and get_file_type(self._file_path) == "image"
-        )
+        file_type = get_file_type(self._file_path) if self._file_path and os.path.isfile(self._file_path) else None
+        is_video = file_type == "video"
+        self.setVisible(not is_video)
+        can_select = file_type == "image"
         self.select_button.setEnabled(can_select)
         if self._file_path and os.path.isdir(self._file_path):
             self.region_info_label.setText(self.tr("目录任务不使用区域框选，将处理每张图片"))
