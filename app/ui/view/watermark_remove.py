@@ -253,7 +253,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         general_edit_card.set_name("general_edit")
         image_layout.addWidget(general_edit_card)
 
-        object_removal_card = StyleCard("#e3fb93", self.tr("智能消除"), self.tr("精准消除，速度快"), vertical_layout=True)
+        object_removal_card = StyleCard("#e3fb93", self.tr("智能消除"), self.tr("精准消除，速度快"), vertical_layout=True, badge=self.tr("小于 8G 显存推荐"))
         object_removal_card.set_name("object_removal")
         image_layout.addWidget(object_removal_card)
 
