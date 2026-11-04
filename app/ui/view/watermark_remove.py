@@ -380,7 +380,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         video_flow.setHorizontalSpacing(8)
         video_flow.setVerticalSpacing(8)
 
-        video_engine_card = StyleCard("#2980b9", self.tr("关键帧擦除"), self.tr("智能传播，速度适中"), vertical_layout=True)
+        video_engine_card = StyleCard("#2980b9", self.tr("关键帧擦除"), self.tr("智能传播，速度适中"), vertical_layout=True, badge=self.tr("小于 8G 显存推荐"))
         video_engine_card.set_name("video_engine")
         video_flow.addWidget(video_engine_card)
 

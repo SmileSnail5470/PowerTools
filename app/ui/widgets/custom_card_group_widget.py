@@ -138,7 +138,7 @@ class StyleCard(QFrame):
     MODEL_FREE = "free"
     MODEL_PRO = "pro"
 
-    def __init__(self, icon_color, title, subtitle, parent=None, vertical_layout=False):
+    def __init__(self, icon_color, title, subtitle, parent=None, vertical_layout=False, badge=None):
         super().__init__(parent)
         self.effect = QGraphicsOpacityEffect(self)
         self.setStyleSheet("""
@@ -190,16 +190,36 @@ class StyleCard(QFrame):
 
         self.auth_label = QLabel(self)
         self.remaining_label = QLabel(self)
+        self.badge_label = None
 
         status_row_layout.addWidget(self.auth_label)
         status_row_layout.addWidget(self.remaining_label)
         status_row_layout.addStretch(1)
 
         if vertical_layout:
+            title_details_layout = QVBoxLayout()
+            title_details_layout.setSpacing(0)
+            title_details_layout.setContentsMargins(0, 0, 0, 0)
+            title_details_layout.addWidget(self.title_label)
+
             title_row_layout = QHBoxLayout()
             title_row_layout.setSpacing(8)
             title_row_layout.addWidget(self.icon_label)
-            title_row_layout.addWidget(self.title_label)
+            if badge:
+                self.badge_label = QLabel(badge, self)
+                setFont(self.badge_label, 8, QFont.DemiBold)
+                self.badge_label.setStyleSheet("""
+                    QLabel {
+                        color: #1d4ed8;
+                        background-color: #eff6ff;
+                        border: 1px solid #bfdbfe;
+                        border-radius: 8px;
+                        padding: 2px 2px;
+                    }
+                """)
+                self.badge_label.setWordWrap(True)
+                title_details_layout.addWidget(self.badge_label, alignment=Qt.AlignLeft)
+            title_row_layout.addLayout(title_details_layout)
             title_row_layout.addStretch(1)
 
             main_layout.addLayout(title_row_layout)
