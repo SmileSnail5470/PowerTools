@@ -1,10 +1,10 @@
 import os
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QVBoxLayout, QWidget, QHBoxLayout, QLabel, QStackedWidget, QStackedLayout, QSlider
+from PySide6.QtWidgets import QVBoxLayout, QWidget, QHBoxLayout, QLabel, QStackedWidget, QStackedLayout, QSlider, QFrame
 from PySide6.QtGui import QFont, QColor
 
 from app.ui.library.qfluentwidgets import (
-    PushButton, setFont, HeaderCardWidget, SegmentedWidget, ScrollArea, ComboBox, BodyLabel,
+    PushButton, setFont, HeaderCardWidget, SegmentedWidget, ScrollArea, ComboBox, BodyLabel, FlowLayout,
     TeachingTip, InfoBarIcon, TeachingTipTailPosition, MessageBox
 )
 
@@ -16,7 +16,7 @@ from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.ocr_preview_widget import OCRViewerWidget
 from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
-from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget, StyleCard, CardSeparator
+from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget, StyleCard
 
 from app.ui.common.event_bus import global_event_bus
 from app.controllers.task_manager import global_task_manager
@@ -85,17 +85,37 @@ class ModelStyleCard(HeaderCardWidget):
 
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        main_layout.setSpacing(8)
 
         self.viewLayout.setContentsMargins(10, 10, 10, 10)
         self.viewLayout.addLayout(main_layout)
 
+        model_cards_widget = QWidget()
+        model_flow = FlowLayout(model_cards_widget, needAni=False, isTight=True)
+        model_flow.setContentsMargins(0, 0, 0, 4)
+        model_flow.setHorizontalSpacing(8)
+        model_flow.setVerticalSpacing(8)
+
         self.cards: list[StyleCard] = []
-        pp_ocr_card = StyleCard("#4facfe", self.tr("通用识别"), self.tr("用于通用场景文字识别，不适合复杂图表公式等识别"))
+        pp_ocr_card = StyleCard("#4facfe", self.tr("通用识别"), self.tr("通用场景文字识别"), vertical_layout=True)
         pp_ocr_card.set_name("pp_ocr")
         self.cards.append(pp_ocr_card)
-        main_layout.addWidget(pp_ocr_card)
-        main_layout.addWidget(CardSeparator(self))
+        model_flow.addWidget(pp_ocr_card)
+
+        model_card = QFrame()
+        model_card.setObjectName("modelCard")
+        model_card.setStyleSheet("""
+            QFrame#modelCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        model_card_layout = QVBoxLayout(model_card)
+        model_card_layout.setContentsMargins(12, 10, 12, 12)
+        model_card_layout.setSpacing(8)
+        model_card_layout.addWidget(model_cards_widget)
+        main_layout.addWidget(model_card)
 
         for i, card in enumerate(self.cards):
             card.mousePressEvent = lambda event, c=card, idx=i: self.on_card_clicked(c, idx)
@@ -104,8 +124,6 @@ class ModelStyleCard(HeaderCardWidget):
         self.select_first_interactive()
         global_event_bus.License_update.connect(self.select_first_interactive)
         global_event_bus.OCR_TaskFinishedByModel.connect(self.update_model_card_info)
-        main_layout.addStretch()
-
     def update_model_card_info(self, model_name):
         for one_card in self.cards:
             if one_card.get_name() != model_name:

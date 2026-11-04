@@ -2,13 +2,13 @@ import os
 import sys
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QStackedWidget, QHBoxLayout, QLabel, QLineEdit, QFileDialog, QStackedLayout
+    QWidget, QVBoxLayout, QStackedWidget, QHBoxLayout, QLabel, QLineEdit, QFileDialog, QStackedLayout, QFrame
 )
 from PySide6.QtGui import QFont, QAction
 
 from app.ui.library.qfluentwidgets import (
     ScrollArea, HeaderCardWidget, SegmentedWidget, setFont, FluentIcon, MessageBox,
-    PushButton, CaptionLabel, TextEdit, SpinBox, ComboBox, Slider, LineEdit,
+    PushButton, CaptionLabel, TextEdit, SpinBox, ComboBox, Slider, LineEdit, FlowLayout,
     TeachingTip, InfoBarIcon, TeachingTipTailPosition
 )
 
@@ -24,7 +24,7 @@ from app.ui.widgets.blind_watermark_text_widget import BlindWatermarkInputPanel
 from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget
 from app.ui.widgets.toggle_switch_widget import ToggleSwitch
-from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget, StyleCard, CardSeparator
+from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget, StyleCard
 
 from app.ui.common.task_params import bind_widget_to_param, LayeredTaskParams
 from app.ui.common.event_bus import global_event_bus
@@ -278,29 +278,47 @@ class BlindWatermarkModelCard(HeaderCardWidget):
 
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        main_layout.setSpacing(8)
 
         self.viewLayout.setContentsMargins(10, 10, 10, 10)
         self.viewLayout.addLayout(main_layout)
 
+        model_cards_widget = QWidget()
+        model_flow = FlowLayout(model_cards_widget, needAni=False, isTight=True)
+        model_flow.setContentsMargins(0, 0, 0, 4)
+        model_flow.setHorizontalSpacing(8)
+        model_flow.setVerticalSpacing(8)
+
         self.cards: list[(StyleCard, str)] = []
-        stable_card = StyleCard("#fa709a", self.tr("稳定可靠"), self.tr("添加盲水印后，建议提取验证，验证失败尝试更换算法"))
+        stable_card = StyleCard("#fa709a", self.tr("稳定可靠"), self.tr("添加后建议提取验证"), vertical_layout=True)
         stable_card.set_name("videoseal")
         self.cards.append((stable_card, "videoseal"))
-        main_layout.addWidget(stable_card)
-        main_layout.addWidget(CardSeparator(self))
+        model_flow.addWidget(stable_card)
 
-        high_quality_card = StyleCard("#84fab0", self.tr("追求质量"), self.tr("添加盲水印后，建议提取验证，验证失败尝试更换算法"))
+        high_quality_card = StyleCard("#84fab0", self.tr("追求质量"), self.tr("添加后建议提取验证"), vertical_layout=True)
         high_quality_card.set_name("pixelseal")
         self.cards.append((high_quality_card, "pixelseal"))
-        main_layout.addWidget(high_quality_card)
-        main_layout.addWidget(CardSeparator(self))
+        model_flow.addWidget(high_quality_card)
+
+        model_card = QFrame()
+        model_card.setObjectName("modelCard")
+        model_card.setStyleSheet("""
+            QFrame#modelCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        model_card_layout = QVBoxLayout(model_card)
+        model_card_layout.setContentsMargins(12, 10, 12, 12)
+        model_card_layout.setSpacing(8)
+        model_card_layout.addWidget(model_cards_widget)
+        main_layout.addWidget(model_card)
 
         for i, card in enumerate(self.cards):
             card_instance, _ = card
             card_instance.mousePressEvent = lambda event, c=card, idx=i: self.on_card_clicked(c, idx)
 
-        main_layout.addStretch()
         bind_widget_to_param(self, "blind_watermark_model_name", watermark_add_params, "blind.blind_watermark_model_name", transform=None)
         self.blind_watermark_model_name.emit("placeholder_model")
         self.select_first_interactive()

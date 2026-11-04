@@ -3,13 +3,13 @@ import sys
 from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
 from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QLabel, QHBoxLayout, QStackedWidget, QStackedLayout, QLineEdit, QFileDialog,
-    QButtonGroup, QPushButton
+    QButtonGroup, QPushButton, QFrame
 )
 from PySide6.QtGui import QFont, QColor, QAction
 
 from app.ui.library.qfluentwidgets import (
     setFont, HeaderCardWidget, SegmentedWidget, ScrollArea, PushButton, CaptionLabel,
-    LineEdit, FluentIcon, TeachingTip, InfoBarIcon, TeachingTipTailPosition,
+    LineEdit, FlowLayout, FluentIcon, TeachingTip, InfoBarIcon, TeachingTipTailPosition,
     MessageBox
 )
 
@@ -309,14 +309,34 @@ class ModelSelectCard(HeaderCardWidget):
 
         # 图片模型列表
         image_container = QWidget()
-        image_layout = QVBoxLayout(image_container)
-        image_layout.setContentsMargins(0, 6, 0, 6)
-        image_layout.setSpacing(0)
+        image_outer_layout = QVBoxLayout(image_container)
+        image_outer_layout.setContentsMargins(0, 6, 0, 6)
+        image_outer_layout.setSpacing(8)
 
-        reverse_edit_card = StyleCard("#8b5cf6", self.tr("智能消除"), self.tr("智能去除暗水印，无需原始水印信息"))
+        image_cards_widget = QWidget()
+        image_layout = FlowLayout(image_cards_widget, isTight=True)
+        image_layout.setContentsMargins(0, 0, 0, 4)
+        image_layout.setHorizontalSpacing(8)
+        image_layout.setVerticalSpacing(8)
+
+        reverse_edit_card = StyleCard("#8b5cf6", self.tr("智能消除"), self.tr("智能去除暗印"), vertical_layout=True)
         reverse_edit_card.set_name("reverse_edit")
         image_layout.addWidget(reverse_edit_card)
-        image_layout.addStretch()
+
+        image_model_card = QFrame()
+        image_model_card.setObjectName("imageModelCard")
+        image_model_card.setStyleSheet("""
+            QFrame#imageModelCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        image_model_card_layout = QVBoxLayout(image_model_card)
+        image_model_card_layout.setContentsMargins(12, 10, 12, 12)
+        image_model_card_layout.setSpacing(8)
+        image_model_card_layout.addWidget(image_cards_widget)
+        image_outer_layout.addWidget(image_model_card)
         self.stacked_widget.addWidget(image_container)
 
         self.image_cards = [reverse_edit_card]
@@ -324,14 +344,33 @@ class ModelSelectCard(HeaderCardWidget):
 
         # 视频模型列表
         video_container = QWidget()
-        video_layout = QVBoxLayout(video_container)
-        video_layout.setContentsMargins(0, 6, 0, 6)
-        video_layout.setSpacing(0)
+        video_outer_layout = QVBoxLayout(video_container)
+        video_outer_layout.setContentsMargins(0, 6, 0, 6)
+        video_outer_layout.setSpacing(8)
 
-        keyframe_remove_card = StyleCard("#fbc2eb", self.tr("关键帧级去除"), self.tr("对视频关键帧进行暗水印去除，并补帧生成完整视频"))
+        video_cards_widget = QWidget()
+        video_layout = FlowLayout(video_cards_widget, isTight=True)
+        video_layout.setContentsMargins(0, 0, 0, 4)
+        video_layout.setHorizontalSpacing(8)
+        video_layout.setVerticalSpacing(8)
+
+        keyframe_remove_card = StyleCard("#fbc2eb", self.tr("关键帧去除"), self.tr("关键帧处理，补帧恢复"), vertical_layout=True)
         keyframe_remove_card.set_name("video_engine")
         video_layout.addWidget(keyframe_remove_card)
-        video_layout.addStretch()
+        video_model_card = QFrame()
+        video_model_card.setObjectName("videoModelCard")
+        video_model_card.setStyleSheet("""
+            QFrame#videoModelCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        video_model_card_layout = QVBoxLayout(video_model_card)
+        video_model_card_layout.setContentsMargins(12, 10, 12, 12)
+        video_model_card_layout.setSpacing(8)
+        video_model_card_layout.addWidget(video_cards_widget)
+        video_outer_layout.addWidget(video_model_card)
         self.stacked_widget.addWidget(video_container)
 
         self.video_cards = [keyframe_remove_card]

@@ -3,12 +3,12 @@ import sys
 from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
 from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QLabel, QHBoxLayout, QStackedWidget, QStackedLayout,
-    QLineEdit, QFileDialog, QButtonGroup, QPushButton, QTextEdit
+    QLineEdit, QFileDialog, QButtonGroup, QPushButton, QTextEdit, QFrame
 )
 from PySide6.QtGui import QFont, QColor, QAction, QPixmap
 
 from app.ui.library.qfluentwidgets import (
-    setFont, HeaderCardWidget, ScrollArea, PushButton, CaptionLabel,
+    setFont, HeaderCardWidget, ScrollArea, PushButton, CaptionLabel, FlowLayout,
     LineEdit, FluentIcon, TeachingTip, InfoBarIcon, TeachingTipTailPosition,
     MessageBox
 )
@@ -230,14 +230,34 @@ class ModelSelectCard(HeaderCardWidget):
 
         # 图片模型
         image_container = QWidget()
-        image_layout = QVBoxLayout(image_container)
-        image_layout.setContentsMargins(0, 6, 0, 6)
-        image_layout.setSpacing(0)
+        image_outer_layout = QVBoxLayout(image_container)
+        image_outer_layout.setContentsMargins(0, 6, 0, 6)
+        image_outer_layout.setSpacing(8)
 
-        general_edit_card = StyleCard("#667eea", self.tr("智能重绘"), self.tr("语义理解强，细节丰富，复杂场景效果佳"))
+        image_cards_widget = QWidget()
+        image_layout = FlowLayout(image_cards_widget, isTight=True)
+        image_layout.setContentsMargins(0, 0, 0, 4)
+        image_layout.setHorizontalSpacing(8)
+        image_layout.setVerticalSpacing(8)
+
+        general_edit_card = StyleCard("#667eea", self.tr("智能重绘"), self.tr("复杂场景，效果好"), vertical_layout=True)
         general_edit_card.set_name("general_edit")
         image_layout.addWidget(general_edit_card)
-        image_layout.addStretch()
+
+        image_model_card = QFrame()
+        image_model_card.setObjectName("imageModelCard")
+        image_model_card.setStyleSheet("""
+            QFrame#imageModelCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        image_model_card_layout = QVBoxLayout(image_model_card)
+        image_model_card_layout.setContentsMargins(12, 10, 12, 12)
+        image_model_card_layout.setSpacing(8)
+        image_model_card_layout.addWidget(image_cards_widget)
+        image_outer_layout.addWidget(image_model_card)
         self.stacked_widget.addWidget(image_container)
 
         self.image_cards = [general_edit_card]

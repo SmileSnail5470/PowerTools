@@ -19,7 +19,7 @@ from app.ui.widgets.directory_selector_widget import DirectorySelectorWidget
 from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
-from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget, StyleCard, CardSeparator
+from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget, StyleCard
 from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 
 from app.ui.common.event_bus import global_event_bus
@@ -225,21 +225,39 @@ class ModelSelectCard(HeaderCardWidget):
 
         # 图片模型
         image_container = QWidget(self)
-        image_layout = QVBoxLayout(image_container)
-        image_layout.setContentsMargins(0, 6, 0, 6)
-        image_layout.setSpacing(0)
+        image_outer_layout = QVBoxLayout(image_container)
+        image_outer_layout.setContentsMargins(0, 6, 0, 6)
+        image_outer_layout.setSpacing(8)
 
-        restoration_card = StyleCard("#f093fb", self.tr("智能修复"), self.tr("统一的图像修复模型，覆盖多种退化场景，速度较慢"))
+        image_cards_widget = QWidget()
+        image_layout = FlowLayout(image_cards_widget, isTight=True)
+        image_layout.setContentsMargins(0, 0, 0, 4)
+        image_layout.setHorizontalSpacing(8)
+        image_layout.setVerticalSpacing(8)
+
+        restoration_card = StyleCard("#f093fb", self.tr("智能修复"), self.tr("多种退化场景，速度较慢"), vertical_layout=True)
         restoration_card.set_name("image_restoration")
         image_layout.addWidget(restoration_card)
-        image_layout.addWidget(CardSeparator(self))
 
-        super_resolution_card = StyleCard("#84fab0", self.tr("图像高清"), self.tr("提高图像分辨率，增强图像清晰度和细节，速度较慢"))
+        super_resolution_card = StyleCard("#84fab0", self.tr("图像高清"), self.tr("高分辨率，速度较慢"), vertical_layout=True)
         super_resolution_card.set_name("image_sr")
         image_layout.addWidget(super_resolution_card)
-        image_layout.addWidget(CardSeparator(self))
 
-        image_layout.addStretch()
+        image_model_card = QFrame()
+        image_model_card.setObjectName("imageModelCard")
+        image_model_card.setStyleSheet("""
+            QFrame#imageModelCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        image_model_card_layout = QVBoxLayout(image_model_card)
+        image_model_card_layout.setContentsMargins(12, 10, 12, 12)
+        image_model_card_layout.setSpacing(8)
+        image_model_card_layout.addWidget(image_cards_widget)
+        image_outer_layout.addWidget(image_model_card)
+
         self.stacked_widget.addWidget(image_container)
         self.image_cards: list[StyleCard] = [restoration_card, super_resolution_card]
 
