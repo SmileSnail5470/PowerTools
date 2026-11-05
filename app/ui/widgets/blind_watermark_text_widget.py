@@ -4,7 +4,10 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLineEdit, QLabel, QPushButton, QGraphicsDropShadowEffect, QHBoxLayout
 )
 from PySide6.QtGui import QColor, QRegularExpressionValidator
-from app.ui.library.qfluentwidgets import setFont, FlowLayout, TeachingTip, InfoBarIcon, TeachingTipTailPosition, FluentIcon
+from app.ui.library.qfluentwidgets import setFont, FlowLayout, TeachingTip, InfoBarIcon, TeachingTipTailPosition, FluentIcon, ToolButton
+
+
+DEFAULT_CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ,1234"
 
 
 class FluentTagButton(QPushButton):
@@ -31,8 +34,8 @@ class FluentTagButton(QPushButton):
         """)
 
 
-class DeleteButton(QPushButton):
-    def __init__(self, parent=None):
+class FluentButton(QPushButton):
+    def __init__(self, type="delete", parent=None):
         super().__init__(parent)
         self.setFixedSize(36, 36)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -42,24 +45,27 @@ class DeleteButton(QPushButton):
         
         self._setup_shadow()
         
-        self.setIcon(FluentIcon.DELETE.icon())
+        if type == "delete":
+            self.setIcon(FluentIcon.DELETE.icon())
+        elif type == "reset":
+            self.setIcon(FluentIcon.ROTATE.icon())
         self.setIconSize(QSize(20, 20))
         
     def _setup_style(self):
         self.setStyleSheet("""
-            DeleteButton {
+            FluentButton {
                 background-color: transparent;
                 border: none;
                 border-radius: 16px;
                 padding: 0px;
             }
-            DeleteButton:hover {
+            FluentButton:hover {
                 background-color: rgba(244, 67, 54, 0.1);
             }
-            DeleteButton:pressed {
+            FluentButton:pressed {
                 background-color: rgba(244, 67, 54, 0.2);
             }
-            DeleteButton QAbstractButton {
+            FluentButton QAbstractButton {
                 background: transparent;
             }
         """)
@@ -77,15 +83,14 @@ class BlindWatermarkInputPanel(QWidget):
     textUpdate = Signal(str)
     charsChange = Signal(str)
 
-    def __init__(self, allowed_chars=None, max_length = 15, reg_exp="[A-Za-z1-4]*", parent=None):
+    def __init__(self, allowed_chars=None, max_length=15, parent=None):
         super().__init__(parent)
 
         if allowed_chars is None:
-            allowed_chars = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ,1234")
+            allowed_chars = list(DEFAULT_CHARSET)
 
         self.allowed_chars = allowed_chars
         self.max_length = max_length
-        self.reg_exp = reg_exp
 
         self.setObjectName("BlindWatermarkInputPanel")
         self.setup_ui()
@@ -109,14 +114,14 @@ class BlindWatermarkInputPanel(QWidget):
         self.input = QLineEdit()
         self.input.setReadOnly(False)
         self.input.setMaxLength(self.max_length)
-        self.input.setValidator(QRegularExpressionValidator(QRegularExpression(self.reg_exp)))
+        self.input.setValidator(QRegularExpressionValidator(QRegularExpression(self.build_reg_exp())))
         self.input.setPlaceholderText(self.tr("输入水印文字"))
         self.input.setMinimumHeight(36)
         setFont(self.input, 13)
         self.input.textChanged.connect(lambda s: self.textUpdate.emit(s.upper()))
         h_layout.addWidget(self.input)
 
-        remove_btn = DeleteButton(self)
+        remove_btn = FluentButton(type="delete", parent=self)
         remove_btn.clicked.connect(lambda: self.input.clear())
         h_layout.addWidget(remove_btn)
 
@@ -157,7 +162,17 @@ class BlindWatermarkInputPanel(QWidget):
         self.charset_input.setMinimumHeight(36)
         setFont(self.charset_input, 13)
         self.charset_input.textChanged.connect(self.update_charset)
-        charset_layout.addWidget(self.charset_input)
+
+        charset_input_layout = QHBoxLayout()
+        charset_input_layout.setContentsMargins(0, 0, 0, 0)
+        charset_input_layout.setSpacing(4)
+        charset_input_layout.addWidget(self.charset_input)
+
+        self.reset_charset_button = FluentButton(type="reset", parent=self)
+        self.reset_charset_button.setToolTip(self.tr("恢复默认字符集"))
+        self.reset_charset_button.clicked.connect(lambda: self.charset_input.setText(DEFAULT_CHARSET))
+        charset_input_layout.addWidget(self.reset_charset_button)
+        charset_layout.addLayout(charset_input_layout)
         layout.addLayout(charset_layout)
 
     def apply_style(self):

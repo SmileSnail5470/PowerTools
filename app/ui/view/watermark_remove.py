@@ -1,9 +1,10 @@
 import os
 import sys
-from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
+import cv2
+from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, QSize
 from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QLabel, QHBoxLayout, QStackedWidget, QLineEdit, QFileDialog, QStackedLayout, 
-    QSlider, QButtonGroup, QPushButton, QFrame, QTextEdit
+    QSlider, QButtonGroup, QPushButton, QFrame, QTextEdit, QSpinBox
 )
 from PySide6.QtGui import QFont, QColor, QAction
 
@@ -16,27 +17,28 @@ from app.ui.library.qfluentwidgets import(
 from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.file_selector_widget import FileSelectorWidget
 from app.ui.widgets.directory_selector_widget import DirectorySelectorWidget
-from app.ui.widgets.custom_card_group_widget import StyleCard, CardSeparator
+from app.ui.widgets.custom_card_group_widget import StyleCard
 from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget
 from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
 from app.ui.widgets.custom_navigation import CustomNavigation
-from app.ui.widgets.watermark_detect_settings import WatermarkDetectSettings
+from app.ui.widgets.watermark_detect_settings import WatermarkDetectSettings, WatermarkVideoPreviewDialog
 
 from app.ui.common.event_bus import global_event_bus
 from app.controllers.task_manager import global_task_manager
-from app.ui.common.task_params import bind_widget_to_param, TaskParams
+from app.ui.common.task_params import bind_widget_to_param, LayeredTaskParams
 from app.ui.common.task_status import TaskStatusModel
 from app.ui.common.utils import get_file_type, global_backend_info_cache
 from app.ui.common.config import cfg
 
-from app.workers.watermark_remove import WatermarkRemoveWork
+from app.workers.watermark_remove import WatermarkRemoveWork, WatermarkRemoveUIParams, VideoTrackingParams
+from app.utils.image_io import open_video_capture
 
 from app.license.globals import feature_gate
 
 
-watermark_remove_params = TaskParams()
+watermark_remove_params = LayeredTaskParams(params=WatermarkRemoveUIParams())
 watermark_remove_task_status_model = TaskStatusModel()
 # 当前批次已提交的任务 future，用于支持一次性取消
 watermark_remove_active_futures = []
@@ -61,10 +63,10 @@ class FileSelectorCard(HeaderCardWidget):
 
         singleFileSelector = FileSelectorWidget(self)
         singleFileSelector.item_selected.connect(lambda file_path: global_event_bus.watermarkRemove_InputFileUpdate.emit(file_path))
-        bind_widget_to_param(singleFileSelector, "item_selected", watermark_remove_params, "input_path", transform=None)
+        bind_widget_to_param(singleFileSelector, "item_selected", watermark_remove_params, "io.input_path", transform=None)
         batchFilesSelector = DirectorySelectorWidget(self)
         batchFilesSelector.item_selected.connect(lambda file_path: global_event_bus.watermarkRemove_InputFileUpdate.emit(file_path))
-        bind_widget_to_param(batchFilesSelector, "item_selected", watermark_remove_params, "input_path", transform=None)
+        bind_widget_to_param(batchFilesSelector, "item_selected", watermark_remove_params, "io.input_path", transform=None)
 
         self.addSubInterface(singleFileSelector, 'FileSelectorWidget', self.tr("文件"))
         self.addSubInterface(batchFilesSelector, 'DirectorySelectorWidget', self.tr("目录"))
@@ -85,7 +87,7 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setTitle(self.tr("🔍 水印检测方式"))
+        self.setTitle(self.tr("🔍 水印检测设置"))
         self.setBorderRadius(8)
 
         main_layout = QVBoxLayout()
@@ -96,103 +98,30 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
         self.viewLayout.addLayout(main_layout)
 
         watermark_detect_settings = WatermarkDetectSettings(parent=self)
-        bind_widget_to_param(watermark_detect_settings, "watermarkDetectType", watermark_remove_params, "watermark_detect_type", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "watermarkFormat", watermark_remove_params, "watermark_format", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "manualWatermarktMaskPath", watermark_remove_params, "manual_watermark_mask_path", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "maskDirectoryChanged", watermark_remove_params, "manual_watermark_mask_path", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "watermarkAIInteractiveType", watermark_remove_params, "watermark_ai_interactive_type", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "watermarkDetectPrompt", watermark_remove_params, "watermark_detect_prompt", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "watermarkBoxes", watermark_remove_params, "watermark_boxes", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "imageBoxes", watermark_remove_params, "image_boxes", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "watermarkContent", watermark_remove_params, "watermark_content", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "watermarkConfidence", watermark_remove_params, "watermark_confidence", transform=None)
-        bind_widget_to_param(watermark_detect_settings, "watermarkTrackingData", watermark_remove_params, "watermark_tracking_data", transform=None)
-        # 设置参数默认值
-        watermark_detect_settings.watermarkDetectType.emit("ai_interactive_detect")
-        watermark_detect_settings.watermarkFormat.emit("static_watermark")
-        watermark_detect_settings.manualWatermarktMaskPath.emit("")
-        watermark_detect_settings.maskDirectoryChanged.emit("")
-        watermark_detect_settings.watermarkAIInteractiveType.emit("semantic_detect")
-        watermark_detect_settings.watermarkDetectPrompt.emit("")
-        watermark_detect_settings.watermarkBoxes.emit([])
-        watermark_detect_settings.imageBoxes.emit([])
-        watermark_detect_settings.watermarkContent.emit("general_watermark")
-        watermark_detect_settings.watermarkConfidence.emit(0.3)
-        watermark_detect_settings.watermarkTrackingData.emit({"keyframes": [], "end_frame": None, "reverse_tracking_frames": 8})
+        bind_widget_to_param(watermark_detect_settings, "watermarkDetectType", watermark_remove_params, "detect.watermark_detect_type", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "videoWatermarkFormat", watermark_remove_params, "detect.video_watermark_format", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "videoWatermarkAIDetectStrategy", watermark_remove_params, "detect.video_watermark_ai_detect_strategy", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "videoWatermarkAIDetectFrameRange", watermark_remove_params, "detect.video_watermark_ai_detect_frame_range", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "videoWatermarkAIDetectAnchorFrame", watermark_remove_params, "detect.video_watermark_ai_detect_anchor_frame", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "manualWatermarktMaskPath", watermark_remove_params, "detect.manual_watermark_mask_path", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "maskDirectoryChanged", watermark_remove_params, "detect.manual_watermark_mask_path", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkAIDetectMethod", watermark_remove_params, "detect.watermark_ai_detect_method", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkAIDetectPrompt", watermark_remove_params, "detect.watermark_ai_detect_prompt", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkAIDetectPosBoxes", watermark_remove_params, "detect.watermark_ai_detect_pos_boxes", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkAIDetectNegBoxes", watermark_remove_params, "detect.watermark_ai_detect_neg_boxes", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkAIDetectConfidence", watermark_remove_params, "detect.watermark_ai_detect_confidence", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "videoWatermarkTrackingData", watermark_remove_params, "detect.video_watermark_tracking_data", transform=None)
 
         global_event_bus.watermarkRemove_InputFileUpdate.connect(
             lambda file_path: (
                 watermark_detect_settings.set_file_path(file_path=file_path),
-                None if file_path else watermark_detect_settings.watermarkBoxes.emit([]),
-                None if file_path else watermark_detect_settings.imageBoxes.emit([]),
-                None if file_path else watermark_detect_settings.watermarkTrackingData.emit({"keyframes": [], "end_frame": None, "reverse_tracking_frames": 8})
+                None if file_path else watermark_detect_settings.watermarkAIDetectPosBoxes.emit([]),
+                None if file_path else watermark_detect_settings.watermarkAIDetectNegBoxes.emit([]),
+                None if file_path else watermark_detect_settings.videoWatermarkTrackingData.emit(VideoTrackingParams()),
             )
         )
 
         main_layout.addWidget(watermark_detect_settings)
-
-
-class WatermarkMaskDilate(HeaderCardWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setTitle(self.tr("⬆️ 水印 Mask"))
-        self.setBorderRadius(8)
-
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(10)
-
-        self.viewLayout.setContentsMargins(10, 10, 10, 10)
-        self.viewLayout.addLayout(main_layout)
-
-        slider_layout = QHBoxLayout()
-        slider_layout.setContentsMargins(0, 0, 0, 0)
-        slider_layout.setSpacing(10)
-
-        self.label = QLabel("2")
-        self.label.setFixedWidth(25)
-        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.label.setStyleSheet("color: #666666;")
-
-        # 滑块
-        self.slider = QSlider(Qt.Orientation.Horizontal)
-        self.slider.setMinimum(0)
-        self.slider.setMaximum(8)
-        self.slider.setValue(2)
-        self.slider.setTickInterval(1)
-        self.slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.slider.setSingleStep(1)
-        self.slider.setStyleSheet("""
-            QSlider::groove:horizontal {
-                height: 6px;
-                background: #ddd;
-                border-radius: 3px;
-            }
-            QSlider::handle:horizontal {
-                background: #2196F3;
-                border: none;
-                width: 16px;
-                height: 16px;
-                margin: -5px 0;
-                border-radius: 8px;
-            }
-            QSlider::sub-page:horizontal {
-                background: #2196F3;
-                border-radius: 3px;
-            }
-        """)
-        label = QLabel(self.tr("扩张系数"))
-        label.setStyleSheet("color: #666666;")
-        slider_layout.addWidget(label)
-        slider_layout.addWidget(self.slider)
-        slider_layout.addWidget(self.label)
-        bind_widget_to_param(self.slider, "valueChanged", watermark_remove_params, "mask_dilate", transform=None)
-        self.slider.valueChanged.connect(self.on_value_changed)
-        self.slider.valueChanged.emit(2)
-        main_layout.addLayout(slider_layout)
-
-    def on_value_changed(self, value):
-        self.label.setText(str(value))
 
 
 class WatermarkTypeCardItem(QFrame):
@@ -202,12 +131,12 @@ class WatermarkTypeCardItem(QFrame):
         super().__init__(parent)
         self.key = key
         self.is_selected = False
-        self.setFixedSize(105, 45)
+        self.setFixedSize(95, 40)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setToolTip(description)
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 6, 8, 6)
-        layout.setSpacing(6)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(4)
 
         icon_label = QLabel(icon, self)
         icon_label.setFixedSize(20, 20)
@@ -217,7 +146,7 @@ class WatermarkTypeCardItem(QFrame):
         )
         layout.addWidget(icon_label)
         name_label = QLabel(name, self)
-        setFont(name_label, 12)
+        setFont(name_label, 11)
         name_label.setStyleSheet("color: #1f2937; background: transparent;")
         layout.addWidget(name_label)
         self.set_selected(False)
@@ -241,73 +170,12 @@ class WatermarkTypeCardItem(QFrame):
             return
         super().mousePressEvent(event)
 
-
-class RestorationWatermarkPromptCard(HeaderCardWidget):
-    PRESETS = (
-        ("general", "💧", "通用水印", "文档中的文字或图形水印", "#38bdf8"),
-        ("horizontal", "↔️", "半透明水平", "半透明水平文字水印", "#22c55e"),
-        ("vertical", "↕️", "半透明垂直", "半透明垂直文字水印", "#f59e0b"),
-        ("diagonal", "📐", "半透明斜向", "半透明斜向文字水印", "#f472b6"),
-        ("logo", "©️", "图片/Logo", "半透明图片或 Logo 水印", "#0ea5e9"),
-    )
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setTitle(self.tr("📝 文档水印参数"))
-        self.setBorderRadius(8)
-        self.viewLayout.setContentsMargins(10, 10, 10, 10)
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-        self.viewLayout.addLayout(layout)
-
-        type_label = CaptionLabel(text=self.tr("水印类型"))
-        setFont(type_label, fontSize=14, weight=QFont.DemiBold)
-        layout.addWidget(type_label)
-        flow_layout = FlowLayout(needAni=True)
-        flow_layout.setContentsMargins(0, 0, 0, 0)
-        flow_layout.setHorizontalSpacing(8)
-        flow_layout.setVerticalSpacing(8)
-        self.type_cards = []
-        for key, icon, name, description, color in self.PRESETS:
-            card = WatermarkTypeCardItem(key, icon, name, description, color, self)
-            card.clicked.connect(self._on_type_selected)
-            flow_layout.addWidget(card)
-            self.type_cards.append(card)
-        layout.addLayout(flow_layout)
-
-        layout.addSpacing(8)
-        prompt_label = CaptionLabel(text=self.tr("自定义水印类型（可选）"))
-        setFont(prompt_label, fontSize=14, weight=QFont.DemiBold)
-        layout.addWidget(prompt_label)
-        self.prompt_edit = QTextEdit(self)
-        self.prompt_edit.setMaximumHeight(72)
-        self.prompt_edit.setPlaceholderText(self.tr("描述什么类型水印；留空则使用上方预设（建议使用英文）"))
-        self.prompt_edit.setStyleSheet("""
-            QTextEdit { border: 1px solid #e0e0e0; border-radius: 8px; padding: 6px; background-color: #fafafa; color: #1a1a1a; }
-            QTextEdit:focus { border: 1px solid #667eea; background-color: #ffffff; }
-        """)
-        setFont(self.prompt_edit, fontSize=13)
-        self.prompt_edit.textChanged.connect(
-            lambda: watermark_remove_params.set_param("restoration_prompt", self.prompt_edit.toPlainText())
-        )
-        layout.addWidget(self.prompt_edit)
-
-        self._on_type_selected(self.PRESETS[0][0])
-
-    def _on_type_selected(self, selected_key):
-        for card in self.type_cards:
-            card.set_selected(card.key == selected_key)
-        watermark_remove_params.set_param("restoration_watermark_type", selected_key)
-
-
 class WatermarkRemoveStyleCard(HeaderCardWidget):
     model_name = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setTitle(self.tr("🎨 水印去除模型"))
+        self.setTitle(self.tr("🎨 水印去除设置"))
         self.setBorderRadius(8)
 
         main_layout = QVBoxLayout()
@@ -368,46 +236,56 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         self.all_cards: list[StyleCard] = []
 
         self.image_container = QWidget()
-        image_layout = QVBoxLayout(self.image_container)
-        image_layout.setContentsMargins(0, 6, 0, 6)
-        image_layout.setSpacing(0)
+        image_outer_layout = QVBoxLayout(self.image_container)
+        image_outer_layout.setContentsMargins(0, 6, 0, 6)
+        image_outer_layout.setSpacing(8)
 
-        general_edit_card = StyleCard("#667eea", self.tr("智能重绘"), self.tr("语义理解强，细节丰富，复杂场景效果佳，速度较慢"))
+        self.image_cards_widget = QWidget()
+        sp = self.image_cards_widget.sizePolicy()
+        sp.setHeightForWidth(True)
+        self.image_cards_widget.setSizePolicy(sp)
+        image_layout = FlowLayout(self.image_cards_widget, needAni=True, isTight=True)
+        image_layout.setContentsMargins(0, 0, 0, 4)
+        image_layout.setHorizontalSpacing(8)
+        image_layout.setVerticalSpacing(8)
+
+        general_edit_card = StyleCard("#667eea", self.tr("智能重绘"), self.tr("复杂场景，效果好"), vertical_layout=True)
         general_edit_card.set_name("general_edit")
         image_layout.addWidget(general_edit_card)
-        general_edit_separator = CardSeparator(self)
-        image_layout.addWidget(general_edit_separator)
 
-        patchwiper_card = StyleCard("#4facfe", self.tr("细节增强"), self.tr("智能重建细节，提升清晰度，速度慢(不适合字幕)"))
+        object_removal_card = StyleCard("#e3fb93", self.tr("智能消除"), self.tr("精准消除，速度快"), vertical_layout=True, badge=self.tr("小于 8G 显存推荐"))
+        object_removal_card.set_name("object_removal")
+        image_layout.addWidget(object_removal_card)
+
+        patchwiper_card = StyleCard("#4facfe", self.tr("细节增强"), self.tr("细节重建，不适合字幕"), vertical_layout=True)
         patchwiper_card.set_name("patchwiper")
         image_layout.addWidget(patchwiper_card)
-        patchwiper_separator = CardSeparator(self)
-        image_layout.addWidget(patchwiper_separator)
 
-        lama_card = StyleCard("#84fab0", self.tr("自然保守"), self.tr("画面衔接自然，可能丢失细节，速度适中"))
-        lama_card.set_name("lama")
-        image_layout.addWidget(lama_card)
-        lama_separator = CardSeparator(self)
-        image_layout.addWidget(lama_separator)
-
-        coordfill_card = StyleCard("#fbc2eb", self.tr("快速填充"), self.tr("细节表现一般，适合简单背景，速度极快"))
+        coordfill_card = StyleCard("#fbc2eb", self.tr("快速填充"), self.tr("简单背景，极速处理"), vertical_layout=True)
         coordfill_card.set_name("coordfill")
         image_layout.addWidget(coordfill_card)
-        coordfill_separator = CardSeparator(self)
-        image_layout.addWidget(coordfill_separator)
 
-        emdf_card = StyleCard("#f093fb", self.tr("自适应修补"), self.tr("效果稳定，可能丢失细节，速度稍慢"))
+        lama_card = StyleCard("#84fab0", self.tr("自然保守"), self.tr("自然衔接，保留不足"), vertical_layout=True)
+        lama_card.set_name("lama")
+        image_layout.addWidget(lama_card)
+
+        emdf_card = StyleCard("#f093fb", self.tr("自适应修补"), self.tr("稳定修补，细节易失"), vertical_layout=True)
         emdf_card.set_name("emdf")
         image_layout.addWidget(emdf_card)
-        emdf_separator = CardSeparator(self)
-        image_layout.addWidget(emdf_separator)
 
-        grig_card = StyleCard("#a18cd1", self.tr("平衡修复"), self.tr("结构保持好，可能丢失细节，速度快"))
+        grig_card = StyleCard("#a18cd1", self.tr("平衡修复"), self.tr("结构稳定，处理快"), vertical_layout=True)
         grig_card.set_name("grig")
         image_layout.addWidget(grig_card)
 
-        self.image_cards = [general_edit_card, patchwiper_card, lama_card, coordfill_card, emdf_card, grig_card]
-        self.image_card_separators = [general_edit_separator, patchwiper_separator, lama_separator, coordfill_card, emdf_separator]
+        self.image_cards = [
+            general_edit_card, 
+            object_removal_card,
+            patchwiper_card,
+            coordfill_card,
+            lama_card,  
+            emdf_card, 
+            grig_card
+        ]
         self.image_model_visible_count = 4
         self.image_models_expanded = False
 
@@ -427,8 +305,26 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
             }
         """)
         self.image_more_button.clicked.connect(self.toggle_image_models)
-        image_layout.addWidget(self.image_more_button)
-        image_layout.addStretch()
+
+        image_model_card = QFrame()
+        image_model_card.setObjectName("modelCard")
+        image_model_card.setStyleSheet("""
+            QFrame#modelCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        image_model_card_layout = QVBoxLayout(image_model_card)
+        image_model_card_layout.setContentsMargins(12, 10, 12, 12)
+        image_model_card_layout.setSpacing(8)
+        image_model_card_layout.addWidget(self.image_cards_widget)
+        image_model_card_layout.addWidget(self.image_more_button)
+        image_outer_layout.addWidget(image_model_card)
+
+        self.image_params_widget = self._build_mask_dilate_params()
+        image_outer_layout.addWidget(self.image_params_widget)
+
         self.stacked_widget.addWidget(self.image_container)
 
         self._set_extra_image_models_visible(False)
@@ -436,41 +332,83 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         self.all_cards.extend(self.image_cards)
 
         document_container = QWidget()
-        document_layout = QVBoxLayout(document_container)
-        document_layout.setContentsMargins(0, 6, 0, 6)
-        document_layout.setSpacing(0)
+        document_outer_layout = QVBoxLayout(document_container)
+        document_outer_layout.setContentsMargins(0, 6, 0, 6)
+        document_outer_layout.setSpacing(8)
 
-        image_restoration_card = StyleCard("#f093fb", self.tr("智能修补"), self.tr("专为文档/截图设计，文字排版还原准确，速度较慢"))
+        document_cards_widget = QWidget()
+        document_flow = FlowLayout(document_cards_widget, isTight=True)
+        document_flow.setContentsMargins(0, 0, 0, 4)
+        document_flow.setHorizontalSpacing(8)
+        document_flow.setVerticalSpacing(8)
+
+        image_restoration_card = StyleCard("#f093fb", self.tr("智能修补"), self.tr("文档截图，精细修复"), vertical_layout=True)
         image_restoration_card.set_name("image_restoration")
-        document_layout.addWidget(image_restoration_card)
+        document_flow.addWidget(image_restoration_card)
 
-        document_layout.addStretch()
+        document_model_card = QFrame()
+        document_model_card.setObjectName("docModelCard")
+        document_model_card.setStyleSheet("""
+            QFrame#docModelCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        document_model_card_layout = QVBoxLayout(document_model_card)
+        document_model_card_layout.setContentsMargins(12, 10, 12, 12)
+        document_model_card_layout.setSpacing(8)
+        document_model_card_layout.addWidget(document_cards_widget)
+        document_outer_layout.addWidget(document_model_card)
+
+        document_params_widget = self._build_restoration_prompt_params()
+        document_outer_layout.addWidget(document_params_widget)
+
         self.stacked_widget.addWidget(document_container)
 
         self.document_cards = [image_restoration_card]
         self.all_cards.extend(self.document_cards)
 
         video_container = QWidget()
-        video_layout = QVBoxLayout(video_container)
-        video_layout.setContentsMargins(0, 6, 0, 6)
-        video_layout.setSpacing(0)
+        video_outer_layout = QVBoxLayout(video_container)
+        video_outer_layout.setContentsMargins(0, 6, 0, 6)
+        video_outer_layout.setSpacing(8)
 
-        video_seq_card = StyleCard("#9b59b6", self.tr("视频时序级擦除"), self.tr("跨帧追踪锁定，无闪烁，适合复杂动态视频"))
+        video_cards_widget = QWidget()
+        video_flow = FlowLayout(video_cards_widget, isTight=True)
+        video_flow.setContentsMargins(0, 0, 0, 4)
+        video_flow.setHorizontalSpacing(8)
+        video_flow.setVerticalSpacing(8)
+
+        video_engine_card = StyleCard("#2980b9", self.tr("关键帧擦除"), self.tr("智能传播，速度适中"), vertical_layout=True, badge=self.tr("小于 8G 显存推荐"))
+        video_engine_card.set_name("video_engine")
+        video_flow.addWidget(video_engine_card)
+
+        video_seq_card = StyleCard("#9b59b6", self.tr("时序擦除"), self.tr("跨帧追踪，减少闪烁"), vertical_layout=True)
         video_seq_card.set_name("ppt")
-        video_layout.addWidget(video_seq_card)
-        # video_seq_separator = CardSeparator(self)
-        # video_layout.addWidget(video_seq_separator)
+        video_flow.addWidget(video_seq_card)
 
-        # video_engine_card = StyleCard("#2980b9", self.tr("关键帧级擦除"), self.tr("图片模型处理关键帧，智能传播至连续帧，兼顾效果与时序一致性"))
-        # video_engine_card.set_name("video_engine")
-        # video_layout.addWidget(video_engine_card)
+        video_model_card = QFrame()
+        video_model_card.setObjectName("videoModelCard")
+        video_model_card.setStyleSheet("""
+            QFrame#videoModelCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        video_model_card_layout = QVBoxLayout(video_model_card)
+        video_model_card_layout.setContentsMargins(12, 10, 12, 12)
+        video_model_card_layout.setSpacing(8)
+        video_model_card_layout.addWidget(video_cards_widget)
+        video_outer_layout.addWidget(video_model_card)
 
-        
-        video_layout.addStretch()
+        video_params_widget = self._build_mask_dilate_params()
+        video_outer_layout.addWidget(video_params_widget)
+
         self.stacked_widget.addWidget(video_container)
         
-        # self.video_cards = [video_seq_card, video_engine_card]
-        self.video_cards = [video_seq_card]
+        self.video_cards = [video_engine_card, video_seq_card]
         self.all_cards.extend(self.video_cards)
 
         self.tab_image.toggled.connect(lambda checked: self.on_tab_changed(0, checked))
@@ -480,21 +418,379 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         for card in self.all_cards:
             card.mousePressEvent = lambda event, c=card: self.on_card_clicked(c)
 
-        bind_widget_to_param(self, "model_name", watermark_remove_params, "model_name", transform=None)
+        bind_widget_to_param(self, "model_name", watermark_remove_params, "model.model_name", transform=None)
         self.select_first_interactive()
         global_event_bus.watermarkRemove_InputFileUpdate.connect(lambda file_path: self.update_default_models(file_path=file_path))
         global_event_bus.License_update.connect(self.select_first_interactive)
         global_event_bus.watermarkRemove_TaskFinishedByModel.connect(self.update_model_card_info)
-        main_layout.addStretch()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._update_stacked_height()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_stacked_height()
+
+    def _update_stacked_height(self):
+        current_index = self.stacked_widget.currentIndex()
+        page_widget = self.stacked_widget.widget(current_index)
+        if page_widget:
+            available_width = self.stacked_widget.width()
+            if available_width <= 0:
+                available_width = self.width() - 20
+            page_h = self._calc_widget_height(page_widget, available_width)
+            self.stacked_widget.setFixedHeight(page_h)
 
     def _card_pool(self, index: int) -> list:
         return {0: self.image_cards, 1: self.document_cards, 2: self.video_cards}.get(index, self.image_cards)
 
+    def _build_params_section_header(self) -> QWidget:
+        header = QWidget()
+        header.setStyleSheet("QWidget { background: transparent; }")
+        h_layout = QHBoxLayout(header)
+        h_layout.setContentsMargins(0, 4, 0, 0)
+        h_layout.setSpacing(8)
+
+        icon_label = QLabel("⚙️")
+        setFont(icon_label, 13)
+        icon_label.setStyleSheet("color: #555555; background: transparent;")
+
+        title_label = QLabel(self.tr("参数设置"))
+        setFont(title_label, 13, QFont.DemiBold)
+        title_label.setStyleSheet("color: #555555; background: transparent;")
+
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setStyleSheet("color: #e2e8f0;")
+
+        h_layout.addWidget(icon_label)
+        h_layout.addWidget(title_label)
+        h_layout.addWidget(line, 1)
+        return header
+
+    def _build_mask_dilate_params(self) -> QWidget:
+        container = QFrame()
+        container.setObjectName("paramsCard")
+        container.setStyleSheet("""
+            QFrame#paramsCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(10)
+        layout.addWidget(self._build_params_section_header())
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+        name_label = QLabel(self.tr("水印 Mask 扩张系数"))
+        setFont(name_label, 13, QFont.DemiBold)
+        name_label.setStyleSheet("color: #2c3e50; background: transparent;")
+        hint_label = QLabel(self.tr("让遮罩稍外扩，盖住水印边缘"))
+        setFont(hint_label, 10)
+        hint_label.setStyleSheet("color: #888888; background: transparent;")
+        value_label = QLabel("2")
+        value_label.setFixedWidth(20)
+        value_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        setFont(value_label, 13, QFont.DemiBold)
+        value_label.setStyleSheet("color: #3498db; background: transparent;")
+        row.addWidget(name_label)
+        row.addWidget(hint_label, 1)
+        row.addWidget(value_label)
+        layout.addLayout(row)
+
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setMinimum(0)
+        slider.setMaximum(8)
+        slider.setValue(2)
+        slider.setTickInterval(1)
+        slider.setSingleStep(1)
+        slider.setStyleSheet("""
+            QSlider::groove:horizontal {
+                height: 6px;
+                background: #e2e8f0;
+                border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: #3498db;
+                border: none;
+                width: 18px;
+                height: 18px;
+                margin: -6px 0;
+                border-radius: 9px;
+            }
+            QSlider::sub-page:horizontal {
+                background: #3498db;
+                border-radius: 3px;
+            }
+        """)
+        slider.setFixedHeight(22)
+        slider.valueChanged.connect(lambda v: value_label.setText(str(v)))
+        bind_widget_to_param(slider, "valueChanged", watermark_remove_params, "model.mask_dilate", transform=None)
+        slider.valueChanged.emit(2)
+        layout.addWidget(slider)
+        return container
+
+    def _build_restoration_prompt_params(self) -> QWidget:
+        PRESETS = (
+            ("general",    "💧", self.tr("通用水印"),   "#38bdf8"),
+            ("horizontal", "↔️", self.tr("半透明水平"), "#22c55e"),
+            ("vertical",   "↕️", self.tr("半透明垂直"), "#f59e0b"),
+            ("diagonal",   "📐", self.tr("半透明斜向"), "#f472b6"),
+            ("logo",       "©️", self.tr("图片/Logo"),  "#0ea5e9"),
+        )
+        container = QFrame()
+        container.setObjectName("restorationParamsCard")
+        container.setStyleSheet("""
+            QFrame#restorationParamsCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(10)
+        layout.addWidget(self._build_params_section_header())
+
+        type_label = QLabel(self.tr("水印类型"))
+        setFont(type_label, 13, QFont.DemiBold)
+        type_label.setStyleSheet("color: #2c3e50; background: transparent;")
+        layout.addWidget(type_label)
+
+        type_cards: list[WatermarkTypeCardItem] = []
+        flow_widget = QWidget()
+        flow_widget.setStyleSheet("QWidget { background: transparent; }")
+        flow_layout = FlowLayout(flow_widget, needAni=True)
+        flow_layout.setContentsMargins(0, 0, 0, 0)
+        flow_layout.setHorizontalSpacing(8)
+        flow_layout.setVerticalSpacing(8)
+
+        def _on_type_selected(selected_key):
+            for tc in type_cards:
+                tc.set_selected(tc.key == selected_key)
+
+        for key, icon, name, color in PRESETS:
+            tc = WatermarkTypeCardItem(key, icon, name, name, color, container)
+            tc.clicked.connect(_on_type_selected)
+            bind_widget_to_param(tc, "clicked", watermark_remove_params, "model.restoration_watermark_type")
+            flow_layout.addWidget(tc)
+            type_cards.append(tc)
+        layout.addWidget(flow_widget)
+
+        prompt_label = QLabel(self.tr("自定义水印类型（可选）"))
+        setFont(prompt_label, 13, QFont.DemiBold)
+        prompt_label.setStyleSheet("color: #2c3e50; background: transparent;")
+        layout.addWidget(prompt_label)
+
+        prompt_edit = QTextEdit(container)
+        prompt_edit.setMaximumHeight(72)
+        prompt_edit.setPlaceholderText(self.tr("描述什么类型水印；留空则使用上方预设（建议使用英文）"))
+        prompt_edit.setStyleSheet("""
+            QTextEdit { border: 1px solid #e0e0e0; border-radius: 8px; padding: 6px;
+                        background-color: #fafafa; color: #1a1a1a; }
+            QTextEdit:focus { border: 1px solid #667eea; background-color: #ffffff; }
+        """)
+        setFont(prompt_edit, 13)
+        bind_widget_to_param(prompt_edit, "textChanged", watermark_remove_params, "model.restoration_prompt", transform=lambda: prompt_edit.toPlainText())
+        layout.addWidget(prompt_edit)
+
+        frame_range_container = QWidget(container)
+        frame_range_container.setStyleSheet("""
+            #labelTitle { color: #0F172A; }
+            QSpinBox#frameRangeInput {
+                padding: 0 18px 0 10px;
+                border-radius: 10px;
+                color: #1e293b;
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                font-size: 12px;
+                selection-background-color: #6366f1;
+            }
+            QSpinBox#frameRangeInput:hover {
+                background: #fff;
+                border-color: #cbd5e1;
+            }
+            QSpinBox#frameRangeInput:focus {
+                background: #fff;
+                border-color: #818cf8;
+            }
+            QSpinBox#frameRangeInput::up-button,
+            QSpinBox#frameRangeInput::down-button {
+                subcontrol-origin: border;
+                width: 13px;
+                height: 12px;
+                border: none;
+                background: transparent;
+            }
+            QSpinBox#frameRangeInput::up-button {
+                subcontrol-position: top right;
+                top: 2px;
+                right: 2px;
+            }
+            QSpinBox#frameRangeInput::down-button {
+                subcontrol-position: bottom right;
+                bottom: 2px;
+                right: 2px;
+            }
+            QSpinBox#frameRangeInput::up-arrow {
+                image: url(:/qfluentwidgets/images/icons/CareUpSolid_black.svg);
+                width: 7px;
+                height: 7px;
+            }
+            QSpinBox#frameRangeInput::down-arrow {
+                image: url(:/qfluentwidgets/images/icons/CareDownSolid_black.svg);
+                width: 7px;
+                height: 7px;
+            }
+            #previewBtn {
+                background: #F1F5F9;
+                border: 1px solid #E2E8F0;
+                border-radius: 10px;
+                padding: 0;
+            }
+            #previewBtn:hover {
+                background: #E2E8F0;
+                border-color: #CBD5E1;
+            }
+            #previewBtn:pressed { background: #CBD5E1; }
+        """)
+        frame_range_layout = QVBoxLayout(frame_range_container)
+        frame_range_layout.setContentsMargins(0, 0, 0, 0)
+        frame_range_layout.setSpacing(4)
+        range_title = QLabel(self.tr("处理帧范围"))
+        range_title.setObjectName("labelTitle")
+        setFont(range_title, 13, QFont.DemiBold)
+        frame_range_layout.addWidget(range_title)
+
+        range_inputs_layout = QHBoxLayout()
+        range_inputs_layout.setContentsMargins(0, 0, 0, 0)
+        range_inputs_layout.setSpacing(8)
+        range_start = QSpinBox()
+        range_start.setObjectName("frameRangeInput")
+        range_start.setRange(1, 1)
+        range_start.setValue(1)
+        range_start.setFixedHeight(30)
+        range_start.setKeyboardTracking(False)
+        range_end = QSpinBox()
+        range_end.setObjectName("frameRangeInput")
+        range_end.setRange(1, 1)
+        range_end.setValue(1)
+        range_end.setFixedHeight(30)
+        range_end.setKeyboardTracking(False)
+        range_inputs_layout.addWidget(range_start, 1)
+        range_label = QLabel(self.tr("至"))
+        range_label.setObjectName("inlineLabel")
+        range_inputs_layout.addWidget(range_label, 0, Qt.AlignmentFlag.AlignCenter)
+        range_inputs_layout.addWidget(range_end, 1)
+
+        preview_button = QPushButton()
+        preview_button.setObjectName("previewBtn")
+        preview_button.setIcon(FluentIcon.VIDEO.icon())
+        preview_button.setIconSize(QSize(16, 16))
+        preview_button.setFixedSize(36, 30)
+        preview_button.setToolTip(self.tr("预览视频"))
+        preview_button.setAccessibleName(self.tr("预览视频"))
+        preview_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        range_inputs_layout.addWidget(preview_button)
+        frame_range_layout.addLayout(range_inputs_layout)
+        frame_range_container.setVisible(False)
+        layout.addWidget(frame_range_container)
+
+        bind_widget_to_param(
+            range_start,
+            "valueChanged",
+            watermark_remove_params,
+            "model.video_watermark_ai_detect_frame_range",
+            transform=lambda _value: [range_start.value(), range_end.value()],
+        )
+        bind_widget_to_param(
+            range_end,
+            "valueChanged",
+            watermark_remove_params,
+            "model.video_watermark_ai_detect_frame_range",
+            transform=lambda _value: [range_start.value(), range_end.value()],
+        )
+
+        frame_range_state = {"file_path": None, "total_frames": 1}
+
+        def _open_frame_range_preview(_checked=False):
+            file_path = frame_range_state["file_path"]
+            if not file_path:
+                return
+            dialog = WatermarkVideoPreviewDialog(
+                file_path=file_path,
+                total_frames=frame_range_state["total_frames"],
+                initial_frame=range_start.value(),
+                parent=self.window(),
+            )
+            if not dialog.capture.isOpened():
+                dialog.capture.release()
+                MessageBox(
+                    title=self.tr("无法读取视频"),
+                    content=self.tr("无法打开视频预览，请检查文件格式或文件是否损坏。"),
+                    parent=self.window(),
+                ).exec()
+                return
+            dialog.exec()
+
+        def _update_frame_range(file_path):
+            if not file_path:
+                frame_range_state["file_path"] = None
+                frame_range_container.setVisible(False)
+                return
+
+            video_path = file_path
+            if os.path.isdir(video_path):
+                input_files = os.listdir(video_path)
+                if not input_files:
+                    frame_range_state["file_path"] = None
+                    frame_range_container.setVisible(False)
+                    return
+                video_path = os.path.join(video_path, input_files[0])
+
+            is_video = get_file_type(video_path) == "video"
+            frame_range_container.setVisible(is_video)
+            if not is_video:
+                frame_range_state["file_path"] = None
+                return
+
+            capture = open_video_capture(video_path)
+            if not capture.isOpened():
+                capture.release()
+                total_frames = 1
+                MessageBox(
+                    title=self.tr("无法读取视频"),
+                    content=self.tr("无法获取视频帧数，请检查文件格式或文件是否损坏。"),
+                    parent=self.window(),
+                ).exec()
+            else:
+                reported_frames = capture.get(cv2.CAP_PROP_FRAME_COUNT)
+                capture.release()
+                total_frames = max(1, int(reported_frames)) if reported_frames > 0 else 1
+
+            frame_range_state["file_path"] = video_path
+            frame_range_state["total_frames"] = total_frames
+            range_start.setRange(1, total_frames)
+            range_start.setValue(1)
+            range_end.setRange(1, total_frames)
+            range_end.setValue(total_frames)
+            watermark_remove_params.set_param("model.video_watermark_ai_detect_frame_range", [range_start.value(), range_end.value()])
+
+        preview_button.clicked.connect(_open_frame_range_preview)
+        global_event_bus.watermarkRemove_InputFileUpdate.connect(_update_frame_range)
+        _update_frame_range(watermark_remove_params.get_param("io.input_path"))
+
+        type_cards[0].clicked.emit(type_cards[0].key)
+        return container
+
     def _set_extra_image_models_visible(self, visible: bool):
         for card in self.image_cards[self.image_model_visible_count:]:
             card.setVisible(visible)
-        for separator in self.image_card_separators[self.image_model_visible_count:]:
-            separator.setVisible(visible)
 
     def toggle_image_models(self):
         self.image_models_expanded = not self.image_models_expanded
@@ -503,10 +799,9 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
         self.image_more_button.setText(self.tr("收起模型 ▴") if is_expanded else self.tr("展开更多模型 ▾"))
 
-        self.image_container.layout().invalidate()
-        self.image_container.layout().activate()
-        content_height = self.get_current_page_height(0)
-        self.animate_height_change(content_height + 114)
+        self.image_cards_widget.layout().invalidate()
+        self.image_cards_widget.layout().activate()
+        self._animate_to_content_height()
 
     def update_model_card_info(self, model_name):
         current_index = self.stacked_widget.currentIndex()
@@ -527,13 +822,73 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         target_pool = self._card_pool(index)
         if target_pool:
             self.on_card_clicked(target_pool[0])
-        content_height = self.get_current_page_height(index)
-        extra_height = 114  # tabs + spacing + margins
-        target_height = content_height + extra_height
+        self._animate_to_content_height()
+
+    def _animate_to_content_height(self):
+        current_index = self.stacked_widget.currentIndex()
+        page_widget = self.stacked_widget.widget(current_index)
+
+        available_width = self.stacked_widget.width()
+        if available_width <= 0:
+            available_width = self.width() - 20
+
+        page_h = self._calc_widget_height(page_widget, available_width)
+        self.stacked_widget.setFixedHeight(page_h)
+
+        self.viewLayout.invalidate()
+        self.viewLayout.activate()
+        target_height = self.sizeHint().height()
         self.animate_height_change(target_height)
 
+    def _calc_widget_height(self, widget: QWidget, width: int) -> int:
+        layout = widget.layout()
+        if layout is None:
+            h = widget.sizeHint().height()
+        else:
+            h = self._calc_layout_height(layout, width)
+        min_h = widget.minimumHeight()
+        max_h = widget.maximumHeight()
+        if min_h > 0:
+            h = max(h, min_h)
+        if max_h < 16777215:
+            h = min(h, max_h)
+        return h
+
+    def _calc_layout_height(self, layout, width: int) -> int:
+        if isinstance(layout, FlowLayout):
+            return layout.heightForWidth(width)
+
+        m = layout.contentsMargins()
+        inner_width = width - m.left() - m.right()
+        total_h = m.top() + m.bottom()
+        item_heights = []
+
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item is None:
+                continue
+            w = item.widget()
+            if w is not None:
+                if not w.isVisible():
+                    continue
+                item_heights.append(self._calc_widget_height(w, inner_width))
+            elif item.layout() is not None:
+                item_heights.append(self._calc_layout_height(item.layout(), inner_width))
+            else:
+                sp = item.spacerItem()
+                if sp is not None:
+                    item_heights.append(sp.sizeHint().height())
+
+        if isinstance(layout, QHBoxLayout):
+            total_h += max(item_heights) if item_heights else 0
+        else:
+            total_h += sum(item_heights)
+            if len(item_heights) > 1:
+                total_h += layout.spacing() * (len(item_heights) - 1)
+
+        return total_h
+
     def on_card_clicked(self, clicked_card):
-        # 如果卡片不可交互，则不响应点击
         if not clicked_card.is_interactive():
             return
         current_index = self.stacked_widget.currentIndex()
@@ -586,19 +941,17 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
     def animate_height_change(self, target_height: int):
         start_height = self.height()
+        self.setMinimumHeight(0)
         self.height_anim = QPropertyAnimation(self, b"maximumHeight")
         self.height_anim.setDuration(250)
         self.height_anim.setStartValue(start_height)
         self.height_anim.setEndValue(target_height)
         self.height_anim.setEasingCurve(QEasingCurve.OutCubic)
+        # 动画结束后解除 maximumHeight 限制，允许父布局自由调整
+        self.height_anim.finished.connect(lambda: self.setMaximumHeight(16777215))
         self.height_anim.start()
 
-    def get_current_page_height(self, index: int):
-        widget = self.stacked_widget.widget(index)
-        widget.layout().activate()
-        return widget.layout().sizeHint().height()
-
-    
+        
 class OutputSettingsCard(HeaderCardWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -620,7 +973,7 @@ class OutputSettingsCard(HeaderCardWidget):
         self.save_location_line_edit.setPlaceholderText(self.tr("选择保存位置"))
         save_location_action = QAction(FluentIcon.FOLDER_ADD.qicon(), "", triggered=self.save_location_browse)
         self.save_location_line_edit.addAction(save_location_action, QLineEdit.TrailingPosition)
-        bind_widget_to_param(self.save_location_line_edit, "textChanged", watermark_remove_params, "output_path", transform=None)
+        bind_widget_to_param(self.save_location_line_edit, "textChanged", watermark_remove_params, "io.output_path", transform=None)
         output_settings_layout.addWidget(self.save_location_line_edit)
         output_settings_layout.addSpacing(10)
 
@@ -630,7 +983,7 @@ class OutputSettingsCard(HeaderCardWidget):
         output_settings_layout.addWidget(output_format_label)
         self.output_format_combo = ComboBox()
         self.output_format_combo.addItems([self.tr("保持原格式")])
-        bind_widget_to_param(self.output_format_combo, "currentTextChanged", watermark_remove_params, "output_format", transform=None)
+        bind_widget_to_param(self.output_format_combo, "currentTextChanged", watermark_remove_params, "io.output_format", transform=None)
         output_settings_layout.addWidget(self.output_format_combo)
 
         self.viewLayout.addWidget(output_settings)
@@ -679,16 +1032,9 @@ class ControlPanelWidget(ScrollArea):
         watermarkRemoveStyleCard = WatermarkRemoveStyleCard(self)
         main_layout.addWidget(watermarkRemoveStyleCard)
 
-        self.restoration_prompt_card = RestorationWatermarkPromptCard(self)
-        main_layout.addWidget(self.restoration_prompt_card)
-
         watermarkDetectionTypeCard = WatermarkDetectionTypeCard(self)
         main_layout.addWidget(watermarkDetectionTypeCard)
         self.output_mask_cards.append(watermarkDetectionTypeCard)
-
-        watermarkMaskDilate = WatermarkMaskDilate(self)
-        main_layout.addWidget(watermarkMaskDilate)
-        self.output_mask_cards.append(watermarkMaskDilate)
 
         outputSettingsCard = OutputSettingsCard(self)
         main_layout.addWidget(outputSettingsCard)
@@ -702,12 +1048,11 @@ class ControlPanelWidget(ScrollArea):
         main_layout.addStretch(1)
 
         watermark_remove_params.param_changed.connect(self._on_param_changed)
-        self._on_param_changed("model_name", watermark_remove_params.get_param("model_name"))
+        self._on_param_changed("model.model_name", watermark_remove_params.get_param("model.model_name"))
         
     def _on_param_changed(self, key, value):
-        if key != "model_name":
+        if key != "model.model_name":
             return
-        self.restoration_prompt_card.setVisible(value == "image_restoration")
         if value == "image_restoration":
             for card in self.output_mask_cards:
                 card.hide()
@@ -779,14 +1124,19 @@ class PreviewWidget(QWidget):
         watermark_remove_params.param_changed.connect(self._on_param_changed)
                 
     def _on_param_changed(self, key, value):
-        if key != "model_name":
-            return
-        if value in ["image_restoration", "video_engine"]:
-            self.status_info_widget.model.set_pipeline_steps(names=[self.tr('准备任务'), self.tr('去除水印'), self.tr('导出文件')])
-            self.navigation.set_item_visible(index=1, visible=False)
-        else:
+        need_mask_preview = True
+        if key == "model.model_name":
+            if value in ["image_restoration"]:
+                need_mask_preview = False
+        if key == "detect.video_watermark_ai_detect_strategy":
+            if value != "tracking":
+                need_mask_preview = False
+        if need_mask_preview:
             self.status_info_widget.model.set_pipeline_steps(names=[self.tr('准备任务'), self.tr('检测水印'), self.tr('去除水印'), self.tr('导出文件')])
             self.navigation.set_item_visible(index=1, visible=True)
+        else:
+            self.status_info_widget.model.set_pipeline_steps(names=[self.tr('准备任务'), self.tr('去除水印'), self.tr('导出文件')])
+            self.navigation.set_item_visible(index=1, visible=False)
 
     def update_init_preview(self, file_path):
         self.image_navigation_widget.clear_images()
@@ -928,36 +1278,37 @@ class HeaderWidget(QWidget):
         self.process_btn.clicked.connect(self.remove_watermark_process)
 
     def remove_watermark_process(self):
-        init_params = watermark_remove_params.to_dict()
-        error_msg, task_params = self._params_check(params=init_params)
+        error_msg = self._params_check(params=watermark_remove_params)
         if error_msg:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
-        w = TaskInfoMessageBox(task_params, "watermark-remove", self.window())
+        w = TaskInfoMessageBox(watermark_remove_params, "watermark-remove", self.window(), file_type=get_file_type(watermark_remove_params.get_param("io.input_path")))
         if not w.exec():
             return
         
-        allowed_use, error_msg = feature_gate.can_use(feature_name=feature_gate.get_feature_name(watermark_remove_params.to_dict()["model_name"]), return_errmsg=True)
+        allowed_use, error_msg = feature_gate.can_use(feature_name=feature_gate.get_feature_name(watermark_remove_params.get_param("model.model_name")), return_errmsg=True)
         if not allowed_use:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
-        task_params["_feature_name_"] = feature_gate.get_feature_name(watermark_remove_params.to_dict()["model_name"])
+        watermark_remove_params.params._feature_name_ = feature_gate.get_feature_name(watermark_remove_params.get_param("model.model_name"))
 
         total_tasks = []
-        input_path = task_params["input_path"]
+        input_path = watermark_remove_params.get_param("io.input_path")
         global_event_bus.watermarkRemove_ImageNavigationInit.emit()
         if os.path.isdir(input_path):
             self.is_batch_task = True
             for one_file in os.listdir(input_path):
-                task_params["input_path"] = os.path.join(input_path, one_file)
-                task_instance = WatermarkRemoveWork(**task_params)
+                if not get_file_type(os.path.join(input_path, one_file)):
+                    continue
+                watermark_remove_params.set_param("io.input_path", os.path.join(input_path, one_file))
+                task_instance = WatermarkRemoveWork(watermark_remove_params)
                 func, args, kwargs = task_instance.to_worker()
-                total_tasks.append((func, args, kwargs))
+                total_tasks.append((func, args, kwargs, os.path.join(input_path, one_file)))
         else:
             self.is_batch_task = False
-            task_instance = WatermarkRemoveWork(**task_params)
+            task_instance = WatermarkRemoveWork(watermark_remove_params)
             func, args, kwargs = task_instance.to_worker()
-            total_tasks.append((func, args, kwargs))
+            total_tasks.append((func, args, kwargs, input_path))
 
         backend_type, gpu_name = global_backend_info_cache.get(key="backend_info")
         watermark_remove_task_status_model.start_batch(total=len(total_tasks), backend_type=backend_type, gpu_name=gpu_name)
@@ -979,8 +1330,7 @@ class HeaderWidget(QWidget):
             )
             future.progress.connect(lambda value, msg, path=input_path: self._task_progress(path, value, msg))
 
-        for func, args, kwargs in total_tasks:
-            input_path = kwargs["input_path"]
+        for func, args, kwargs, input_path in total_tasks:
             submit_task(func, args, kwargs, input_path)
         TeachingTip.create(
             target=self.process_btn,
@@ -1015,90 +1365,26 @@ class HeaderWidget(QWidget):
     def _task_finished(self, input_path, output_path):
         if not feature_gate.is_pro:
             try:
-                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(watermark_remove_params.to_dict()["model_name"]))
+                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(watermark_remove_params.get_param("model.model_name")))
             except Exception:
                 pass
-            global_event_bus.watermarkRemove_TaskFinishedByModel.emit(watermark_remove_params.to_dict()["model_name"])
+            global_event_bus.watermarkRemove_TaskFinishedByModel.emit(watermark_remove_params.get_param("model.model_name"))
         watermark_remove_task_status_model.report_success()
         global_event_bus.watermarkRemove_TaskFinished.emit(input_path, output_path)
         if not self.is_batch_task:
             watermark_remove_task_status_model.finish_step(name=self.tr("导出文件"))
 
-    def _params_check(self, params):
+    def _params_check(self, params: LayeredTaskParams):
         error_msg = ""
-        task_params = {}
-        if not params:
-            error_msg = self.tr("请设置水印移除参数")
-            return error_msg, task_params
         if not cfg.get(cfg.localWatermarkRemoveEnabled):
             error_msg = self.tr("请在设置页面打开 '水印移除' 能力开关")
-            return error_msg, task_params
-        
-        if "input_path" not in params or not params["input_path"]:
-            error_msg = self.tr("请选择要处理的文件或目录")
-            return error_msg, task_params
-        else:
-            task_params["input_path"] = params["input_path"]
-
-        if get_file_type(params["input_path"]) == "video" and cfg.get(cfg.additionalParams)["SoftwareSettings"]["FFmpeg_status_info"]["text"] != "OK":
+            return error_msg
+        if get_file_type(params.get_param("io.input_path")) == "video" and \
+           cfg.get(cfg.additionalParams)["SoftwareSettings"]["FFmpeg_status_info"]["text"] != "OK":
             error_msg = self.tr("请在设置页面配置软件 FFmpeg 的正确路径并通过验证")
-            return error_msg, task_params
-
-        if "output_path" not in params or not params["output_path"]:
-            error_msg = self.tr("请设置文件保存位置")
-            return error_msg, task_params
-        else:
-            task_params["output_path"] = params["output_path"]
-            task_params["output_format"] = params["output_format"]
-
-        if "model_name" not in params or not params["model_name"]:
-            error_msg = self.tr("请选择水印移除算法")
-            return error_msg, task_params
-        else:
-            task_params["model_name"] = params["model_name"]
-
-        if task_params["model_name"] in ["image_restoration"]:
-            task_params["restoration_watermark_type"] = params.get("restoration_watermark_type", "general")
-            task_params["restoration_prompt"] = params.get("restoration_prompt", "")
-        else:
-            # 水印检测
-            if "watermark_detect_type" not in params:
-                error_msg = self.tr("请选择水印检测方式")
-                return error_msg, task_params
-            else:
-                task_params["watermark_detect_type"] = params["watermark_detect_type"]
-
-            if "mask_dilate" not in params:
-                error_msg = self.tr("请设置水印 Mask 扩张系数")
-                return error_msg, task_params
-            else:
-                task_params["mask_dilate"] = params["mask_dilate"]
-
-            if "image_boxes" in params and params["image_boxes"]:
-                task_params["image_boxes"] = params["image_boxes"]
-            if "watermark_tracking_data" in params and params["watermark_tracking_data"]:
-                task_params["watermark_tracking_data"] = params["watermark_tracking_data"]
-
-            if params["watermark_detect_type"] == "ai_auto_detect":
-                task_params["watermark_content"] = params["watermark_content"]
-                task_params["watermark_format"] = params["watermark_format"]
-            if params["watermark_detect_type"] == "ai_interactive_detect":
-                task_params["watermark_ai_interactive_type"] = params["watermark_ai_interactive_type"]
-                task_params["watermark_format"] = params["watermark_format"]
-                task_params["watermark_confidence"] = params["watermark_confidence"]
-                if task_params["watermark_ai_interactive_type"] == "semantic_detect":
-                    if not params["watermark_detect_prompt"]:
-                        error_msg = self.tr("请框输入水印语义检测提示词")
-                        return error_msg, task_params
-                    task_params["watermark_detect_prompt"] = params["watermark_detect_prompt"]
-                if task_params["watermark_ai_interactive_type"] == "space_detect":
-                    if not params["watermark_boxes"]:
-                        error_msg = self.tr("请框选水印位置")
-                        return error_msg, task_params
-                    task_params["watermark_boxes"] = params["watermark_boxes"]
-            if params["watermark_detect_type"] == "manual_detect":
-                task_params["manual_watermark_mask_path"] = params["manual_watermark_mask_path"]
-        return error_msg, task_params
+            return error_msg
+        error_msg = params.validate()
+        return error_msg
 
 
 class WatermarkRemove(QWidget):

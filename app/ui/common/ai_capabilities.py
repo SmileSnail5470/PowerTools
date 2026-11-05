@@ -11,7 +11,7 @@ MODEL_DIR_SIZES = {
     "cpu": {
         "blind_watermark_addition": 1027,
         "visible_watermark_removal": 2464,
-        "segment": 857,
+        "object_segmentation": 1228,
         "ocr": 207,
         "tracker": 119,
         "video_inpainting/ppt": 250,
@@ -19,11 +19,12 @@ MODEL_DIR_SIZES = {
         "image_edit/reverse_edit": 2198,
         "image_edit/sr_edit": 3339,
         "image_restoration/general_restoration": 6802,
+        "image_edit/object_remove": 3625,
     },
     "gpu": {
         "blind_watermark_addition": 1027,
         "visible_watermark_removal": 2369,
-        "segment": 1610,
+        "object_segmentation": 1228,
         "ocr": 207,
         "tracker": 119,
         "video_inpainting/ppt": 175,
@@ -31,6 +32,7 @@ MODEL_DIR_SIZES = {
         "image_edit/reverse_edit": 2198,
         "image_edit/sr_edit": 2528,
         "image_restoration/general_restoration": 6640,
+        "image_edit/object_remove": 3625,
     },
 }
 
@@ -52,10 +54,10 @@ AI_CAPABILITIES = (
         "description": "智能检测并去除图片、视频中的可见水印、台标与字幕",
         "cfg_attr": "localWatermarkRemoveEnabled",
         "media": {
-            MEDIA_IMAGE: ["visible_watermark_removal", "segment", "image_edit/general_edit", "image_restoration/general_restoration"],
+            MEDIA_IMAGE: ["visible_watermark_removal", "object_segmentation", "image_edit/general_edit", "image_restoration/general_restoration", "image_edit/object_remove"],
             MEDIA_VIDEO: [
-                "visible_watermark_removal", "segment", "image_edit/general_edit", "image_restoration/general_restoration", 
-                "video_inpainting/ppt", "tracker", "video_engine"
+                "visible_watermark_removal", "object_segmentation", "image_edit/general_edit", "image_restoration/general_restoration", 
+                "video_inpainting/ppt", "tracker", "video_engine", "image_edit/object_remove"
             ],
         },
     },
@@ -75,8 +77,8 @@ AI_CAPABILITIES = (
         "description": "去除图片、视频中不可见的暗水印（盲水印）痕迹",
         "cfg_attr": "localBlindWatermarkRemoveEnabled",
         "media": {
-            MEDIA_IMAGE: ["image_edit/reverse_edit", "image_edit/sr_edit", "blind_watermark_addition"],
-            MEDIA_VIDEO: ["image_edit/reverse_edit", "image_edit/sr_edit", "video_engine", "blind_watermark_addition"],
+            MEDIA_IMAGE: ["image_edit/reverse_edit", "image_edit/sr_edit", "blind_watermark_addition", "ocr"],
+            MEDIA_VIDEO: ["image_edit/reverse_edit", "image_edit/sr_edit", "video_engine", "blind_watermark_addition", "ocr"],
         },
     },
     {

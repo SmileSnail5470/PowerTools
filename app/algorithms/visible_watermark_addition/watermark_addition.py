@@ -56,7 +56,7 @@ class VisibleWatermarkAddition:
         self._sys_fonts_cache = fonts
         return fonts
 
-    def _get_font_path(self, font_name: Optional[str]) -> Optional[str]:
+    def _get_font_path(self, font_name: Optional[str], allow_fallback: bool = True) -> Optional[str]:
         if font_name:
             target = font_name.lower()
         else:
@@ -80,6 +80,8 @@ class VisibleWatermarkAddition:
                                     return candidate
                 except Exception:
                     pass
+        if not allow_fallback:
+            return None
         fallback_names = [
             "DejaVuSans.ttf", "Arial.ttf", "NotoSansCJK-Regular.ttc", "PingFang.ttc", "NotoSans-Regular.ttf"
         ]

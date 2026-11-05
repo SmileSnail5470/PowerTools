@@ -3,13 +3,13 @@ import sys
 from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
 from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QLabel, QHBoxLayout, QStackedWidget, QStackedLayout, QLineEdit, QFileDialog,
-    QButtonGroup, QPushButton
+    QButtonGroup, QPushButton, QFrame
 )
 from PySide6.QtGui import QFont, QColor, QAction
 
 from app.ui.library.qfluentwidgets import (
     setFont, HeaderCardWidget, SegmentedWidget, ScrollArea, PushButton, CaptionLabel,
-    LineEdit, FluentIcon, TeachingTip, InfoBarIcon, TeachingTipTailPosition,
+    LineEdit, FlowLayout, FluentIcon, TeachingTip, InfoBarIcon, TeachingTipTailPosition,
     MessageBox
 )
 
@@ -18,27 +18,34 @@ from app.ui.widgets.file_selector_widget import FileSelectorWidget
 from app.ui.widgets.directory_selector_widget import DirectorySelectorWidget
 from app.ui.widgets.custom_card_group_widget import StyleCard
 from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget
+from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
 from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
 
 from app.ui.common.event_bus import global_event_bus
-from app.ui.common.task_params import bind_widget_to_param, TaskParams
+from app.ui.common.task_params import bind_widget_to_param, LayeredTaskParams
 from app.ui.common.task_status import TaskStatusModel
 from app.ui.common.utils import get_file_type, global_backend_info_cache
 from app.ui.common.config import cfg
 
 from app.controllers.task_manager import global_task_manager
-from app.workers.blind_watermark_remove_work import BlindWatermarkRemoveWork
+from app.workers.blind_watermark_remove_work import BlindWatermarkRemoveWork, BlindWatermarkRemoveUIParams
 
 from app.license.globals import feature_gate
 
 
-blind_watermark_remove_params = TaskParams()
+blind_watermark_remove_params = LayeredTaskParams(params=BlindWatermarkRemoveUIParams())
 blind_watermark_remove_task_status_model = TaskStatusModel()
 # 当前批次已提交的任务 future，用于支持一次性取消
 blind_watermark_remove_active_futures = []
+
+
+def _first_supported_media_path(path):
+    if not os.path.isdir(path):
+        return path
+    return next((os.path.join(path, name) for name in os.listdir(path) if get_file_type(os.path.join(path, name))),"")
 
 
 class FileSelectorCard(HeaderCardWidget):
@@ -61,10 +68,10 @@ class FileSelectorCard(HeaderCardWidget):
 
         singleFileSelector = FileSelectorWidget(self)
         singleFileSelector.item_selected.connect(lambda file_path: global_event_bus.blindWatermarkRemove_InputFileUpdate.emit(file_path))
-        bind_widget_to_param(singleFileSelector, "item_selected", blind_watermark_remove_params, "input_path", transform=None)
+        bind_widget_to_param(singleFileSelector, "item_selected", blind_watermark_remove_params, "io.input_path", transform=None)
         batchFilesSelector = DirectorySelectorWidget(self)
         batchFilesSelector.item_selected.connect(lambda file_path: global_event_bus.blindWatermarkRemove_InputFileUpdate.emit(file_path))
-        bind_widget_to_param(batchFilesSelector, "item_selected", blind_watermark_remove_params, "input_path", transform=None)
+        bind_widget_to_param(batchFilesSelector, "item_selected", blind_watermark_remove_params, "io.input_path", transform=None)
 
         self.addSubInterface(singleFileSelector, 'FileSelectorWidget', self.tr("文件"))
         self.addSubInterface(batchFilesSelector, 'DirectorySelectorWidget', self.tr("目录"))
@@ -130,13 +137,12 @@ class ProcessRegionCard(HeaderCardWidget):
 
     def _on_file_selected(self, file_path):
         self._file_path = file_path or ""
-        blind_watermark_remove_params.set_param("reserve_region", None)
+        blind_watermark_remove_params.set_param("settings.reserve_region", None)
         self.region_info_label.setText(self.tr("未选择区域，将处理整张图片"))
-        can_select = bool(
-            self._file_path
-            and os.path.isfile(self._file_path)
-            and get_file_type(self._file_path) == "image"
-        )
+        file_type = get_file_type(self._file_path) if self._file_path and os.path.isfile(self._file_path) else None
+        is_video = file_type == "video"
+        self.setVisible(not is_video)
+        can_select = file_type == "image"
         self.select_button.setEnabled(can_select)
         if self._file_path and os.path.isdir(self._file_path):
             self.region_info_label.setText(self.tr("目录任务不使用区域框选，将处理每张图片"))
@@ -151,10 +157,11 @@ class ProcessRegionCard(HeaderCardWidget):
             single_area_only=True,
             parent=self.window(),
         )
+        dialog.current_box_type = "negative"  # 保留区域
         dialog.exec()
         boxes = dialog.get_results()
         region = boxes[0] if boxes else None
-        blind_watermark_remove_params.set_param("reserve_region", region)
+        blind_watermark_remove_params.set_param("settings.reserve_region", region)
         if region:
             self.region_info_label.setText(self.tr("已选择原图保留区域: X={0}, Y={1}, 宽={2}, 高={3}").format(
                     region["x"], region["y"], region["w"], region["h"]
@@ -189,7 +196,7 @@ class ColorFixCard(HeaderCardWidget):
         self.toggle.setActive(True, animated=False)
         toggle_layout.addWidget(self.toggle)
 
-        bind_widget_to_param(self.toggle, "toggled", blind_watermark_remove_params, "use_color_fix", transform=None)
+        bind_widget_to_param(self.toggle, "toggled", blind_watermark_remove_params, "settings.use_color_fix", transform=None)
         self.toggle.toggled.emit(True)
 
         main_layout.addLayout(toggle_layout)
@@ -227,7 +234,7 @@ class HighQualityOutputCard(HeaderCardWidget):
             self.toggle,
             "toggled",
             blind_watermark_remove_params,
-            "high_quality_output",
+            "settings.high_quality_output",
             transform=None,
         )
         self.toggle.toggled.emit(False)
@@ -288,7 +295,6 @@ class ModelSelectCard(HeaderCardWidget):
         self.tab_video = QPushButton(self.tr("视频模型"))
         setFont(self.tab_video, fontSize=14, weight=QFont.DemiBold)
         self.tab_video.setCheckable(True)
-        self.tab_video.setEnabled(False)  # 暂不支持视频模型
         self.tab_group.addButton(self.tab_image, 0)
         self.tab_group.addButton(self.tab_video, 1)
         tab_layout.addWidget(self.tab_image)
@@ -302,45 +308,95 @@ class ModelSelectCard(HeaderCardWidget):
 
         # 图片模型列表
         image_container = QWidget()
-        image_layout = QVBoxLayout(image_container)
-        image_layout.setContentsMargins(0, 6, 0, 6)
-        image_layout.setSpacing(0)
+        image_outer_layout = QVBoxLayout(image_container)
+        image_outer_layout.setContentsMargins(0, 6, 0, 6)
+        image_outer_layout.setSpacing(8)
 
-        reverse_edit_card = StyleCard("#8b5cf6", self.tr("智能消除"), self.tr("智能去除暗水印，无需原始水印信息"))
+        image_cards_widget = QWidget()
+        image_layout = FlowLayout(image_cards_widget, isTight=True)
+        image_layout.setContentsMargins(0, 0, 0, 4)
+        image_layout.setHorizontalSpacing(8)
+        image_layout.setVerticalSpacing(8)
+
+        reverse_edit_card = StyleCard("#8b5cf6", self.tr("智能消除"), self.tr("智能去除暗印"), vertical_layout=True)
         reverse_edit_card.set_name("reverse_edit")
         image_layout.addWidget(reverse_edit_card)
-        image_layout.addStretch()
+
+        image_model_card = QFrame()
+        image_model_card.setObjectName("imageModelCard")
+        image_model_card.setStyleSheet("""
+            QFrame#imageModelCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        image_model_card_layout = QVBoxLayout(image_model_card)
+        image_model_card_layout.setContentsMargins(12, 10, 12, 12)
+        image_model_card_layout.setSpacing(8)
+        image_model_card_layout.addWidget(image_cards_widget)
+        image_outer_layout.addWidget(image_model_card)
         self.stacked_widget.addWidget(image_container)
 
         self.image_cards = [reverse_edit_card]
         self.all_cards.extend(self.image_cards)
 
-        # 视频模型列表（占位）
+        # 视频模型列表
         video_container = QWidget()
-        video_layout = QVBoxLayout(video_container)
-        video_layout.setContentsMargins(0, 6, 0, 6)
-        video_layout.setSpacing(0)
+        video_outer_layout = QVBoxLayout(video_container)
+        video_outer_layout.setContentsMargins(0, 6, 0, 6)
+        video_outer_layout.setSpacing(8)
 
-        video_placeholder = QLabel(self.tr("视频暗水印去除模型开发中，敬请期待..."))
-        video_placeholder.setStyleSheet("color: #999999; padding: 20px;")
-        video_placeholder.setAlignment(Qt.AlignCenter)
-        video_layout.addWidget(video_placeholder)
-        video_layout.addStretch()
+        video_cards_widget = QWidget()
+        video_layout = FlowLayout(video_cards_widget, isTight=True)
+        video_layout.setContentsMargins(0, 0, 0, 4)
+        video_layout.setHorizontalSpacing(8)
+        video_layout.setVerticalSpacing(8)
+
+        keyframe_remove_card = StyleCard("#fbc2eb", self.tr("关键帧去除"), self.tr("关键帧处理，补帧恢复"), vertical_layout=True)
+        keyframe_remove_card.set_name("video_engine")
+        video_layout.addWidget(keyframe_remove_card)
+        video_model_card = QFrame()
+        video_model_card.setObjectName("videoModelCard")
+        video_model_card.setStyleSheet("""
+            QFrame#videoModelCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        video_model_card_layout = QVBoxLayout(video_model_card)
+        video_model_card_layout.setContentsMargins(12, 10, 12, 12)
+        video_model_card_layout.setSpacing(8)
+        video_model_card_layout.addWidget(video_cards_widget)
+        video_outer_layout.addWidget(video_model_card)
         self.stacked_widget.addWidget(video_container)
 
-        self.video_cards = []
+        self.video_cards = [keyframe_remove_card]
+        self.all_cards.extend(self.video_cards)
 
         for card in self.all_cards:
             card.mousePressEvent = lambda event, c=card: self._on_card_clicked(c)
 
         self.tab_image.toggled.connect(lambda checked: self._on_tab_changed(0, checked))
         self.tab_video.toggled.connect(lambda checked: self._on_tab_changed(1, checked))
+        global_event_bus.blindWatermarkRemove_InputFileUpdate.connect(self._on_input_file_updated)
 
-        bind_widget_to_param(self, "model_name", blind_watermark_remove_params, "model_name", transform=None)
+        bind_widget_to_param(self, "model_name", blind_watermark_remove_params, "model.model_name", transform=None)
         self.select_first_interactive()
         global_event_bus.License_update.connect(self.select_first_interactive)
         global_event_bus.blindWatermarkRemove_TaskFinishedByModel.connect(self._on_task_finished_by_model)
         main_layout.addStretch()
+
+    def _on_input_file_updated(self, file_path):
+        if not file_path:
+            return
+        file_path = _first_supported_media_path(file_path)
+        file_type = get_file_type(file_path) if file_path else None
+        if file_type == "video":
+            self.tab_video.setChecked(True)
+        elif file_type == "image":
+            self.tab_image.setChecked(True)
 
     def _on_tab_changed(self, index, checked):
         if not checked:
@@ -423,7 +479,7 @@ class OutputSettingsCard(HeaderCardWidget):
         self.save_location_line_edit.setPlaceholderText(self.tr("选择保存位置"))
         save_location_action = QAction(FluentIcon.FOLDER_ADD.qicon(), "", triggered=self.save_location_browse)
         self.save_location_line_edit.addAction(save_location_action, QLineEdit.TrailingPosition)
-        bind_widget_to_param(self.save_location_line_edit, "textChanged", blind_watermark_remove_params, "output_path", transform=None)
+        bind_widget_to_param(self.save_location_line_edit, "textChanged", blind_watermark_remove_params, "io.output_path", transform=None)
         output_settings_layout.addWidget(self.save_location_line_edit)
 
         self.viewLayout.addWidget(output_settings)
@@ -474,15 +530,17 @@ class PreviewWidget(QWidget):
         self.stack = QStackedLayout()
         self.stack.setContentsMargins(0, 0, 0, 0)
 
-        self.placeholder_widget = QLabel(self.tr("请选择图片文件进行暗水印去除预览"), parent=self)
+        self.placeholder_widget = QLabel(self.tr("请选择图片或视频文件进行暗水印去除预览"), parent=self)
         self.placeholder_widget.setStyleSheet("color: #888888;")
         setFont(self.placeholder_widget, 20)
         self.placeholder_widget.setAlignment(Qt.AlignCenter)
 
         self.image_viewer = SyncImageViewer(img1="", img2="", parent=self)
+        self.video_viewer = SyncVideoViewer(self)
 
         self.stack.addWidget(self.placeholder_widget)
         self.stack.addWidget(self.image_viewer)
+        self.stack.addWidget(self.video_viewer)
 
         main_layout.addLayout(self.stack, 1)
 
@@ -511,23 +569,33 @@ class PreviewWidget(QWidget):
     def update_init_preview(self, file_path):
         self.image_navigation_widget.clear_images()
         self.image_viewer.init_scene()
+        self.video_viewer.init_scene()
         self.files_preview_info = {}
         self.media_type = "image"
         if not file_path:
+            self.placeholder_widget.setText(self.tr("请选择图片或视频文件进行暗水印去除预览"))
             self.stack.setCurrentIndex(0)
             blind_watermark_remove_task_status_model.reset()
             return
         if os.path.isdir(file_path):
-            tmp_file_path = os.path.join(file_path, os.listdir(file_path)[0])
             self.status_info_widget.show_batch_pipeline_widget()
+            tmp_file_path = _first_supported_media_path(file_path)
         else:
             tmp_file_path = file_path
             self.status_info_widget.show_pipeline_widget()
+        if not tmp_file_path:
+            self.placeholder_widget.setText(self.tr("目录中没有支持的图片或视频"))
+            self.stack.setCurrentIndex(0)
+            blind_watermark_remove_task_status_model.reset()
+            return
         file_type = get_file_type(tmp_file_path)
-        ext = tmp_file_path.lower().split(".")[-1]
+        ext = os.path.splitext(tmp_file_path)[1].lower().lstrip(".")
         if file_type == "image":
             self.stack.setCurrentIndex(1)
             self.media_type = "image"
+        elif file_type == "video":
+            self.stack.setCurrentIndex(2)
+            self.media_type = "video"
         else:
             self.placeholder_widget.setText(self.tr(f"不支持的文件类型: {ext}"))
             self.stack.setCurrentIndex(0)
@@ -543,6 +611,8 @@ class PreviewWidget(QWidget):
         out = self.files_preview_info.get(path)
         if self.media_type == "image" and out:
             self.image_viewer.set_images(img1=path, img2=out)
+        elif self.media_type == "video" and out:
+            self.video_viewer.setVideos(main_path=path, sub_path=out)
 
     def _cancel_tasks(self):
         cancelled = 0
@@ -604,37 +674,43 @@ class HeaderWidget(QWidget):
         self.process_btn.clicked.connect(self._on_process)
 
     def _on_process(self):
-        init_params = blind_watermark_remove_params.to_dict()
-        error_msg, task_params = self._params_check(params=init_params)
+        error_msg = blind_watermark_remove_params.validate()
+        if not cfg.get(cfg.localBlindWatermarkRemoveEnabled):
+            error_msg = self.tr("请在设置页面打开 '暗印去除' 能力开关")
         if error_msg:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
-        w = TaskInfoMessageBox(task_params, "blind-watermark-remove", self.window())
+        w = TaskInfoMessageBox(blind_watermark_remove_params, "blind-watermark-remove", self.window())
         if not w.exec():
             return
+
+        model_name = blind_watermark_remove_params.get_param("model.model_name")
         allowed_use, error_msg = feature_gate.can_use(
-            feature_name=feature_gate.get_feature_name(blind_watermark_remove_params.to_dict()["model_name"]),
+            feature_name=feature_gate.get_feature_name(model_name),
             return_errmsg=True
         )
         if not allowed_use:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
-        task_params["_feature_name_"] = feature_gate.get_feature_name( blind_watermark_remove_params.to_dict()["model_name"])
+        blind_watermark_remove_params.params._feature_name_ = feature_gate.get_feature_name(model_name)
+
         total_tasks = []
-        input_path = task_params["input_path"]
+        input_path = blind_watermark_remove_params.get_param("io.input_path")
         global_event_bus.blindWatermarkRemove_ImageNavigationInit.emit()
         if os.path.isdir(input_path):
             self.is_batch_task = True
             for one_file in os.listdir(input_path):
-                task_params["input_path"] = os.path.join(input_path, one_file)
-                task_instance = BlindWatermarkRemoveWork(**task_params)
+                if not get_file_type(os.path.join(input_path, one_file)):
+                    continue
+                blind_watermark_remove_params.set_param("io.input_path", os.path.join(input_path, one_file))
+                task_instance = BlindWatermarkRemoveWork(blind_watermark_remove_params)
                 func, args, kwargs = task_instance.to_worker()
-                total_tasks.append((func, args, kwargs))
+                total_tasks.append((func, args, kwargs, os.path.join(input_path, one_file)))
         else:
             self.is_batch_task = False
-            task_instance = BlindWatermarkRemoveWork(**task_params)
+            task_instance = BlindWatermarkRemoveWork(blind_watermark_remove_params)
             func, args, kwargs = task_instance.to_worker()
-            total_tasks.append((func, args, kwargs))
+            total_tasks.append((func, args, kwargs, input_path))
 
         backend_type, gpu_name = global_backend_info_cache.get(key="backend_info")
         blind_watermark_remove_task_status_model.start_batch(total=len(total_tasks), backend_type=backend_type, gpu_name=gpu_name)
@@ -655,9 +731,8 @@ class HeaderWidget(QWidget):
             )
             future.progress.connect(lambda value, msg, path=input_path: self._task_progress(path, value, msg))
 
-        for func, args, kwargs in total_tasks:
-            input_path = kwargs["input_path"]
-            submit_task(func, args, kwargs, input_path)
+        for func, args, kwargs, one_input_path in total_tasks:
+            submit_task(func, args, kwargs, one_input_path)
         TeachingTip.create(
             target=self.process_btn,
             icon=InfoBarIcon.SUCCESS,
@@ -680,44 +755,19 @@ class HeaderWidget(QWidget):
                 blind_watermark_remove_task_status_model.start_step(name=self.tr("导出结果"))
 
     def _task_finished(self, input_path, result):
+        model_name = blind_watermark_remove_params.get_param("model.model_name")
         if not feature_gate.is_pro:
             try:
-                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(blind_watermark_remove_params.to_dict()["model_name"]))
+                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(model_name))
             except Exception:
                 pass
-            global_event_bus.blindWatermarkRemove_TaskFinishedByModel.emit(blind_watermark_remove_params.to_dict()["model_name"])
+            global_event_bus.blindWatermarkRemove_TaskFinishedByModel.emit(model_name)
         blind_watermark_remove_task_status_model.report_success()
         # result 为 (output_path, metrics) 元组
         output_tuple = result if isinstance(result, tuple) else (result, {})
         global_event_bus.blindWatermarkRemove_TaskFinished.emit(input_path, output_tuple)
         if not self.is_batch_task:
             blind_watermark_remove_task_status_model.finish_step(name=self.tr("导出结果"))
-
-    def _params_check(self, params):
-        error_msg = ""
-        task_params = {}
-        if not params:
-            error_msg = self.tr("请设置暗水印去除参数")
-            return error_msg, task_params
-        if not cfg.get(cfg.localBlindWatermarkRemoveEnabled):
-            error_msg = self.tr("请在设置页面打开 '暗印去除' 能力开关")
-            return error_msg, task_params
-        if "input_path" not in params or not params["input_path"]:
-            error_msg = self.tr("请选择要处理的文件或目录")
-            return error_msg, task_params
-        task_params["input_path"] = params["input_path"]
-        if "model_name" not in params or not params["model_name"]:
-            error_msg = self.tr("请选择去除模型")
-            return error_msg, task_params
-        task_params["model_name"] = params["model_name"]
-        task_params["use_color_fix"] = params.get("use_color_fix", True)
-        task_params["high_quality_output"] = params.get("high_quality_output", False)
-        task_params["reserve_region"] = params.get("reserve_region")
-        if "output_path" not in params or not params["output_path"]:
-            error_msg = self.tr("请设置文件保存位置")
-            return error_msg, task_params
-        task_params["output_path"] = params["output_path"]
-        return error_msg, task_params
 
 
 class BlindWatermarkRemove(QWidget):

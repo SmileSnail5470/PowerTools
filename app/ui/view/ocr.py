@@ -1,10 +1,10 @@
 import os
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QVBoxLayout, QWidget, QHBoxLayout, QLabel, QStackedWidget, QStackedLayout, QSlider
+from PySide6.QtWidgets import QVBoxLayout, QWidget, QHBoxLayout, QLabel, QStackedWidget, QStackedLayout, QSlider, QFrame
 from PySide6.QtGui import QFont, QColor
 
 from app.ui.library.qfluentwidgets import (
-    PushButton, setFont, HeaderCardWidget, SegmentedWidget, ScrollArea, ComboBox, BodyLabel,
+    PushButton, setFont, HeaderCardWidget, SegmentedWidget, ScrollArea, ComboBox, BodyLabel, FlowLayout,
     TeachingTip, InfoBarIcon, TeachingTipTailPosition, MessageBox
 )
 
@@ -16,21 +16,21 @@ from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.ocr_preview_widget import OCRViewerWidget
 from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
-from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget, StyleCard, CardSeparator
+from app.ui.widgets.custom_card_group_widget import CustomCardGroupWidget, StyleCard
 
 from app.ui.common.event_bus import global_event_bus
 from app.controllers.task_manager import global_task_manager
-from app.ui.common.task_params import bind_widget_to_param, TaskParams
+from app.ui.common.task_params import bind_widget_to_param, LayeredTaskParams
 from app.ui.common.task_status import TaskStatusModel
 from app.ui.common.utils import get_file_type, global_backend_info_cache
 from app.ui.common.config import cfg
 
-from app.workers.ocr_work import OCRWork
+from app.workers.ocr_work import OCRWork, OCRUIParams
 
 from app.license.globals import feature_gate
 
 
-ocr_params = TaskParams()
+ocr_params = LayeredTaskParams(params=OCRUIParams())
 ocr_task_status_model = TaskStatusModel()
 # 当前批次已提交的任务 future，用于支持一次性取消
 ocr_active_futures = []
@@ -54,12 +54,12 @@ class FileSelectorCard(HeaderCardWidget):
         self.viewLayout.setContentsMargins(10, 10, 10, 10)
         self.viewLayout.addLayout(main_layout)
 
-        singleFileSelector = FileSelectorWidget(self)
+        singleFileSelector = FileSelectorWidget(self, format_text_value=self.tr("支持 JPG, PNG格式"))
         singleFileSelector.item_selected.connect(lambda file_path: global_event_bus.OCR_InputFileUpdate.emit(file_path))
-        bind_widget_to_param(singleFileSelector, "item_selected", ocr_params, "input_path", transform=None)
+        bind_widget_to_param(singleFileSelector, "item_selected", ocr_params, "io.input_path", transform=None)
         batchFilesSelector = DirectorySelectorWidget(self)
         batchFilesSelector.item_selected.connect(lambda file_path: global_event_bus.OCR_InputFileUpdate.emit(file_path))
-        bind_widget_to_param(batchFilesSelector, "item_selected", ocr_params, "input_path", transform=None)
+        bind_widget_to_param(batchFilesSelector, "item_selected", ocr_params, "io.input_path", transform=None)
 
         self.addSubInterface(singleFileSelector, 'FileSelectorWidget', self.tr("文件"))
         self.addSubInterface(batchFilesSelector, 'DirectorySelectorWidget', self.tr("目录"))
@@ -85,27 +85,45 @@ class ModelStyleCard(HeaderCardWidget):
 
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        main_layout.setSpacing(8)
 
         self.viewLayout.setContentsMargins(10, 10, 10, 10)
         self.viewLayout.addLayout(main_layout)
 
+        model_cards_widget = QWidget()
+        model_flow = FlowLayout(model_cards_widget, needAni=False, isTight=True)
+        model_flow.setContentsMargins(0, 0, 0, 4)
+        model_flow.setHorizontalSpacing(8)
+        model_flow.setVerticalSpacing(8)
+
         self.cards: list[StyleCard] = []
-        pp_ocr_card = StyleCard("#4facfe", self.tr("通用识别"), self.tr("用于通用场景文字识别，不适合复杂图表公式等识别"))
+        pp_ocr_card = StyleCard("#4facfe", self.tr("通用识别"), self.tr("通用场景文字识别"), vertical_layout=True)
         pp_ocr_card.set_name("pp_ocr")
         self.cards.append(pp_ocr_card)
-        main_layout.addWidget(pp_ocr_card)
-        main_layout.addWidget(CardSeparator(self))
+        model_flow.addWidget(pp_ocr_card)
+
+        model_card = QFrame()
+        model_card.setObjectName("modelCard")
+        model_card.setStyleSheet("""
+            QFrame#modelCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        model_card_layout = QVBoxLayout(model_card)
+        model_card_layout.setContentsMargins(12, 10, 12, 12)
+        model_card_layout.setSpacing(8)
+        model_card_layout.addWidget(model_cards_widget)
+        main_layout.addWidget(model_card)
 
         for i, card in enumerate(self.cards):
             card.mousePressEvent = lambda event, c=card, idx=i: self.on_card_clicked(c, idx)
 
-        bind_widget_to_param(self, "model_name", ocr_params, "model_name", transform=None)
+        bind_widget_to_param(self, "model_name", ocr_params, "model.model_name", transform=None)
         self.select_first_interactive()
         global_event_bus.License_update.connect(self.select_first_interactive)
         global_event_bus.OCR_TaskFinishedByModel.connect(self.update_model_card_info)
-        main_layout.addStretch()
-
     def update_model_card_info(self, model_name):
         for one_card in self.cards:
             if one_card.get_name() != model_name:
@@ -167,7 +185,7 @@ class SettingsCard(HeaderCardWidget):
         )
         watermark_content_card.addWidget(language_content_combox, stretch=0)
         watermark_content_card.setSeparatorVisible(True)
-        bind_widget_to_param(language_content_combox, "currentTextChanged", ocr_params, "ocr_rec_language", transform=None)
+        bind_widget_to_param(language_content_combox, "currentTextChanged", ocr_params, "settings.ocr_rec_language", transform=None)
         language_content_combox.currentTextChanged.emit(self.language_map["中日英"])
         main_layout.addWidget(watermark_content_card)
 
@@ -186,7 +204,7 @@ class SettingsCard(HeaderCardWidget):
         use_textline_ori_card.setContentWordWrap(True)
         use_textline_ori_card.addWidget(use_textline_ori_btn)
         main_layout.addWidget(use_textline_ori_card)
-        bind_widget_to_param(use_textline_ori_btn, "toggled", ocr_params, "use_textline_ori", transform=None)
+        bind_widget_to_param(use_textline_ori_btn, "toggled", ocr_params, "settings.use_textline_ori", transform=None)
         use_textline_ori_btn.toggled.emit(False)
 
         slider_main_layout = QVBoxLayout()
@@ -230,7 +248,7 @@ class SettingsCard(HeaderCardWidget):
         slider_main_layout.addLayout(slider_layout)
         slider_layout.addWidget(self.slider)
         slider_layout.addWidget(self.label)
-        bind_widget_to_param(self.slider, "valueChanged", ocr_params, "drop_score", transform=lambda x: x / 10)
+        bind_widget_to_param(self.slider, "valueChanged", ocr_params, "settings.drop_score", transform=lambda x: x / 10)
         self.slider.valueChanged.connect(self.on_value_changed)
         self.slider.valueChanged.emit(5)
         main_layout.addLayout(slider_main_layout)
@@ -415,36 +433,40 @@ class HeaderWidget(QWidget):
         self.process_btn.clicked.connect(self.ocr_process)
 
     def ocr_process(self):
-        init_params = ocr_params.to_dict()
-        error_msg, task_params = self._params_check(params=init_params)
+        error_msg = ocr_params.validate()
+        if not cfg.get(cfg.localTextExtractEnabled):
+            error_msg = self.tr("请在设置页面打开 '文字提取' 能力开关")
         if error_msg:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
-        w = TaskInfoMessageBox(task_params, "ocr-rec", self.window())
+        w = TaskInfoMessageBox(ocr_params, "ocr-rec", self.window())
         if not w.exec():
             return
-        
-        allowed_use, error_msg = feature_gate.can_use(feature_name=feature_gate.get_feature_name(ocr_params.to_dict()["model_name"]), return_errmsg=True)
+
+        model_name = ocr_params.get_param("model.model_name")
+        allowed_use, error_msg = feature_gate.can_use(feature_name=feature_gate.get_feature_name(model_name), return_errmsg=True)
         if not allowed_use:
             MessageBox(title=self.tr("提醒"), content=error_msg, parent=self.window()).exec()
             return
-        task_params["_feature_name_"] = feature_gate.get_feature_name(ocr_params.to_dict()["model_name"])
+        ocr_params.params._feature_name_ = feature_gate.get_feature_name(model_name)
 
         total_tasks = []
-        input_path = task_params["input_path"]
+        input_path = ocr_params.get_param("io.input_path")
         global_event_bus.OCR_ImageNavigationInit.emit()
         if os.path.isdir(input_path):
             self.is_batch_task = True
             for one_file in os.listdir(input_path):
-                task_params["input_path"] = os.path.join(input_path, one_file)
-                task_instance = OCRWork(**task_params)
+                if not get_file_type(os.path.join(input_path, one_file)):
+                    continue
+                ocr_params.set_param("io.input_path", os.path.join(input_path, one_file))
+                task_instance = OCRWork(ocr_params)
                 func, args, kwargs = task_instance.to_worker()
-                total_tasks.append((func, args, kwargs))
+                total_tasks.append((func, args, kwargs, os.path.join(input_path, one_file)))
         else:
             self.is_batch_task = False
-            task_instance = OCRWork(**task_params)
+            task_instance = OCRWork(ocr_params)
             func, args, kwargs = task_instance.to_worker()
-            total_tasks.append((func, args, kwargs))
+            total_tasks.append((func, args, kwargs, input_path))
 
         backend_type, gpu_name = global_backend_info_cache.get(key="backend_info")
         ocr_task_status_model.start_batch(total=len(total_tasks), backend_type=backend_type, gpu_name=gpu_name)
@@ -466,9 +488,8 @@ class HeaderWidget(QWidget):
             )
             future.progress.connect(lambda value, msg, path=input_path: self._task_progress(path, value, msg))
 
-        for func, args, kwargs in total_tasks:
-            input_path = kwargs["input_path"]
-            submit_task(func, args, kwargs, input_path)
+        for func, args, kwargs, one_input_path in total_tasks:
+            submit_task(func, args, kwargs, one_input_path)
 
         TeachingTip.create(
             target=self.process_btn,
@@ -492,55 +513,17 @@ class HeaderWidget(QWidget):
                 ocr_task_status_model.start_step(name=self.tr('导出结果'))
 
     def _task_finished(self, input_path, ocr_result):
+        model_name = ocr_params.get_param("model.model_name")
         if not feature_gate.is_pro:
             try:
-                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(ocr_params.to_dict()["model_name"]))
+                feature_gate.use_feature(feature_name=feature_gate.get_feature_name(model_name))
             except Exception:
                 pass
-            global_event_bus.OCR_TaskFinishedByModel.emit(ocr_params.to_dict()["model_name"])
+            global_event_bus.OCR_TaskFinishedByModel.emit(model_name)
         ocr_task_status_model.report_success()
         global_event_bus.OCR_TaskFinished.emit(input_path, ocr_result)
         if not self.is_batch_task:
             ocr_task_status_model.finish_step(name=self.tr("导出结果"))
-
-    def _params_check(self, params):
-        error_msg = ""
-        task_params = {}
-        if not params:
-            error_msg = self.tr("请设置OCR识别参数")
-            return error_msg, task_params
-        if not cfg.get(cfg.localTextExtractEnabled):
-            error_msg = self.tr("请在设置页面打开 '文字提取' 能力开关")
-            return error_msg, task_params
-        
-        if "input_path" not in params or not params["input_path"]:
-            error_msg = self.tr("请选择要处理的文件或目录")
-            return error_msg, task_params
-        else:
-            task_params["input_path"] = params["input_path"]
-
-        if "model_name" not in params or not params["model_name"]:
-            error_msg = self.tr("请选择OCR识别算法")
-            return error_msg, task_params
-        else:
-            task_params["model_name"] = params["model_name"]
-
-        if "ocr_rec_language" not in params or not params["ocr_rec_language"]:
-            error_msg = self.tr("请设置要识别的目标语言")
-            return error_msg, task_params
-        else:
-            task_params["ocr_rec_language"] = params["ocr_rec_language"]
-
-        if "drop_score" not in params or not params["drop_score"]:
-            error_msg = self.tr("请设置识别置信度")
-            return error_msg, task_params
-        else:
-            task_params["drop_score"] = params["drop_score"]
-
-        if "use_textline_ori" in params:
-            task_params["use_textline_ori"] = params["use_textline_ori"]
-
-        return error_msg, task_params
 
 
 class OCR(QWidget):

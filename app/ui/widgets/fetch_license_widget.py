@@ -221,7 +221,7 @@ class FetchLicenseWidget(QWidget):
         setFont(note_icon, 12)
         note_layout.addWidget(note_icon, 0, Qt.AlignTop)
 
-        note_text = QLabel(self.tr("提示：若超过 10 分钟仍未生成授权文件，可联系作者处理 (QQ群: 1080076113)，工作时间 9:00-23:30。"))
+        note_text = QLabel(self.tr("提示：若超 10 分钟未完成，联系作者 (QQ群: 1080076113)，工作时间 9:00-23:30。期间可打开 VPN 或关闭 VPN 手动查询尝试。"))
         setFont(note_text, 10)
         note_text.setWordWrap(True)
         note_text.setStyleSheet("color: #b45309;")

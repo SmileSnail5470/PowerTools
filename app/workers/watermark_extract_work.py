@@ -1,14 +1,41 @@
 import os
 import logging
 import platform
+from dataclasses import dataclass, field
 from PIL import Image, ImageDraw, ImageFont
 import app.utils.ffmpeg as ffmpeg
 from app.ui.common.config import cfg
 from app.workers.work_base import BaseWorker, _resolve_hardware_variant
+from app.algorithms.visible_watermark_addition.watermark_addition import VisibleWatermarkAddition
 from app.utils.logger.decorators import log_exception
 
 from app.algorithms.blind_watermark_addition.blind_watermark_addition_image import ImageBlindWatermarkDetect
 from app.algorithms.blind_watermark_addition.blind_watermark_addition_video import VideoBlindWatermarkDetect
+
+
+@dataclass
+class _ExtractIOParams:
+    input_path: str = ""
+
+
+@dataclass
+class _ExtractBlindParams:
+    blind_watermark_model_name: str = ""
+    custom_characters: list = field(default_factory=lambda: list("ABCDEFGHIJKLMNOPQRSTUVWXYZ,1234"))
+
+
+@dataclass
+class WatermarkExtractUIParams:
+    io: _ExtractIOParams = field(default_factory=_ExtractIOParams)
+    blind: _ExtractBlindParams = field(default_factory=_ExtractBlindParams)
+    _feature_name_: str | None = None
+
+    def validate(self) -> str:
+        if not self.io.input_path:
+            return "请选择要处理的文件或目录"
+        if not self.blind.blind_watermark_model_name or self.blind.blind_watermark_model_name == "placeholder_model":
+            return "请选择盲水印算法"
+        return ""
 
 
 class WatermarkExtractInternal():
@@ -42,6 +69,32 @@ class WatermarkExtractInternal():
 class WatermarkExtractWork(BaseWorker):
     _image_instance = None
     _video_instance = None
+    _font_locator = VisibleWatermarkAddition()
+    _font_candidates = (
+        "Microsoft YaHei",
+        "msyh",
+        "NotoSansCJK",
+        "PingFang",
+        "WenQuanYi",
+        "SimHei",
+    )
+    _font_fallback_candidates = (
+        "Arial",
+        "DejaVuSans",
+    )
+
+    @classmethod
+    def _find_cjk_font_path(cls, font_size):
+        for font_name in cls._font_candidates:
+            font_path = cls._font_locator._get_font_path(font_name, allow_fallback=False)
+            if not font_path:
+                continue
+            try:
+                ImageFont.truetype(font_path, font_size)
+                return font_path
+            except OSError:
+                continue
+        return None
 
     @classmethod
     def _get_image_instance(cls):
@@ -69,9 +122,19 @@ class WatermarkExtractWork(BaseWorker):
         draw = ImageDraw.Draw(img)
 
         font_size = max(48, min(w, h) // 10)
-        try:
-            font = ImageFont.truetype("arial.ttf", font_size)
-        except Exception:
+        font_path = self._find_cjk_font_path(font_size)
+        font = ImageFont.truetype(font_path, font_size) if font_path else None
+        if font is None:
+            for font_name in self._font_fallback_candidates:
+                font_path = self._font_locator._get_font_path(font_name, allow_fallback=False)
+                if not font_path:
+                    continue
+                try:
+                    font = ImageFont.truetype(font_path, font_size)
+                    break
+                except OSError:
+                    continue
+        if font is None:
             font = ImageFont.load_default(font_size)
 
         bbox = draw.textbbox((0, 0), text, font=font)
@@ -105,6 +168,10 @@ class WatermarkExtractWork(BaseWorker):
         width = int(vinfo["width"])
         height = int(vinfo["height"])
         duration = float(vinfo.get("duration", probe["format"]["duration"]))
+        font_size = max(48, min(width, height) // 8)
+        font_path = self._find_cjk_font_path(font_size)
+        if not font_path:
+            raise RuntimeError("No system font supporting Chinese and English was found")
 
         output_dir = os.path.join(self.cache_path, "blind_watermark_extract")
         os.makedirs(output_dir, exist_ok=True)
@@ -119,8 +186,9 @@ class WatermarkExtractWork(BaseWorker):
             )
             .drawtext(
                 text=text,
+                fontfile=font_path,
                 fontcolor='white',
-                fontsize=max(48, min(width, height) // 8),
+                fontsize=font_size,
                 x='(w-text_w)/2',
                 y='(h-text_h)/2'
             )
@@ -137,42 +205,42 @@ class WatermarkExtractWork(BaseWorker):
 
     @log_exception(logger=logging.getLogger('WatermarkExtract'), reraise=True, log_args=True, log_result=True)
     def run_algorithm(self, progress_cb, cancel_requested, *args, **kwargs):
-        input_path = kwargs["input_path"]
+        p: WatermarkExtractUIParams = args[0].params
+        input_path = p.io.input_path
         file_type = self.file_type(input_file=input_path)
         if file_type is None:
             raise Exception("Not support file {0}".format(os.path.splitext(input_path)[1].lstrip(".")))
-        if "watermark_type" not in kwargs or kwargs["watermark_type"] != "blind":
-            raise Exception("Error watermark type value, watermark type must be blind")
-        if "blind_watermark_task_type" not in kwargs or kwargs["blind_watermark_task_type"] != "extract_blind_watermark":
-            raise Exception("Error blind watermark task type, must be extract_blind_watermark")
-        if "_feature_name_" in kwargs:
-            os.environ["_feature_name_"] = kwargs["_feature_name_"]
+        if p._feature_name_ is not None:
+            os.environ["_feature_name_"] = p._feature_name_
+        custom_characters = p.blind.custom_characters or list("ABCDEFGHIJKLMNOPQRSTUVWXYZ,1234")
+        os.environ["BLIND_WATERMARK_CHARSET"] = "".join(custom_characters) + "`"
         if file_type == "image":
-            params = {
+            extract_params = {
                 "input_image_path": input_path
             }
             self._get_image_instance().prepare(
-                onnx_path=os.path.join(self.deps_path, _resolve_hardware_variant(), "blind_watermark_addition", "{0}_image_detect.encmodel".format(kwargs["blind_watermark_model_name"]))
+                onnx_path=os.path.join(self.deps_path, _resolve_hardware_variant(), "blind_watermark_addition", "{0}_image_detect.encmodel".format(p.blind.blind_watermark_model_name))
             )
             if progress_cb is not None:
                 progress_cb("BlindWatermarkExtractStart", "")
-            text = self._get_image_instance().watermark_extraction(**params)["preds"]
+            text = self._get_image_instance().watermark_extraction(**extract_params)["preds"]
             if progress_cb is not None:
                 progress_cb("BlindWatermarkExtractCompleted", "")
             output_file = self._text_to_image(input_path=input_path, text=text)
         else:
-            params = {
+            extract_params = {
                 "input_path": input_path,
                 "chunk_size": 8
             }
             self._get_video_instance().prepare(
-                onnx_path=os.path.join(self.deps_path, _resolve_hardware_variant(), "blind_watermark_addition", "{0}_video_detect.encmodel".format(kwargs["blind_watermark_model_name"])),
+                onnx_path=os.path.join(self.deps_path, _resolve_hardware_variant(), "blind_watermark_addition", "{0}_video_detect.encmodel".format(p.blind.blind_watermark_model_name)),
                 ffmpeg_path=os.getenv("POWERTOOLS_FFMPEG_BIN")
             )
             if progress_cb is not None:
                 progress_cb("BlindWatermarkExtractStart", "")
-            text = self._get_video_instance().watermark_extraction(**params)["preds"]
+            text = self._get_video_instance().watermark_extraction(**extract_params)["preds"]
             if progress_cb is not None:
                 progress_cb("BlindWatermarkExtractCompleted", "")
             output_file = self._text_to_video(input_path=input_path, text=text)
+        return output_file
         return output_file

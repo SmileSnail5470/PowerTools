@@ -8,10 +8,10 @@ from app.ui.library.qfluentwidgets import setFont, SimpleCardWidget, BodyLabel, 
 
 class FileUploadWidget(SimpleCardWidget):
     file_selected = Signal(list)
-    format_text_value = "支持 JPG, PNG, AVIF, MP4, AVI 格式"
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, format_text_value: str = "支持 JPG, PNG, AVIF, MP4, AVI 格式"):
         super().__init__(parent)
+        self.format_text_value = format_text_value
         self.setAcceptDrops(True)
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -232,14 +232,14 @@ class FileSelectorWidget(QWidget):
     item_selected = Signal(str)
     layout_add_height = Signal(int)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, format_text_value: str = "支持 JPG, PNG, AVIF, MP4, AVI 格式"):
         super().__init__(parent)
 
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(10)
 
-        self.fileSelector = FileUploadWidget(self)
+        self.fileSelector = FileUploadWidget(self, format_text_value=format_text_value)
         self.main_layout.addWidget(self.fileSelector)
 
         self.fileInfoWidget = None

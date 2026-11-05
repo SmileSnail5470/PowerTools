@@ -138,13 +138,13 @@ class StyleCard(QFrame):
     MODEL_FREE = "free"
     MODEL_PRO = "pro"
 
-    def __init__(self, icon_color, title, subtitle, parent=None):
+    def __init__(self, icon_color, title, subtitle, parent=None, vertical_layout=False, badge=None):
         super().__init__(parent)
         self.effect = QGraphicsOpacityEffect(self)
         self.setStyleSheet("""
             StyleCard {
                 background-color: white;
-                border: 2px solid transparent;
+                border: 2px solid #e2e8f0;
                 border-radius: 12px;
                 margin: 2px;
             }
@@ -153,12 +153,12 @@ class StyleCard(QFrame):
             }
         """)
         
-        main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(12, 8, 12, 8)
-        main_layout.setSpacing(12)
+        main_layout = QVBoxLayout(self) if vertical_layout else QHBoxLayout(self)
+        main_layout.setContentsMargins(8, 8, 8, 8)
+        main_layout.setSpacing(0 if vertical_layout else 12)
         
         self.icon_label = QLabel(self)
-        self.icon_label.setFixedSize(40, 40)
+        self.icon_label.setFixedSize(36 if vertical_layout else 40, 36 if vertical_layout else 40)
         icon = self.ICON_MAP.get(icon_color, "🧩")
         self.icon_label.setText(icon)
             
@@ -180,7 +180,7 @@ class StyleCard(QFrame):
         self.title_label.setStyleSheet("color: #2c3e50;")
         
         self.subtitle_label = QLabel(subtitle)
-        setFont(self.subtitle_label, 12)
+        setFont(self.subtitle_label, 10)
         self.subtitle_label.setStyleSheet("color: #7f8c8d;")
         self.subtitle_label.setWordWrap(True)
 
@@ -190,17 +190,48 @@ class StyleCard(QFrame):
 
         self.auth_label = QLabel(self)
         self.remaining_label = QLabel(self)
+        self.badge_label = None
 
         status_row_layout.addWidget(self.auth_label)
         status_row_layout.addWidget(self.remaining_label)
         status_row_layout.addStretch(1)
 
-        text_layout.addWidget(self.title_label)
-        text_layout.addWidget(self.subtitle_label)
-        text_layout.addLayout(status_row_layout)
-        
-        main_layout.addWidget(self.icon_label)
-        main_layout.addLayout(text_layout)
+        if vertical_layout:
+            title_details_layout = QVBoxLayout()
+            title_details_layout.setSpacing(0)
+            title_details_layout.setContentsMargins(0, 0, 0, 0)
+            title_details_layout.addWidget(self.title_label)
+
+            title_row_layout = QHBoxLayout()
+            title_row_layout.setSpacing(8)
+            title_row_layout.addWidget(self.icon_label)
+            if badge:
+                self.badge_label = QLabel(badge, self)
+                setFont(self.badge_label, 8, QFont.DemiBold)
+                self.badge_label.setStyleSheet("""
+                    QLabel {
+                        color: #1d4ed8;
+                        background-color: #eff6ff;
+                        border: 1px solid #bfdbfe;
+                        border-radius: 8px;
+                        padding: 2px 2px;
+                    }
+                """)
+                self.badge_label.setWordWrap(True)
+                title_details_layout.addWidget(self.badge_label, alignment=Qt.AlignLeft)
+            title_row_layout.addLayout(title_details_layout)
+            title_row_layout.addStretch(1)
+
+            main_layout.addLayout(title_row_layout)
+            main_layout.addWidget(self.subtitle_label)
+            main_layout.addLayout(status_row_layout)
+        else:
+            text_layout.addWidget(self.title_label)
+            text_layout.addWidget(self.subtitle_label)
+            text_layout.addLayout(status_row_layout)
+
+            main_layout.addWidget(self.icon_label)
+            main_layout.addLayout(text_layout)
         
         self.is_selected = False
         self.name = ""
@@ -257,7 +288,7 @@ class StyleCard(QFrame):
             self.setStyleSheet("""
                 StyleCard {
                     background-color: #f5f5f5;
-                    border: 2px solid transparent;
+                    border: 2px solid #e2e8f0;
                     border-radius: 12px;
                     margin: 2px;
                 }
@@ -282,7 +313,7 @@ class StyleCard(QFrame):
                 self.setStyleSheet("""
                     StyleCard {
                         background-color: white;
-                        border: 2px solid transparent;
+                        border: 2px solid #e2e8f0;
                         border-radius: 12px;
                         margin: 2px;
                     }
@@ -300,7 +331,7 @@ class StyleCard(QFrame):
             self.auth_label.setStyleSheet("""
                 QLabel {
                     color: #27ae60;
-                    font-size: 11px;
+                    font-size: 10px;
                 }
             """)
         else:
@@ -308,7 +339,7 @@ class StyleCard(QFrame):
             self.auth_label.setStyleSheet("""
                 QLabel {
                     color: #e74c3c;
-                    font-size: 11px;
+                    font-size: 10px;
                 }
             """)
 
@@ -323,7 +354,7 @@ class StyleCard(QFrame):
             self.remaining_label.setStyleSheet("""
                 QLabel {
                     color: #7f8c8d;
-                    font-size: 11px;
+                    font-size: 10px;
                 }
             """)
         elif self._remaining_uses == 0:
@@ -331,7 +362,7 @@ class StyleCard(QFrame):
             self.remaining_label.setStyleSheet("""
                 QLabel {
                     color: #e74c3c;
-                    font-size: 11px;
+                    font-size: 10px;
                     font-weight: bold;
                 }
             """)
@@ -340,7 +371,7 @@ class StyleCard(QFrame):
             self.remaining_label.setStyleSheet("""
                 QLabel {
                     color: #7f8c8d;
-                    font-size: 11px;
+                    font-size: 10px;
                 }
             """)
 
@@ -387,7 +418,7 @@ class StyleCard(QFrame):
                 self.setStyleSheet("""
                     StyleCard {
                         background-color: white;
-                        border: 2px solid transparent;
+                        border: 2px solid #e2e8f0;
                         border-radius: 12px;
                         margin: 2px;
                     }
