@@ -423,6 +423,19 @@ class IOBindingSession:
         return binding
 
     def run_with_iobinding(self, input_feed, run_options=None):
+        """返回全部输出的 OrtValue 列表, CUDA 下输出保留在显存。
+
+        使用场景:
+          - 输出要直接喂给下一个模型或下一步循环 (循环状态、逐帧 cache、特征传递),
+            避免 GPU -> CPU -> GPU 往返;
+          - 需要在 GPU 上做后处理时, 配合 cupy/dlpack 把 OrtValue 转成 cupy 数组。
+
+        特点:
+          - 每次新建 binding, 输出由 ORT 分配, 不在内部缓存输出缓冲,
+            调用方释放引用后显存即可回收, 适合对显存敏感的长循环;
+          - 总是绑定全部输出, 不支持只取部分输出;
+          - CPU 下退回 session.run, 再把结果包装成 CPU OrtValue。
+        """
         if not self._use_cuda:
             results = self._run_numpy_fallback(input_feed, run_options=run_options)
             return [ort.OrtValue.ortvalue_from_numpy(r) for r in results]
@@ -430,6 +443,20 @@ class IOBindingSession:
         return binding.get_outputs()
 
     def run_with_iobinding_numpy(self, input_feed, run_options=None):
+        """返回全部输出的 numpy 列表 (按 output_names 顺序), 所有输出都拷回 CPU。
+
+        使用场景:
+          - 单模型、一次推理即得到结果, 后处理在 CPU 上做,
+            如检测、OCR、分块 inpaint、超分/分割;
+          - 同一输入形状被反复调用 (逐 tile、逐帧)。
+
+        特点:
+          - 复用线程级 binding; numpy 输入在 CUDA 下会缓存为显存缓冲,
+            形状和 dtype 不变时用 update_inplace 覆盖写入, 省去重复分配;
+            这些缓冲会一直保留到 clear_persistent_inputs / evict_session_cache;
+          - 输出每次都拷回 CPU, 不适合输出还要回到 GPU 的场景 (此时用 run_with_iobinding);
+          - CPU 下退回 session.run。
+        """
         if not self._use_cuda:
             return self._run_numpy_fallback(input_feed, run_options=run_options)
         binding, _ = self._run_bound(input_feed, run_options)
@@ -445,6 +472,27 @@ class IOBindingSession:
         prefer_cupy=False,
         use_io_binding=None,
     ):
+        """返回 {output_name: 输出} 字典, 可选固定输出缓冲和 cupy 输出。
+
+        使用场景:
+          - 多输出模型, 需要按名字取值;
+          - 输出形状事先已知且反复调用, 如扩散模型 UNet/DiT 多步去噪、VAE 编解码;
+          - 整条链路用 cupy 在 GPU 上计算 (prefer_cupy=True), 输出直接是 cupy 数组。
+
+        参数:
+          - output_shapes: 提供全部输出的形状时, 输出写入按形状缓存的固定缓冲
+            (每个输出最多缓存 _MAX_OUTPUT_BUF_ENTRIES 种形状); 不提供或缺项时
+            由 ORT 分配输出并拷回 CPU 返回 numpy;
+          - prefer_cupy: 仅在提供 output_shapes 时生效, 返回 cupy 数组;
+          - use_io_binding: 默认 CUDA 下开启; False 或 CPU 下退回 session.run。
+
+        注意:
+          - 固定缓冲会被下一次同形状调用覆盖, 返回的 cupy 数组需要跨调用保留时
+            调用方要自行 copy;
+          - 未开启 cupy 时返回的 numpy 来自 buf.numpy(), 已拷贝到 CPU, 可以直接保留;
+          - 固定缓冲常驻显存直到 clear_persistent_inputs / evict_session_cache,
+            显存敏感且形状多变的场景慎用。
+        """
         if use_io_binding is None:
             use_io_binding = self._use_cuda
         if not use_io_binding or not self._use_cuda:
