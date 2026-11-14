@@ -29,6 +29,7 @@ class VideoExtraModelPaths:
     ppt_onnx_basedir: str
     tacker_onnx_dir: str
     object_segmentation_model_dir: str = ""
+    video_object_removal_model_dir: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +99,11 @@ class VideoMaskConfig(MaskConfig):
 
 
 @dataclass(slots=True)
+class VideoModelConfig:
+    infer_step: int | None = None
+
+
+@dataclass(slots=True)
 class RestorationConfig:
     refine_type: str = "image_restoration"
     restoration_prompt: str = ""
@@ -139,6 +145,7 @@ class VideoWatermarkRemoveConfig:
     video_extra: VideoExtraModelPaths
     detection: DetectionConfig = field(default_factory=DetectionConfig)
     mask: VideoMaskConfig = field(default_factory=VideoMaskConfig)
+    model_config: VideoModelConfig = field(default=VideoModelConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
 
 @dataclass(slots=True)

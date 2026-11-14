@@ -11,6 +11,7 @@ from app.algorithms.visible_watermark_removal.params_config import (
     get_ppt_onnx_path,
 )
 from app.algorithms.visible_watermark_removal.video_modules.ppt.inference import PPTInferenceORT
+from app.algorithms.private.video_object_remove.inference import VideoObjectRemoveInference
 from app.algorithms.visible_watermark_removal.helpers.video.video_roi import (
     crop_frames_and_masks,
     get_roi,
@@ -114,6 +115,58 @@ def video_ppt_inpainting(
             pipeline.inference(
                 input_frames_dir=str(cropped_frames_dir),
                 masks_dir=str(cropped_masks_dir),
+                output_dir=str(cropped_output_dir),
+            )
+        finally:
+            pipeline.release()
+        paste_cropped_frames(
+            input_frames_dir,
+            cropped_output_dir,
+            processed_frames_dir,
+            bbox,
+        )
+
+
+def video_stable_inpainting(
+    frame_files: list[Path] | tuple[Path, ...], 
+    processed_frames_dir: Path, 
+    frame_mask_map: dict[str, str], 
+    step_num: int, 
+    video_object_removal_onnx_basedir: str
+) -> None:
+    if not frame_mask_map:
+        raise ValueError("Stable video removal inpainting requires at least one frame mask")
+    with tempfile.TemporaryDirectory(prefix="stable_removal_frames_") as input_tmp, tempfile.TemporaryDirectory(prefix="stable_removal_masks_") as masks_tmp:
+        input_frames_dir = Path(input_tmp)
+        masks_dir = Path(masks_tmp)
+        frames_by_path = {str(frame_file): frame_file for frame_file in frame_files}
+        for frame_path, mask_path in frame_mask_map.items():
+            frame_file = frames_by_path.get(frame_path)
+            if frame_file is None:
+                raise ValueError(f"Mask mapping refers to an unknown frame: {frame_path}")
+            shutil.copy2(frame_file, input_frames_dir / frame_file.name)
+            shutil.copy2(mask_path, masks_dir / frame_file.name)
+        bbox = get_roi(masks_dir, pad=200)
+        cropped_frames_dir, cropped_masks_dir = crop_frames_and_masks(input_frames_dir, masks_dir, bbox)
+        if bbox is None:
+            raise Exception(f"Not find mask in input video")
+        else:
+            xmin, ymin, xmax, ymax = bbox
+            width, height = xmax - xmin, ymax - ymin
+        logger.info(
+            "Process video process size %s and gpu memory limit %s",
+            (width, height),
+            os.environ.get("POWERTOOLS_GPU_MEMORY_LIMIT", 16),
+        )
+        pipeline = VideoObjectRemoveInference(
+            model_dir=video_object_removal_onnx_basedir,
+            infer_step=step_num
+        )
+        try:
+            cropped_output_dir = processed_frames_dir.parent / f"{processed_frames_dir.name}_cropped"
+            pipeline.inference(
+                input_dir=str(cropped_frames_dir),
+                mask_dir=str(cropped_masks_dir),
                 output_dir=str(cropped_output_dir),
             )
         finally:

@@ -20,6 +20,7 @@ from app.algorithms.visible_watermark_removal.params_config import (
 from app.algorithms.visible_watermark_removal.helpers.video.video_inpainting import (
     image_model_inpainting,
     video_ppt_inpainting,
+    video_stable_inpainting
 )
 from app.algorithms.visible_watermark_removal.helpers.video.video_io import (
     VideoInfo,
@@ -160,6 +161,14 @@ class VideoWatermarkRemover:
                     config.mask.dilate_num,
                     config.video_extra.ppt_onnx_basedir,
                     config.runtime.should_cancel,
+                )
+            elif config.mask.refine_type == "stable_video_remove":
+                video_stable_inpainting(
+                    frame_files=frame_files,
+                    processed_frames_dir=processed_frames_dir,
+                    frame_mask_map=frame_mask_map,
+                    step_num=config.model_config.infer_step,
+                    video_object_removal_onnx_basedir=config.video_extra.video_object_removal_model_dir
                 )
             else:
                 image_model_inpainting(processed_frames_dir, frame_mask_map, config)

@@ -380,6 +380,10 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         video_flow.setHorizontalSpacing(8)
         video_flow.setVerticalSpacing(8)
 
+        video_stable_card = StyleCard("#edf108", self.tr("稳固擦除"), self.tr("兼顾擦除速度与质量"), vertical_layout=True, badge=self.tr("速度快、效果好"))
+        video_stable_card.set_name("stable_video_remove")
+        video_flow.addWidget(video_stable_card)
+        
         video_engine_card = StyleCard("#2980b9", self.tr("关键帧擦除"), self.tr("智能传播，速度适中"), vertical_layout=True, badge=self.tr("小于 8G 显存推荐"))
         video_engine_card.set_name("video_engine")
         video_flow.addWidget(video_engine_card)
@@ -403,12 +407,15 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         video_model_card_layout.addWidget(video_cards_widget)
         video_outer_layout.addWidget(video_model_card)
 
-        video_params_widget = self._build_mask_dilate_params()
-        video_outer_layout.addWidget(video_params_widget)
+        self.video_mask_params_widget = self._build_mask_dilate_params()
+        video_outer_layout.addWidget(self.video_mask_params_widget)
+        self.video_speed_params_widget = self._build_video_speed_params()
+        self.video_speed_params_widget.hide()
+        video_outer_layout.addWidget(self.video_speed_params_widget)
 
         self.stacked_widget.addWidget(video_container)
         
-        self.video_cards = [video_engine_card, video_seq_card]
+        self.video_cards = [video_stable_card, video_engine_card, video_seq_card]
         self.all_cards.extend(self.video_cards)
 
         self.tab_image.toggled.connect(lambda checked: self.on_tab_changed(0, checked))
@@ -419,6 +426,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
             card.mousePressEvent = lambda event, c=card: self.on_card_clicked(c)
 
         bind_widget_to_param(self, "model_name", watermark_remove_params, "model.model_name", transform=None)
+        self.model_name.connect(self._update_video_params_visibility)
         self.select_first_interactive()
         global_event_bus.watermarkRemove_InputFileUpdate.connect(lambda file_path: self.update_default_models(file_path=file_path))
         global_event_bus.License_update.connect(self.select_first_interactive)
@@ -534,6 +542,110 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         slider.valueChanged.emit(2)
         layout.addWidget(slider)
         return container
+
+    def _build_video_speed_params(self) -> QWidget:
+        container = QFrame()
+        container.setObjectName("videoSpeedParamsCard")
+        container.setStyleSheet("""
+            QFrame#videoSpeedParamsCard {
+                background-color: #f8f9fa;
+                border-radius: 10px;
+                border: 1px solid #e9ecef;
+            }
+            QPushButton#videoSpeedOption {
+                background-color: #ffffff;
+                color: #1f2937;
+                border: 1px solid #e5e7eb;
+                border-radius: 9px;
+                font-weight: 600;
+            }
+            QPushButton#videoSpeedOption:hover {
+                background-color: #f8fafc;
+                border-color: #94a3b8;
+            }
+            QPushButton#videoSpeedOption:checked {
+                background-color: #eff6ff;
+                color: #1d4ed8;
+                border: 1px solid #3b82f6;
+            }
+        """)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(8)
+        layout.addWidget(self._build_params_section_header())
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+        name_label = QLabel(self.tr("水印移除速度"))
+        setFont(name_label, 13, QFont.DemiBold)
+        name_label.setStyleSheet("color: #2c3e50; background: transparent;")
+        hint_label = QLabel(self.tr("速度越快，修复质量可能越低"))
+        setFont(hint_label, 10)
+        hint_label.setStyleSheet("color: #888888; background: transparent;")
+        row.addWidget(name_label)
+        row.addWidget(hint_label, 1)
+        layout.addLayout(row)
+
+        speed_options = (
+            (self.tr("快速"), 2, "⚡", "#d97706", "#fef3c7"),
+            (self.tr("均衡"), 4, "◈", "#2563eb", "#dbeafe"),
+            (self.tr("高质量"), 8, "✦", "#7c3aed", "#ede9fe"),
+        )
+        option_group = QButtonGroup(container)
+        option_group.setExclusive(True)
+        options_layout = QHBoxLayout()
+        options_layout.setContentsMargins(0, 2, 0, 0)
+        options_layout.setSpacing(8)
+
+        configured_step = watermark_remove_params.get_param("model.infer_step")
+        available_steps = {step for _, step, _, _, _ in speed_options}
+        current_step = configured_step if configured_step in available_steps else 2
+        options_layout.addStretch(1)
+        for title, step, icon, icon_color, icon_background in speed_options:
+            option = QPushButton()
+            option.setObjectName("videoSpeedOption")
+            option.setCheckable(True)
+            option.setCursor(Qt.CursorShape.PointingHandCursor)
+            option.setFixedSize(88 if title != self.tr("高质量") else 96, 54)
+
+            option_layout = QVBoxLayout(option)
+            option_layout.setContentsMargins(3, 7, 3, 3)
+            option_layout.setSpacing(0)
+            icon_label = QLabel(icon)
+            icon_label.setFixedSize(28, 24)
+            icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            setFont(icon_label, 16, QFont.Bold)
+            icon_label.setStyleSheet(f"color: {icon_color}; background-color: {icon_background}; border-radius: 7px;")
+            title_label = QLabel(title)
+            title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            setFont(title_label, 10, QFont.DemiBold)
+            title_label.setStyleSheet("color: #1f2937; background: transparent;")
+            option_layout.addWidget(icon_label, alignment=Qt.AlignmentFlag.AlignCenter)
+            option_layout.addWidget(title_label)
+
+            option.setChecked(step == current_step)
+
+            def _on_speed_option_clicked(checked: bool, selected_step: int = step):
+                if checked:
+                    watermark_remove_params.set_param("model.infer_step", selected_step)
+
+            option.clicked.connect(_on_speed_option_clicked)
+            option_group.addButton(option)
+            options_layout.addWidget(option)
+
+        options_layout.addStretch(1)
+        layout.addLayout(options_layout)
+        if configured_step != current_step:
+            watermark_remove_params.set_param("model.infer_step", current_step)
+        return container
+
+    def _update_video_params_visibility(self, model_name: str):
+        is_stable_video_remove = model_name == "stable_video_remove"
+        self.video_mask_params_widget.setVisible(not is_stable_video_remove)
+        self.video_speed_params_widget.setVisible(is_stable_video_remove)
+        if self.stacked_widget.currentIndex() == 2:
+            self._animate_to_content_height()
 
     def _build_restoration_prompt_params(self) -> QWidget:
         PRESETS = (

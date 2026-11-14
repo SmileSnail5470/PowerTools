@@ -15,6 +15,7 @@ MODEL_DIR_SIZES = {
         "ocr": 207,
         "tracker": 119,
         "video_inpainting/ppt": 250,
+        "video_inpainting/video_object_removal": 2898,
         "image_edit/general_edit": 5756,
         "image_edit/reverse_edit": 2198,
         "image_edit/sr_edit": 3339,
@@ -28,6 +29,7 @@ MODEL_DIR_SIZES = {
         "ocr": 207,
         "tracker": 119,
         "video_inpainting/ppt": 175,
+        "video_inpainting/video_object_removal": 2898,
         "image_edit/general_edit": 5756,
         "image_edit/reverse_edit": 2198,
         "image_edit/sr_edit": 2528,
@@ -57,7 +59,7 @@ AI_CAPABILITIES = (
             MEDIA_IMAGE: ["visible_watermark_removal", "object_segmentation", "image_edit/general_edit", "image_restoration/general_restoration", "image_edit/object_remove"],
             MEDIA_VIDEO: [
                 "visible_watermark_removal", "object_segmentation", "image_edit/general_edit", "image_restoration/general_restoration", 
-                "video_inpainting/ppt", "tracker", "video_engine", "image_edit/object_remove"
+                "video_inpainting/ppt", "tracker", "video_engine", "image_edit/object_remove", "video_inpainting/video_object_removal",
             ],
         },
     },
