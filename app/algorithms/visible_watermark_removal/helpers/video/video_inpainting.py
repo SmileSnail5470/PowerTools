@@ -160,7 +160,7 @@ def video_stable_inpainting(
         )
         pipeline = VideoObjectRemoveInference(
             model_dir=video_object_removal_onnx_basedir,
-            infer_step=step_num
+            infer_step=int(step_num)
         )
         try:
             cropped_output_dir = processed_frames_dir.parent / f"{processed_frames_dir.name}_cropped"
