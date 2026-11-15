@@ -168,6 +168,7 @@ class VideoWatermarkRemover:
                     processed_frames_dir=processed_frames_dir,
                     frame_mask_map=frame_mask_map,
                     step_num=config.model_config.infer_step,
+                    low_memory=config.model_config.low_memory,
                     video_object_removal_onnx_basedir=config.video_extra.video_object_removal_model_dir
                 )
             else:

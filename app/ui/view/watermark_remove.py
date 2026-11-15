@@ -18,6 +18,7 @@ from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.file_selector_widget import FileSelectorWidget
 from app.ui.widgets.directory_selector_widget import DirectorySelectorWidget
 from app.ui.widgets.custom_card_group_widget import StyleCard
+from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget
 from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
@@ -573,6 +574,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         layout.setContentsMargins(12, 10, 12, 12)
         layout.setSpacing(8)
         layout.addWidget(self._build_params_section_header())
+        self._build_video_low_memory_params(layout, container)
 
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
@@ -639,6 +641,36 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         if configured_step != current_step:
             watermark_remove_params.set_param("model.infer_step", current_step)
         return container
+
+    def _build_video_low_memory_params(self, layout: QVBoxLayout, parent: QWidget) -> None:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+        name_label = QLabel(self.tr("低显存模式"))
+        setFont(name_label, 13, QFont.DemiBold)
+        name_label.setStyleSheet("color: #2c3e50; background: transparent;")
+        hint_label = QLabel(self.tr("关闭低显存模式，速度提升20%，建议大于12G显存关闭。"))
+        setFont(hint_label, 10)
+        hint_label.setStyleSheet("color: #888888; background: transparent;")
+
+        low_memory_switch = ToggleSwitch(parent=parent, on_color="#667eea")
+        low_memory_switch.setActive(
+            watermark_remove_params.get_param("model.low_memory"),
+            animated=False,
+        )
+        row.addWidget(name_label)
+        row.addWidget(hint_label, 1)
+        row.addWidget(low_memory_switch)
+        layout.addLayout(row)
+
+        bind_widget_to_param(
+            low_memory_switch,
+            "toggled",
+            watermark_remove_params,
+            "model.low_memory",
+            transform=bool,
+        )
+        low_memory_switch.toggled.emit(low_memory_switch.isActive())
 
     def _update_video_params_visibility(self, model_name: str):
         is_stable_video_remove = model_name == "stable_video_remove"
