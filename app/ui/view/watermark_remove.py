@@ -3,8 +3,8 @@ import sys
 import cv2
 from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, QSize
 from PySide6.QtWidgets import (
-    QVBoxLayout, QWidget, QLabel, QHBoxLayout, QStackedWidget, QLineEdit, QFileDialog, QStackedLayout, 
-    QSlider, QButtonGroup, QPushButton, QFrame, QTextEdit, QSpinBox
+    QVBoxLayout, QWidget, QLabel, QHBoxLayout, QStackedWidget, QLineEdit, QFileDialog, QStackedLayout,
+    QSlider, QButtonGroup, QPushButton, QFrame, QTextEdit, QSpinBox, QGridLayout, QSizePolicy
 )
 from PySide6.QtGui import QFont, QColor, QAction
 
@@ -596,15 +596,17 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         )
         option_group = QButtonGroup(container)
         option_group.setExclusive(True)
-        options_layout = QHBoxLayout()
+        options_layout = QGridLayout()
         options_layout.setContentsMargins(0, 2, 0, 0)
-        options_layout.setSpacing(8)
+        options_layout.setHorizontalSpacing(8)
+        options_layout.setVerticalSpacing(0)
+        options_layout.setColumnStretch(0, 1)
+        options_layout.setColumnStretch(4, 1)
 
         configured_step = watermark_remove_params.get_param("model.infer_step")
         available_steps = {step for _, step, _, _, _ in speed_options}
         current_step = configured_step if configured_step in available_steps else 2
-        options_layout.addStretch(1)
-        for title, step, icon, icon_color, icon_background in speed_options:
+        for column, (title, step, icon, icon_color, icon_background) in enumerate(speed_options, start=1):
             option = QPushButton()
             option.setObjectName("videoSpeedOption")
             option.setCheckable(True)
@@ -634,42 +636,42 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
             option.clicked.connect(_on_speed_option_clicked)
             option_group.addButton(option)
-            options_layout.addWidget(option)
+            options_layout.addWidget(option, 0, column)
 
-        options_layout.addStretch(1)
         layout.addLayout(options_layout)
         if configured_step != current_step:
             watermark_remove_params.set_param("model.infer_step", current_step)
         return container
 
     def _build_video_low_memory_params(self, layout: QVBoxLayout, parent: QWidget) -> None:
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(8)
+        section = QVBoxLayout()
+        section.setContentsMargins(0, 0, 0, 0)
+        section.setSpacing(4)
         name_label = QLabel(self.tr("低显存模式"))
         setFont(name_label, 13, QFont.DemiBold)
         name_label.setStyleSheet("color: #2c3e50; background: transparent;")
-        hint_label = QLabel(self.tr("关闭低显存模式，速度提升20%，建议大于12G显存关闭。"))
-        setFont(hint_label, 10)
+        hint_label = QLabel(self.tr("建议显存大于 12G 关闭以获的 20% 提速"))
+        setFont(hint_label, 11)
         hint_label.setStyleSheet("color: #888888; background: transparent;")
 
+        controls_row = QGridLayout()
+        controls_row.setContentsMargins(0, 0, 0, 0)
+        controls_row.setHorizontalSpacing(8)
+        controls_row.setVerticalSpacing(0)
+        controls_row.setColumnStretch(0, 1)
+        controls_row.setColumnMinimumWidth(1, 88)
+        controls_row.setColumnMinimumWidth(2, 88)
+        controls_row.setColumnMinimumWidth(3, 96)
+        controls_row.setColumnStretch(4, 1)
+        hint_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         low_memory_switch = ToggleSwitch(parent=parent, on_color="#667eea")
-        low_memory_switch.setActive(
-            watermark_remove_params.get_param("model.low_memory"),
-            animated=False,
-        )
-        row.addWidget(name_label)
-        row.addWidget(hint_label, 1)
-        row.addWidget(low_memory_switch)
-        layout.addLayout(row)
-
-        bind_widget_to_param(
-            low_memory_switch,
-            "toggled",
-            watermark_remove_params,
-            "model.low_memory",
-            transform=bool,
-        )
+        low_memory_switch.setActive(watermark_remove_params.get_param("model.low_memory"), animated=True)
+        controls_row.addWidget(hint_label, 0, 0, 1, 3)
+        controls_row.addWidget(low_memory_switch, 0, 3, alignment=Qt.AlignmentFlag.AlignRight)
+        section.addWidget(name_label)
+        section.addLayout(controls_row)
+        layout.addLayout(section)
+        bind_widget_to_param(low_memory_switch, "toggled", watermark_remove_params, "model.low_memory", transform=bool)
         low_memory_switch.toggled.emit(low_memory_switch.isActive())
 
     def _update_video_params_visibility(self, model_name: str):
@@ -1005,6 +1007,29 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         m = layout.contentsMargins()
         inner_width = width - m.left() - m.right()
         total_h = m.top() + m.bottom()
+        if isinstance(layout, QGridLayout):
+            row_heights = {}
+            for i in range(layout.count()):
+                item = layout.itemAt(i)
+                if item is None:
+                    continue
+                row, _, _, _ = layout.getItemPosition(i)
+                widget = item.widget()
+                if widget is not None:
+                    if not widget.isVisible():
+                        continue
+                    item_height = self._calc_widget_height(widget, inner_width)
+                elif item.layout() is not None:
+                    item_height = self._calc_layout_height(item.layout(), inner_width)
+                else:
+                    spacer = item.spacerItem()
+                    item_height = spacer.sizeHint().height() if spacer is not None else 0
+                row_heights[row] = max(row_heights.get(row, 0), item_height)
+
+            total_h += sum(row_heights.values())
+            if len(row_heights) > 1:
+                total_h += layout.verticalSpacing() * (len(row_heights) - 1)
+            return total_h
         item_heights = []
 
         for i in range(layout.count()):
