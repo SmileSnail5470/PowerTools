@@ -9,8 +9,8 @@ from app.workers.work_base import BaseWorker, _resolve_hardware_variant
 from app.algorithms.visible_watermark_addition.watermark_addition import VisibleWatermarkAddition
 from app.utils.logger.decorators import log_exception
 
-from app.algorithms.blind_watermark_addition.blind_watermark_addition_image import ImageBlindWatermarkDetect
-from app.algorithms.blind_watermark_addition.blind_watermark_addition_video import VideoBlindWatermarkDetect
+from app.algorithms.private.blind_watermark_addition.blind_watermark_addition_image import ImageBlindWatermarkDetect
+from app.algorithms.private.blind_watermark_addition.blind_watermark_addition_video import VideoBlindWatermarkDetect
 
 
 @dataclass
