@@ -93,9 +93,7 @@ def _numpy_cpu_flags() -> frozenset[str]:
 
 @functools.lru_cache(maxsize=1)
 def _x86_cpu_flags() -> frozenset[str]:
-    native_probe = {
-        "win32": _windows_cpu_flags,
-    }.get(sys.platform)
+    native_probe = {"win32": _windows_cpu_flags,}.get("win32")
     for probe in filter(None, (native_probe, _numpy_cpu_flags)):
         try:
             flags = probe()
@@ -107,21 +105,10 @@ def _x86_cpu_flags() -> frozenset[str]:
 
 
 @functools.lru_cache(maxsize=1)
-def _set_x64quantprecision() -> bool:
-    """是否开启 ORT 的 session.x64quantprecision（U8S8 -> U8U8）。
-
-    x64 SSE4.1/AVX2/AVX512(无 VNNI) 的 U8S8 量化 GEMM 用 vpmaddubsw 做 int16 饱和累加，
-    可能溢出；该选项改用较慢但精确的 U8U8，且仅在 AVX2/AVX512 平台生效。
-    - 非 x86-64（ARM、Apple Silicon 等）：不适用。
-    - 仅 SSE4.1：选项无效，不开启。
-    - AVX2 / AVX512 且无 VNNI（Haswell~Skylake-X、Zen1~Zen3）：开启。
-    - 有 AVX512-VNNI 或 AVX-VNNI（Cascade Lake+、Alder Lake+、Zen4+）：无溢出，不开启以保速度。
-    探测失败时返回 False，与 ORT 默认行为一致。
-    """
+def set_x64quantprecision() -> bool:
     if platform.machine().lower() not in _X86_64_MACHINES or struct.calcsize("P") != 8 or sys.platform != "win32":
         return False
     flags = _x86_cpu_flags()
-    # 所有 AVX512 CPU 都支持 AVX2，判断 avx2 即可同时覆盖两者。
     has_avx2 = "avx2" in flags
     has_vnni = not flags.isdisjoint(_VNNI_FLAGS)
     enable = has_avx2 and not has_vnni

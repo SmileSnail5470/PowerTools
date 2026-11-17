@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QLabel, QHBoxLayout, QStackedWidget, QLineEdit, QFileDialog, QStackedLayout,
     QSlider, QButtonGroup, QPushButton, QFrame, QTextEdit, QSpinBox, QGridLayout, QSizePolicy
 )
-from PySide6.QtGui import QFont, QColor, QAction
+from PySide6.QtGui import QFont, QColor, QAction, QWheelEvent
 
 from app.ui.library.qfluentwidgets import( 
     setFont, HeaderCardWidget, SegmentedWidget, ScrollArea, PushButton, CaptionLabel,
@@ -43,6 +43,12 @@ watermark_remove_params = LayeredTaskParams(params=WatermarkRemoveUIParams())
 watermark_remove_task_status_model = TaskStatusModel()
 # 当前批次已提交的任务 future，用于支持一次性取消
 watermark_remove_active_futures = []
+
+
+class _NoWheelSlider(QSlider):
+    def wheelEvent(self, event: QWheelEvent):
+        event.ignore()
+
 
 class FileSelectorCard(HeaderCardWidget):
     def __init__(self, parent=None):
@@ -512,7 +518,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         row.addWidget(value_label)
         layout.addLayout(row)
 
-        slider = QSlider(Qt.Orientation.Horizontal)
+        slider = _NoWheelSlider(Qt.Orientation.Horizontal)
         slider.setMinimum(0)
         slider.setMaximum(8)
         slider.setValue(2)

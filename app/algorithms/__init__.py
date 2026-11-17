@@ -11,7 +11,7 @@ ort.preload_dlls(directory="")
 import app.library._model_loader as model_loader
 from app.ui.common.utils import global_backend_info_cache
 from app.ui.common.config import cfg
-from app.algorithms.hardware_info import _set_x64quantprecision
+from app.algorithms.hardware_info import set_x64quantprecision
 try:
     import cupy
 except Exception:
@@ -740,7 +740,9 @@ def general_session(
     }[graph_optimization_level]
     options.add_session_config_entry("session.use_env_allocators", "1")
     # options.add_session_config_entry("session.use_device_allocator_for_initializers", "1")
-    if not is_gpu_device() and not (sys.platform == "darwin" and platform.machine() == "arm64") and _set_x64quantprecision():
+    cpu_compatibility_mode = cfg.get(cfg.cpuCompatibilityMode)
+    enable_x64quantprecision = cpu_compatibility_mode == "Enable" or (cpu_compatibility_mode == "Auto" and set_x64quantprecision())
+    if not is_gpu_device() and not (sys.platform == "darwin" and platform.machine() == "arm64") and enable_x64quantprecision:
         options.add_session_config_entry("session.x64quantprecision", "1")
         algorithms_logger.info("Eanbel x64quantprecision session config.")
     options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
