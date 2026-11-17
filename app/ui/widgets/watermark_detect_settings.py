@@ -756,6 +756,8 @@ class WatermarkDetectSettings(QWidget):
         self.confidence_container.setVisible(mode in ("semantic_detect", "space_detect"))
         self.watermarkDetectType.emit("ai_detect")
         self.watermarkAIDetectMethod.emit(mode)
+        self.watermarkAIDetectPosBoxes.emit([])
+        self.watermarkAIDetectNegBoxes.emit([])
         self._update_tracking_visibility(update_height=False)
         if update_height:
             self.update_layout_height()
