@@ -133,6 +133,7 @@ def video_stable_inpainting(
     frame_mask_map: dict[str, str], 
     step_num: int, 
     low_memory: bool,
+    paste_back: bool,
     video_object_removal_onnx_basedir: str
 ) -> None:
     if not frame_mask_map:
@@ -162,6 +163,7 @@ def video_stable_inpainting(
         pipeline = VideoObjectRemoveInference(
             model_dir=video_object_removal_onnx_basedir,
             low_memory=low_memory,
+            paste_back=paste_back,
             infer_step=int(step_num)
         )
         try:

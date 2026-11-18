@@ -580,6 +580,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         layout.setContentsMargins(12, 10, 12, 12)
         layout.setSpacing(8)
         layout.addWidget(self._build_params_section_header())
+        self._build_video_original_quality_params(layout, container)
         self._build_video_low_memory_params(layout, container)
 
         row = QHBoxLayout()
@@ -657,7 +658,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         setFont(name_label, 13, QFont.DemiBold)
         name_label.setStyleSheet("color: #2c3e50; background: transparent;")
         hint_label = QLabel(self.tr("建议显存大于 12G 关闭以获的 20% 提速"))
-        setFont(hint_label, 11)
+        setFont(hint_label, 10)
         hint_label.setStyleSheet("color: #888888; background: transparent;")
 
         controls_row = QGridLayout()
@@ -679,6 +680,41 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         layout.addLayout(section)
         bind_widget_to_param(low_memory_switch, "toggled", watermark_remove_params, "model.low_memory", transform=bool)
         low_memory_switch.toggled.emit(low_memory_switch.isActive())
+
+    def _build_video_original_quality_params(self, layout: QVBoxLayout, parent: QWidget) -> None:
+        section = QVBoxLayout()
+        section.setContentsMargins(0, 0, 0, 0)
+        section.setSpacing(4)
+        name_label = QLabel(self.tr("非水印区域保留原画质"))
+        setFont(name_label, 13, QFont.DemiBold)
+        name_label.setStyleSheet("color: #2c3e50; background: transparent;")
+        hint_label = QLabel(self.tr(
+            "开启：画质无损，但修复区或有超轻微闪烁\n"
+            "关闭：画面整体一致性好，但画质略有下降"
+        ))
+        setFont(hint_label, 10)
+        hint_label.setStyleSheet("color: #888888; background: transparent;")
+        hint_label.setWordWrap(True)
+
+        controls_row = QGridLayout()
+        controls_row.setContentsMargins(0, 0, 0, 0)
+        controls_row.setHorizontalSpacing(8)
+        controls_row.setVerticalSpacing(0)
+        controls_row.setColumnStretch(0, 1)
+        controls_row.setColumnMinimumWidth(1, 88)
+        controls_row.setColumnMinimumWidth(2, 88)
+        controls_row.setColumnMinimumWidth(3, 96)
+        controls_row.setColumnStretch(4, 1)
+        hint_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        paste_back_switch = ToggleSwitch(parent=parent, on_color="#667eea")
+        paste_back_switch.setActive(watermark_remove_params.get_param("model.paste_back"), animated=True)
+        controls_row.addWidget(hint_label, 0, 0, 1, 3)
+        controls_row.addWidget(paste_back_switch, 0, 3, alignment=Qt.AlignmentFlag.AlignRight)
+        section.addWidget(name_label)
+        section.addLayout(controls_row)
+        layout.addLayout(section)
+        bind_widget_to_param(paste_back_switch, "toggled", watermark_remove_params, "model.paste_back", transform=bool)
+        paste_back_switch.toggled.emit(paste_back_switch.isActive())
 
     def _update_video_params_visibility(self, model_name: str):
         is_stable_video_remove = model_name == "stable_video_remove"

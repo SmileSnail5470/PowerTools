@@ -72,6 +72,7 @@ class _ModelParams:
     mask_dilate: int = 2
     infer_step: int | None = None
     low_memory: bool = True
+    paste_back: bool = True
     # restoration 模型参数
     restoration_watermark_type: str = "general"
     restoration_prompt: str = ""
@@ -236,6 +237,7 @@ class WatermarkRemoveWork(BaseWorker):
                     model_config=VideoModelConfig(
                         infer_step=p.model.infer_step,
                         low_memory=p.model.low_memory,
+                        paste_back=p.model.paste_back,
                     ),
                     runtime=RuntimeConfig(
                         progress_cb=progress_cb,

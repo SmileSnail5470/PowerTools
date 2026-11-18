@@ -102,6 +102,7 @@ class VideoMaskConfig(MaskConfig):
 class VideoModelConfig:
     infer_step: int | None = None
     low_memory: bool = True
+    paste_back: bool = True
 
 
 @dataclass(slots=True)
