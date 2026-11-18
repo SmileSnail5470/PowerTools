@@ -3,10 +3,10 @@ import sys
 import cv2
 from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, QSize
 from PySide6.QtWidgets import (
-    QVBoxLayout, QWidget, QLabel, QHBoxLayout, QStackedWidget, QLineEdit, QFileDialog, QStackedLayout, 
-    QSlider, QButtonGroup, QPushButton, QFrame, QTextEdit, QSpinBox
+    QVBoxLayout, QWidget, QLabel, QHBoxLayout, QStackedWidget, QLineEdit, QFileDialog, QStackedLayout,
+    QSlider, QButtonGroup, QPushButton, QFrame, QTextEdit, QSpinBox, QGridLayout, QSizePolicy
 )
-from PySide6.QtGui import QFont, QColor, QAction
+from PySide6.QtGui import QFont, QColor, QAction, QWheelEvent
 
 from app.ui.library.qfluentwidgets import( 
     setFont, HeaderCardWidget, SegmentedWidget, ScrollArea, PushButton, CaptionLabel,
@@ -18,6 +18,7 @@ from app.ui.widgets.gradient_header_widget import GradientHeader
 from app.ui.widgets.file_selector_widget import FileSelectorWidget
 from app.ui.widgets.directory_selector_widget import DirectorySelectorWidget
 from app.ui.widgets.custom_card_group_widget import StyleCard
+from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget
 from app.ui.widgets.video_preview_widget import SyncVideoViewer
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
@@ -42,6 +43,12 @@ watermark_remove_params = LayeredTaskParams(params=WatermarkRemoveUIParams())
 watermark_remove_task_status_model = TaskStatusModel()
 # 当前批次已提交的任务 future，用于支持一次性取消
 watermark_remove_active_futures = []
+
+
+class _NoWheelSlider(QSlider):
+    def wheelEvent(self, event: QWheelEvent):
+        event.ignore()
+
 
 class FileSelectorCard(HeaderCardWidget):
     def __init__(self, parent=None):
@@ -380,6 +387,10 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         video_flow.setHorizontalSpacing(8)
         video_flow.setVerticalSpacing(8)
 
+        video_stable_card = StyleCard("#edf108", self.tr("稳固擦除"), self.tr("兼顾擦除速度与质量"), vertical_layout=True, badge=self.tr("速度快、效果好"))
+        video_stable_card.set_name("stable_video_remove")
+        video_flow.addWidget(video_stable_card)
+        
         video_engine_card = StyleCard("#2980b9", self.tr("关键帧擦除"), self.tr("智能传播，速度适中"), vertical_layout=True, badge=self.tr("小于 8G 显存推荐"))
         video_engine_card.set_name("video_engine")
         video_flow.addWidget(video_engine_card)
@@ -403,12 +414,15 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         video_model_card_layout.addWidget(video_cards_widget)
         video_outer_layout.addWidget(video_model_card)
 
-        video_params_widget = self._build_mask_dilate_params()
-        video_outer_layout.addWidget(video_params_widget)
+        self.video_mask_params_widget = self._build_mask_dilate_params()
+        video_outer_layout.addWidget(self.video_mask_params_widget)
+        self.video_speed_params_widget = self._build_video_speed_params()
+        self.video_speed_params_widget.hide()
+        video_outer_layout.addWidget(self.video_speed_params_widget)
 
         self.stacked_widget.addWidget(video_container)
         
-        self.video_cards = [video_engine_card, video_seq_card]
+        self.video_cards = [video_stable_card, video_engine_card, video_seq_card]
         self.all_cards.extend(self.video_cards)
 
         self.tab_image.toggled.connect(lambda checked: self.on_tab_changed(0, checked))
@@ -419,6 +433,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
             card.mousePressEvent = lambda event, c=card: self.on_card_clicked(c)
 
         bind_widget_to_param(self, "model_name", watermark_remove_params, "model.model_name", transform=None)
+        self.model_name.connect(self._update_video_params_visibility)
         self.select_first_interactive()
         global_event_bus.watermarkRemove_InputFileUpdate.connect(lambda file_path: self.update_default_models(file_path=file_path))
         global_event_bus.License_update.connect(self.select_first_interactive)
@@ -503,7 +518,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         row.addWidget(value_label)
         layout.addLayout(row)
 
-        slider = QSlider(Qt.Orientation.Horizontal)
+        slider = _NoWheelSlider(Qt.Orientation.Horizontal)
         slider.setMinimum(0)
         slider.setMaximum(8)
         slider.setValue(2)
@@ -534,6 +549,179 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         slider.valueChanged.emit(2)
         layout.addWidget(slider)
         return container
+
+    def _build_video_speed_params(self) -> QWidget:
+        container = QFrame()
+        container.setObjectName("videoSpeedParamsCard")
+        container.setStyleSheet("""
+            QFrame#videoSpeedParamsCard {
+                background-color: #f8f9fa;
+                border-radius: 10px;
+                border: 1px solid #e9ecef;
+            }
+            QPushButton#videoSpeedOption {
+                background-color: #ffffff;
+                color: #1f2937;
+                border: 1px solid #e5e7eb;
+                border-radius: 9px;
+                font-weight: 600;
+            }
+            QPushButton#videoSpeedOption:hover {
+                background-color: #f8fafc;
+                border-color: #94a3b8;
+            }
+            QPushButton#videoSpeedOption:checked {
+                background-color: #eff6ff;
+                color: #1d4ed8;
+                border: 1px solid #3b82f6;
+            }
+        """)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(8)
+        layout.addWidget(self._build_params_section_header())
+        self._build_video_original_quality_params(layout, container)
+        self._build_video_low_memory_params(layout, container)
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+        name_label = QLabel(self.tr("水印移除速度"))
+        setFont(name_label, 13, QFont.DemiBold)
+        name_label.setStyleSheet("color: #2c3e50; background: transparent;")
+        hint_label = QLabel(self.tr("速度越快，修复质量可能越低"))
+        setFont(hint_label, 10)
+        hint_label.setStyleSheet("color: #888888; background: transparent;")
+        row.addWidget(name_label)
+        row.addWidget(hint_label, 1)
+        layout.addLayout(row)
+
+        speed_options = (
+            (self.tr("快速"), 2, "⚡", "#d97706", "#fef3c7"),
+            (self.tr("均衡"), 4, "◈", "#2563eb", "#dbeafe"),
+            (self.tr("高质量"), 8, "✦", "#7c3aed", "#ede9fe"),
+        )
+        option_group = QButtonGroup(container)
+        option_group.setExclusive(True)
+        options_layout = QGridLayout()
+        options_layout.setContentsMargins(0, 2, 0, 0)
+        options_layout.setHorizontalSpacing(8)
+        options_layout.setVerticalSpacing(0)
+        options_layout.setColumnStretch(0, 1)
+        options_layout.setColumnStretch(4, 1)
+
+        configured_step = watermark_remove_params.get_param("model.infer_step")
+        available_steps = {step for _, step, _, _, _ in speed_options}
+        current_step = configured_step if configured_step in available_steps else 2
+        for column, (title, step, icon, icon_color, icon_background) in enumerate(speed_options, start=1):
+            option = QPushButton()
+            option.setObjectName("videoSpeedOption")
+            option.setCheckable(True)
+            option.setCursor(Qt.CursorShape.PointingHandCursor)
+            option.setFixedSize(88 if title != self.tr("高质量") else 96, 54)
+
+            option_layout = QVBoxLayout(option)
+            option_layout.setContentsMargins(3, 7, 3, 3)
+            option_layout.setSpacing(0)
+            icon_label = QLabel(icon)
+            icon_label.setFixedSize(28, 24)
+            icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            setFont(icon_label, 16, QFont.Bold)
+            icon_label.setStyleSheet(f"color: {icon_color}; background-color: {icon_background}; border-radius: 7px;")
+            title_label = QLabel(title)
+            title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            setFont(title_label, 10, QFont.DemiBold)
+            title_label.setStyleSheet("color: #1f2937; background: transparent;")
+            option_layout.addWidget(icon_label, alignment=Qt.AlignmentFlag.AlignCenter)
+            option_layout.addWidget(title_label)
+
+            option.setChecked(step == current_step)
+
+            def _on_speed_option_clicked(checked: bool, selected_step: int = step):
+                if checked:
+                    watermark_remove_params.set_param("model.infer_step", selected_step)
+
+            option.clicked.connect(_on_speed_option_clicked)
+            option_group.addButton(option)
+            options_layout.addWidget(option, 0, column)
+
+        layout.addLayout(options_layout)
+        if configured_step != current_step:
+            watermark_remove_params.set_param("model.infer_step", current_step)
+        return container
+
+    def _build_video_low_memory_params(self, layout: QVBoxLayout, parent: QWidget) -> None:
+        section = QVBoxLayout()
+        section.setContentsMargins(0, 0, 0, 0)
+        section.setSpacing(4)
+        name_label = QLabel(self.tr("低显存模式"))
+        setFont(name_label, 13, QFont.DemiBold)
+        name_label.setStyleSheet("color: #2c3e50; background: transparent;")
+        hint_label = QLabel(self.tr("建议显存大于 12G 关闭以获的 20% 提速"))
+        setFont(hint_label, 10)
+        hint_label.setStyleSheet("color: #888888; background: transparent;")
+
+        controls_row = QGridLayout()
+        controls_row.setContentsMargins(0, 0, 0, 0)
+        controls_row.setHorizontalSpacing(8)
+        controls_row.setVerticalSpacing(0)
+        controls_row.setColumnStretch(0, 1)
+        controls_row.setColumnMinimumWidth(1, 88)
+        controls_row.setColumnMinimumWidth(2, 88)
+        controls_row.setColumnMinimumWidth(3, 96)
+        controls_row.setColumnStretch(4, 1)
+        hint_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        low_memory_switch = ToggleSwitch(parent=parent, on_color="#667eea")
+        low_memory_switch.setActive(watermark_remove_params.get_param("model.low_memory"), animated=True)
+        controls_row.addWidget(hint_label, 0, 0, 1, 3)
+        controls_row.addWidget(low_memory_switch, 0, 3, alignment=Qt.AlignmentFlag.AlignRight)
+        section.addWidget(name_label)
+        section.addLayout(controls_row)
+        layout.addLayout(section)
+        bind_widget_to_param(low_memory_switch, "toggled", watermark_remove_params, "model.low_memory", transform=bool)
+        low_memory_switch.toggled.emit(low_memory_switch.isActive())
+
+    def _build_video_original_quality_params(self, layout: QVBoxLayout, parent: QWidget) -> None:
+        section = QVBoxLayout()
+        section.setContentsMargins(0, 0, 0, 0)
+        section.setSpacing(4)
+        name_label = QLabel(self.tr("非水印区域保留原画质"))
+        setFont(name_label, 13, QFont.DemiBold)
+        name_label.setStyleSheet("color: #2c3e50; background: transparent;")
+        hint_label = QLabel(self.tr(
+            "开启：画质无损，但修复区或有超轻微闪烁\n"
+            "关闭：画面整体一致性好，但画质略有下降"
+        ))
+        setFont(hint_label, 10)
+        hint_label.setStyleSheet("color: #888888; background: transparent;")
+        hint_label.setWordWrap(True)
+
+        controls_row = QGridLayout()
+        controls_row.setContentsMargins(0, 0, 0, 0)
+        controls_row.setHorizontalSpacing(8)
+        controls_row.setVerticalSpacing(0)
+        controls_row.setColumnStretch(0, 1)
+        controls_row.setColumnMinimumWidth(1, 88)
+        controls_row.setColumnMinimumWidth(2, 88)
+        controls_row.setColumnMinimumWidth(3, 96)
+        controls_row.setColumnStretch(4, 1)
+        hint_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        paste_back_switch = ToggleSwitch(parent=parent, on_color="#667eea")
+        paste_back_switch.setActive(watermark_remove_params.get_param("model.paste_back"), animated=True)
+        controls_row.addWidget(hint_label, 0, 0, 1, 3)
+        controls_row.addWidget(paste_back_switch, 0, 3, alignment=Qt.AlignmentFlag.AlignRight)
+        section.addWidget(name_label)
+        section.addLayout(controls_row)
+        layout.addLayout(section)
+        bind_widget_to_param(paste_back_switch, "toggled", watermark_remove_params, "model.paste_back", transform=bool)
+        paste_back_switch.toggled.emit(paste_back_switch.isActive())
+
+    def _update_video_params_visibility(self, model_name: str):
+        is_stable_video_remove = model_name == "stable_video_remove"
+        self.video_mask_params_widget.setVisible(not is_stable_video_remove)
+        self.video_speed_params_widget.setVisible(is_stable_video_remove)
+        if self.stacked_widget.currentIndex() == 2:
+            self._animate_to_content_height()
 
     def _build_restoration_prompt_params(self) -> QWidget:
         PRESETS = (
@@ -861,6 +1049,29 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         m = layout.contentsMargins()
         inner_width = width - m.left() - m.right()
         total_h = m.top() + m.bottom()
+        if isinstance(layout, QGridLayout):
+            row_heights = {}
+            for i in range(layout.count()):
+                item = layout.itemAt(i)
+                if item is None:
+                    continue
+                row, _, _, _ = layout.getItemPosition(i)
+                widget = item.widget()
+                if widget is not None:
+                    if not widget.isVisible():
+                        continue
+                    item_height = self._calc_widget_height(widget, inner_width)
+                elif item.layout() is not None:
+                    item_height = self._calc_layout_height(item.layout(), inner_width)
+                else:
+                    spacer = item.spacerItem()
+                    item_height = spacer.sizeHint().height() if spacer is not None else 0
+                row_heights[row] = max(row_heights.get(row, 0), item_height)
+
+            total_h += sum(row_heights.values())
+            if len(row_heights) > 1:
+                total_h += layout.verticalSpacing() * (len(row_heights) - 1)
+            return total_h
         item_heights = []
 
         for i in range(layout.count()):

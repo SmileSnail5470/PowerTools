@@ -20,6 +20,7 @@ from app.algorithms.visible_watermark_removal.params_config import (
     VideoEngineRemoveConfig,
     VideoExtraModelPaths,
     VideoMaskConfig,
+    VideoModelConfig,
     VideoWatermarkRemoveConfig,
 )
 from dataclasses import dataclass, field, asdict
@@ -69,6 +70,9 @@ class _DetectParams:
 class _ModelParams:
     model_name: str = ""
     mask_dilate: int = 2
+    infer_step: int | None = None
+    low_memory: bool = True
+    paste_back: bool = True
     # restoration 模型参数
     restoration_watermark_type: str = "general"
     restoration_prompt: str = ""
@@ -209,13 +213,15 @@ class WatermarkRemoveWork(BaseWorker):
             if p.model.model_name not in ["image_restoration"]:
                 ppt_onnx_basedir = os.path.join(self.deps_path, _resolve_hardware_variant(), "video_inpainting", "ppt")
                 tacker_onnx_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "tracker")
+                video_object_removal_model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "video_inpainting", "video_object_removal")
                 video_cfg = VideoWatermarkRemoveConfig(
                     segment=segment_paths,
                     inpaint=inpaint_paths,
                     video_extra=VideoExtraModelPaths(
                         ppt_onnx_basedir=ppt_onnx_basedir,
                         tacker_onnx_dir=tacker_onnx_dir,
-                        object_segmentation_model_dir=segment_model_dir
+                        object_segmentation_model_dir=segment_model_dir,
+                        video_object_removal_model_dir=video_object_removal_model_dir
                     ),
                     detection=detection_cfg,
                     mask=VideoMaskConfig(
@@ -227,6 +233,11 @@ class WatermarkRemoveWork(BaseWorker):
                         video_watermark_ai_detect_anchor_frame=detect.video_watermark_ai_detect_anchor_frame,
                         video_watermark_ai_detect_frame_range=detect.video_watermark_ai_detect_frame_range,
                         watermark_tracking_data=tracking_dict,
+                    ),
+                    model_config=VideoModelConfig(
+                        infer_step=p.model.infer_step,
+                        low_memory=p.model.low_memory,
+                        paste_back=p.model.paste_back,
                     ),
                     runtime=RuntimeConfig(
                         progress_cb=progress_cb,

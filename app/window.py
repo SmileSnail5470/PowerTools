@@ -70,7 +70,7 @@ class MainWindow(FluentWindow):
     def initNavigation(self):
         # add navigation items
         self.addSubInterface(self.homeInterface, FIF.HOME, self.tr('主页'))
-        self.addSubInterface(self.settingInterface, FIF.SETTING, self.tr("常规"))
+        self.addSubInterface(self.settingInterface, FIF.SETTING, self.tr("设置"))
         self.addSubInterface(self.licenseInterface, FIF.CERTIFICATE, self.tr("授权"))
         self.addSubInterface(self.tutorialInterface, FIF.LIBRARY, self.tr("教程"))
         self.navigationInterface.addSeparator()

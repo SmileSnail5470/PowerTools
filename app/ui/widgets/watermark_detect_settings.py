@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QStackedWidget, QSpinBox, QFrame, QGraphicsDropShadowEffect, QDialog
 )
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal, QTimer, QSize
-from PySide6.QtGui import QColor, QFont, QImage
+from PySide6.QtGui import QColor, QFont, QImage, QWheelEvent
 from app.ui.library.qfluentwidgets import setFont, MessageBox, FlowLayout, FluentIcon
 from app.ui.common.utils import get_file_type
 from app.ui.common.config import cfg
@@ -15,6 +15,11 @@ from app.ui.widgets.watermark_manual_select_widget import WatermarkMaskTool
 from app.ui.widgets.video_object_detector_widget import VideoFrameCanvas, VideoObjectDetectorWidget
 from app.workers.watermark_remove import VideoTrackingParams
 from app.utils.image_io import open_video_capture
+
+
+class _NoWheelSlider(QSlider):
+    def wheelEvent(self, event: QWheelEvent):
+        event.ignore()
 
 
 class WatermarkVideoPreviewDialog(QDialog):
@@ -506,7 +511,7 @@ class WatermarkDetectSettings(QWidget):
         header.addWidget(self.conf_val_label)
         layout.addLayout(header)
 
-        self.conf_slider = QSlider(Qt.Horizontal)
+        self.conf_slider = _NoWheelSlider(Qt.Horizontal)
         self.conf_slider.setObjectName("confSlider")
         self.conf_slider.setRange(0, 100)
         self.conf_slider.setValue(30)
@@ -751,6 +756,8 @@ class WatermarkDetectSettings(QWidget):
         self.confidence_container.setVisible(mode in ("semantic_detect", "space_detect"))
         self.watermarkDetectType.emit("ai_detect")
         self.watermarkAIDetectMethod.emit(mode)
+        self.watermarkAIDetectPosBoxes.emit([])
+        self.watermarkAIDetectNegBoxes.emit([])
         self._update_tracking_visibility(update_height=False)
         if update_height:
             self.update_layout_height()

@@ -1703,6 +1703,25 @@ class Settings(QWidget):
         hardware_optimization_card.setSeparatorVisible(True)
         performance_settings_cards.append(hardware_optimization_card)
 
+        cpu_compatibility_combox = ComboBox()
+        current_cpu_compatibility = cfg.get(cfg.cpuCompatibilityMode)
+        setFont(cpu_compatibility_combox, 14)
+        cpu_compatibility_combox.addItems(["Auto", "Enable", "Disable"])
+        index = cpu_compatibility_combox.findText(current_cpu_compatibility)
+        if index >= 0:
+            cpu_compatibility_combox.setCurrentIndex(index)
+        cpu_compatibility_combox.currentTextChanged.connect(
+            lambda text: cfg.set(cfg.cpuCompatibilityMode, text)
+        )
+        cpu_compatibility_card = CustomCardGroupWidget(
+            title=self.tr("CPU 兼容模式运行"),
+            content=self.tr("自动模式将根据处理器支持情况决定是否启用兼容设置"),
+            parent=self
+        )
+        cpu_compatibility_card.addWidget(cpu_compatibility_combox, stretch=0)
+        cpu_compatibility_card.setSeparatorVisible(True)
+        performance_settings_cards.append(cpu_compatibility_card)
+
         for card in performance_settings_cards:
             performance_settings.addCard(card=card)
 

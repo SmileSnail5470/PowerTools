@@ -323,7 +323,7 @@ class LicenseView(QWidget):
         layout.addStretch()
         layout.addWidget(self._create_separator())
 
-        help_label = QLabel(self.tr("🛡️ 支付完成后自动下发与本机绑定的授权文件；每一笔订单均生成可追溯记录，如遇异常可凭订单号申诉。"))
+        help_label = QLabel(self.tr("🛡️ 支付完成后作者需要人工确认订单，授权时间从确认订单开始计时。确认订单后自动下发与本机绑定的授权文件；每一笔订单均生成可追溯记录，如遇异常可凭订单号申诉。"))
         setFont(help_label, 11)
         help_label.setWordWrap(True)
         help_label.setStyleSheet(f"color: {TEXT_SECONDARY};")

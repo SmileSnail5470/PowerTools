@@ -1461,7 +1461,7 @@ class VideoObjectDetectorWidget(QDialog):
         edge_layout = QVBoxLayout(self.edgetam_params)
         edge_layout.setContentsMargins(0, 0, 0, 0)
         edge_layout.setSpacing(8)
-        edge_layout.addWidget(self._pill_label(self.tr("ⓘ EdgeTAM 根据起始掩码跟踪目标，水印文本用于描述目标。"), "warningBox", wrap=False))
+        edge_layout.addWidget(self._pill_label(self.tr("ⓘ 根据起始掩码跟踪目标，水印文本用于描述目标。"), "warningBox", wrap=False))
         self.edgetam_text_enabled, self.edgetam_box_enabled = self._add_prompt_mode_switches("edgetam")
         edge_layout.addWidget(self._section_title_with_toggle(self.tr("文本提示"), self.edgetam_text_enabled))
         self.edge_text_input = QLineEdit("watermark")
@@ -1487,7 +1487,7 @@ class VideoObjectDetectorWidget(QDialog):
         edge_chips_layout.addStretch()
         edge_layout.addWidget(edge_chips_row)
         self._prompt_text_controls["edgetam"] = [self.edge_text_input, edge_chips_row]
-        edge_layout.addWidget(self._info_pill(self.tr("EdgeTAM 根据起始掩码跟踪目标，文本用于描述当前跟踪目标。")))
+        edge_layout.addWidget(self._info_pill(self.tr("根据起始掩码跟踪目标，文本用于描述当前跟踪目标。")))
         self._add_prompt_box_controls(edge_layout, "edgetam")
         self._add_anchor_frame_setting(edge_layout, "edge_anchor_spin", "edge_anchor_button", "anchorFrameInput")
         self._add_tracking_direction_setting(edge_layout, "edge_direction_buttons")
