@@ -8,12 +8,16 @@ import subprocess
 import sys
 import tarfile
 import zipfile
-from PySide6.QtCore import Qt, Signal, QRunnable, QObject, QPropertyAnimation, QEasingCurve
+import xml.etree.ElementTree as ET
+import requests
+from urllib.parse import unquote, urlparse
+from packaging.version import InvalidVersion, Version
+from PySide6.QtCore import Qt, Signal, Slot, QRunnable, QObject, QPropertyAnimation, QEasingCurve, QThreadPool, QUrl
 from PySide6.QtWidgets import(
     QHBoxLayout, QWidget, QVBoxLayout, QLabel, QFrame, QLineEdit, QPushButton, QFileDialog,
     QSizePolicy, QDialog, QProgressBar, QTextEdit, QButtonGroup
 )
-from PySide6.QtGui import QFont, QPainter, QPen, QColor
+from PySide6.QtGui import QFont, QPainter, QPen, QColor, QDesktopServices
 from huggingface_hub import snapshot_download
 from tqdm.auto import tqdm
 
@@ -33,6 +37,7 @@ from app.controllers.task_manager import InternalTaskManager
 from app.ui.common.utils import global_backend_info_cache
 from app.utils.logger import get_log_manager
 from app.utils.logger.decorators import log_exception, log_function_call
+from version import VERSION
 
 
 def detect_gpu_available() -> bool:
@@ -43,6 +48,10 @@ def detect_gpu_available() -> bool:
 HF_REPO_ID = "SmailSnail/PowerToolsEnc"
 HF_MIRROR_ENDPOINT = "https://hf-mirror.com"
 HF_VARIANT_DIRS = {"cpu": "CPU", "gpu": "GPU"}
+GITHUB_RELEASES_API_URL = "https://api.github.com/repos/SmileSnail5470/PowerTools/releases/latest"
+GITHUB_RELEASES_URL = "https://github.com/SmileSnail5470/PowerTools/releases"
+GITHUB_RELEASES_ATOM_URL = "https://github.com/SmileSnail5470/PowerTools/releases.atom"
+QUARK_RELEASES_URL = "https://pan.quark.cn/s/82baadea041e"
 
 
 def model_dir_path(deps_path: str, variant: str, model_dir: str) -> str:
@@ -81,6 +90,72 @@ class WorkerSignals(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+
+
+class ReleaseCheckSignals(QObject):
+    finished = Signal(bool, str, str)
+
+
+class ReleaseCheckWorker(QRunnable):
+    def __init__(self, current_version: str):
+        super().__init__()
+        self.current_version = current_version
+        self.signals = ReleaseCheckSignals()
+
+    def run(self):
+        try:
+            try:
+                tag_name = self._fetch_latest_release_tag_from_api()
+            except (requests.RequestException, ValueError) as api_error:
+                try:
+                    tag_name = self._fetch_latest_release_tag_from_atom()
+                except (requests.RequestException, ET.ParseError, ValueError) as atom_error:
+                    raise RuntimeError(
+                        f"GitHub API request failed ({api_error}); "
+                        f"Releases feed request failed ({atom_error})"
+                    ) from atom_error
+            latest_version = Version(tag_name.lstrip("vV"))
+            current_version = Version(self.current_version.lstrip("vV"))
+            self.signals.finished.emit(latest_version > current_version, str(latest_version), "")
+        except (requests.RequestException, ET.ParseError, ValueError, InvalidVersion, RuntimeError) as error:
+            self.signals.finished.emit(False, "", str(error))
+
+    @staticmethod
+    def _fetch_latest_release_tag_from_api() -> str:
+        response = requests.get(
+            GITHUB_RELEASES_API_URL,
+            headers={"Accept": "application/vnd.github+json", "User-Agent": "PowerTools"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        release = response.json()
+        if not isinstance(release, dict):
+            raise ValueError("GitHub release response is not a JSON object")
+        tag_name = release.get("tag_name")
+        if not isinstance(tag_name, str) or not tag_name:
+            raise ValueError("GitHub release response does not contain a valid tag_name")
+        return tag_name
+
+    @staticmethod
+    def _fetch_latest_release_tag_from_atom() -> str:
+        response = requests.get(
+            GITHUB_RELEASES_ATOM_URL,
+            headers={"User-Agent": "PowerTools"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        root = ET.fromstring(response.content)
+        namespace = "{http://www.w3.org/2005/Atom}"
+        for entry in root.findall(f"{namespace}entry"):
+            for link in entry.findall(f"{namespace}link"):
+                if link.get("rel") != "alternate":
+                    continue
+                path = urlparse(link.get("href", "")).path
+                if "/releases/tag/" in path:
+                    tag_name = unquote(path.rsplit("/releases/tag/", 1)[1])
+                    if tag_name:
+                        return tag_name
+        raise ValueError("GitHub Releases feed does not contain a release tag")
 
 
 class InitWorker(QRunnable):
@@ -1307,6 +1382,8 @@ class Settings(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.setObjectName("Settings")
+        self._release_check_worker = None
+        self._release_check_controls = None
         
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -1489,22 +1566,34 @@ class Settings(QWidget):
     def _create_general_settings(self):
         settings_cards = []
         settings = CustomGroupBox(title=self.tr("⚙️ 通用设置"))
-        
-        auto_start_switch = ToggleSwitch()
-        auto_start_switch.setActive(cfg.get(cfg.autoStartup))
-        auto_start_switch.toggled.connect(lambda flag: cfg.set(cfg.autoStartup, flag))
-        auto_start_card = CustomCardGroupWidget(title=self.tr("开机自启动"), content=self.tr("系统启动时自动运行程序（开发中）"), parent=self)
-        auto_start_card.addWidget(auto_start_switch, stretch=0)
-        auto_start_card.setSeparatorVisible(True)
-        settings_cards.append(auto_start_card)
+        version_card = CustomCardGroupWidget(title=self.tr("当前版本"), content=self.tr("版本 v{0}").format(VERSION), parent=self)
+        update_status_label = QLabel(version_card)
+        update_status_label.setStyleSheet("color: #606060;")
+        update_status_label.hide()
+        version_card.textLayout.addWidget(update_status_label)
 
-        auto_update_switch = ToggleSwitch()
-        auto_update_switch.setActive(cfg.get(cfg.autoUpdate))
-        auto_update_switch.toggled.connect(lambda flag: cfg.set(cfg.autoUpdate, flag))
-        auto_update_card = CustomCardGroupWidget(title=self.tr("自动更新"), content=self.tr("自动检查并安装新版本（开发中）"), parent=self)
-        auto_update_card.addWidget(auto_update_switch, stretch=0)
-        auto_update_card.setSeparatorVisible(True)
-        settings_cards.append(auto_update_card)
+        check_update_btn = QPushButton(self.tr("检查更新"))
+        check_update_btn.setStyleSheet(self._btn_style(bg="#4f46e5", hover="#4338ca", color="white"))
+        setFont(check_update_btn, 12, QFont.Bold)
+
+        github_download_btn = QPushButton(self.tr("GitHub 下载"))
+        github_download_btn.setStyleSheet(self._btn_style(bg="#f3f4f6", hover="#d1d5db"))
+        setFont(github_download_btn, 12, QFont.Bold)
+        github_download_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(GITHUB_RELEASES_URL)))
+        github_download_btn.hide()
+
+        quark_download_btn = QPushButton(self.tr("夸克网盘"))
+        quark_download_btn.setStyleSheet(self._btn_style(bg="#f3f4f6", hover="#d1d5db"))
+        setFont(quark_download_btn, 12, QFont.Bold)
+        quark_download_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(QUARK_RELEASES_URL)))
+        quark_download_btn.hide()
+
+        check_update_btn.clicked.connect(lambda: self._check_for_updates(update_status_label, check_update_btn, github_download_btn, quark_download_btn))
+        version_card.addWidget(check_update_btn)
+        version_card.addWidget(github_download_btn)
+        version_card.addWidget(quark_download_btn)
+        version_card.setSeparatorVisible(True)
+        settings_cards.append(version_card)
 
         self.cache_line_edit = QLineEdit()
         self.cache_line_edit.setText(cfg.get(cfg.cachePath))
@@ -1556,6 +1645,42 @@ class Settings(QWidget):
             settings.addCard(card=card)
 
         return settings
+
+    def _check_for_updates(
+        self,
+        status_label: QLabel,
+        check_button: QPushButton,
+        github_button: QPushButton,
+        quark_button: QPushButton,
+    ):
+        status_label.setText(self.tr("正在检查更新…"))
+        status_label.show()
+        check_button.setEnabled(False)
+        github_button.hide()
+        quark_button.hide()
+
+        worker = ReleaseCheckWorker(VERSION)
+        self._release_check_controls = (status_label, check_button, github_button, quark_button)
+        worker.signals.finished.connect(self._on_release_check_finished)
+        self._release_check_worker = worker
+        QThreadPool.globalInstance().start(worker)
+
+    @Slot(bool, str, str)
+    def _on_release_check_finished(self, has_update: bool, latest_version: str, error: str):
+        self._release_check_worker = None
+        status_label, check_button, github_button, quark_button = self._release_check_controls
+        self._release_check_controls = None
+        check_button.setEnabled(True)
+        if error:
+            logger.error("Failed to check for PowerTools updates: %s", error)
+            status_label.setText(self.tr("检查更新失败：{0}").format(error))
+            return
+        if has_update:
+            status_label.setText(self.tr("发现新版本 v{0}，可以下载").format(latest_version))
+            github_button.show()
+            quark_button.show()
+            return
+        status_label.setText(self.tr("已经是最新版本"))
     
     def _create_chevron_btn(self, panel: ModelVariantPanel):
         btn = ChevronButton()
