@@ -37,18 +37,18 @@ image_edit_task_status_model = TaskStatusModel()
 image_edit_active_futures = []
 
 
-class PromptInputCard(HeaderCardWidget):
+class PromptInputCard(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setTitle(self.tr("✍️ 提示词"))
-        self.setBorderRadius(8)
 
-        main_layout = QVBoxLayout()
+        main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(8)
 
-        self.viewLayout.setContentsMargins(10, 10, 10, 10)
-        self.viewLayout.addLayout(main_layout)
+        title_label = QLabel(self.tr("✍️ 提示词"), self)
+        setFont(title_label, 13, QFont.DemiBold)
+        title_label.setStyleSheet("color: #555555; background: transparent;")
+        main_layout.addWidget(title_label)
 
         self.prompt_edit = QTextEdit(self)
         self.prompt_edit.setMaximumHeight(100)
@@ -66,8 +66,8 @@ class PromptInputCard(HeaderCardWidget):
                 color: #000000;
             }
         """)
-        self._v_scroll = ScrollBar(Qt.Vertical, self.view)
-        self.prompt_edit.setVerticalScrollBar( self._v_scroll)
+        self._v_scroll = ScrollBar(Qt.Vertical, self)
+        self.prompt_edit.setVerticalScrollBar(self._v_scroll)
         setFont(self.prompt_edit, fontSize=13)
         self.prompt_edit.textChanged.connect(self._on_text_changed)
         main_layout.addWidget(self.prompt_edit)
@@ -81,18 +81,18 @@ class PromptInputCard(HeaderCardWidget):
         image_edit_params.set_param("task.prompt", self.prompt_edit.toPlainText())
 
 
-class ReferenceImageCard(HeaderCardWidget):
+class ReferenceImageCard(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setTitle(self.tr("🖼️ 参考图（可选）"))
-        self.setBorderRadius(8)
 
-        main_layout = QVBoxLayout()
+        main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(8)
 
-        self.viewLayout.setContentsMargins(10, 10, 10, 10)
-        self.viewLayout.addLayout(main_layout)
+        title_label = QLabel(self.tr("🖼️ 参考图（可选）"), self)
+        setFont(title_label, 13, QFont.DemiBold)
+        title_label.setStyleSheet("color: #555555; background: transparent;")
+        main_layout.addWidget(title_label)
 
         self.file_selector = FileSelectorWidget(self, format_text_value=self.tr("支持 JPG, PNG 格式"))
         self.file_selector.item_selected.connect(self._on_file_selected)
@@ -165,6 +165,50 @@ class ReferenceImageCard(HeaderCardWidget):
             self.area_info_label.setText(self.tr("已选择 {0} 个区域").format(len(boxes)))
         else:
             self.area_info_label.setText(self.tr("未选择区域"))
+
+
+class ParameterSettingsCard(QFrame):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("paramsCard")
+        self.setStyleSheet("""
+            QFrame#paramsCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(12, 10, 12, 12)
+        main_layout.setSpacing(10)
+
+        header = QWidget(self)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 4, 0, 0)
+        header_layout.setSpacing(8)
+
+        icon_label = QLabel("⚙️")
+        setFont(icon_label, 13)
+        icon_label.setStyleSheet("color: #555555; background: transparent;")
+        title_label = QLabel(self.tr("参数设置"))
+        setFont(title_label, 13, QFont.DemiBold)
+        title_label.setStyleSheet("color: #555555; background: transparent;")
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setStyleSheet("color: #e2e8f0;")
+
+        header_layout.addWidget(icon_label)
+        header_layout.addWidget(title_label)
+        header_layout.addWidget(divider, 1)
+        main_layout.addWidget(header)
+        main_layout.addWidget(PromptInputCard(self))
+
+        section_divider = QFrame(self)
+        section_divider.setFrameShape(QFrame.HLine)
+        section_divider.setStyleSheet("color: #e2e8f0;")
+        main_layout.addWidget(section_divider)
+        main_layout.addWidget(ReferenceImageCard(self))
 
 
 class ModelSelectCard(HeaderCardWidget):
@@ -394,9 +438,8 @@ class ControlPanelWidget(ScrollArea):
         main_layout.setSpacing(10)
         main_layout.setAlignment(Qt.AlignTop)
 
-        main_layout.addWidget(PromptInputCard(self))
-        main_layout.addWidget(ReferenceImageCard(self))
         main_layout.addWidget(ModelSelectCard(self))
+        main_layout.addWidget(ParameterSettingsCard(self))
         main_layout.addWidget(OutputSettingsCard(self))
         main_layout.addStretch(1)
 

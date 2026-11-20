@@ -156,22 +156,45 @@ class ModelStyleCard(HeaderCardWidget):
                 return
         self.model_name.emit("")
 
-class SettingsCard(HeaderCardWidget):
+class SettingsCard(QFrame):
     language_map = {
         "中日英": "zh-jp-en"
     }
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setTitle(self.tr("⚙️ OCR 设置"))
-        self.setBorderRadius(8)
+        self.setObjectName("paramsCard")
+        self.setStyleSheet("""
+            QFrame#paramsCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
 
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(12, 10, 12, 12)
+        main_layout.setSpacing(8)
 
-        self.viewLayout.setContentsMargins(10, 10, 10, 10)
-        self.viewLayout.addLayout(main_layout)
+        header = QWidget(self)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 4, 0, 0)
+        header_layout.setSpacing(8)
+
+        icon_label = QLabel("⚙️")
+        setFont(icon_label, 13)
+        icon_label.setStyleSheet("color: #555555; background: transparent;")
+        title_label = QLabel(self.tr("参数设置"))
+        setFont(title_label, 13, QFont.DemiBold)
+        title_label.setStyleSheet("color: #555555; background: transparent;")
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setStyleSheet("color: #e2e8f0;")
+
+        header_layout.addWidget(icon_label)
+        header_layout.addWidget(title_label)
+        header_layout.addWidget(divider, 1)
+        main_layout.addWidget(header)
 
         language_content_combox = ComboBox()
         setFont(language_content_combox, 12)
@@ -273,8 +296,7 @@ class ControlPanelWidget(ScrollArea):
         modelStyleCard = ModelStyleCard(self)
         main_layout.addWidget(modelStyleCard)
 
-        settingsCard = SettingsCard(self)
-        main_layout.addWidget(settingsCard)
+        main_layout.addWidget(SettingsCard(self))
 
 
         main_layout.addStretch(1)
