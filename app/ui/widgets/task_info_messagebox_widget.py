@@ -123,6 +123,7 @@ class TaskInfoMessageBox(MessageBoxBase):
                 else:
                     if p.detect.watermark_ai_detect_pos_boxes:
                         params.append((self.tr("正检测框 (去除)"), p.detect.watermark_ai_detect_pos_boxes))
+                params.append((self.tr("大图精细模式"), str(p.detect.enable_high_res_title_detect)))
         params.append((self.tr("模型"), value_map.get(p.model.model_name, p.model.model_name)))
         if p.model.model_name == "image_restoration":
             params.append((self.tr("水印类型"), p.model.restoration_watermark_type))

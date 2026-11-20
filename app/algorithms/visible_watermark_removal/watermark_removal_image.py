@@ -384,7 +384,7 @@ class ImageWatermarkRemove():
             raise ValueError(f"Cannot read image: {image_path}")
         height, width = image.shape[:2]
         tile_bounds = self._get_tile_bounds(width, height)
-        if len(tile_bounds) == 1:
+        if len(tile_bounds) == 1 or not detection.enable_high_res_title_detect:
             mask = self._detect_mask(image_path, segment_config, detection, kwargs)
         else:
             mask = np.zeros((height, width), dtype=np.uint8)

@@ -54,6 +54,7 @@ class DetectionConfig:
     watermark_ai_detect_pos_boxes: list = field(default_factory=list)
     watermark_ai_detect_neg_boxes: list = field(default_factory=list)
     watermark_ai_detect_confidence: float = 0.3
+    enable_high_res_title_detect: bool = False
 
     # OCR 检测超参
     ocr_limit_side_len: int = 960

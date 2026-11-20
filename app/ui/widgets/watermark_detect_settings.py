@@ -13,6 +13,7 @@ from app.ui.common.config import cfg
 from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
 from app.ui.widgets.watermark_manual_select_widget import WatermarkMaskTool
 from app.ui.widgets.video_object_detector_widget import VideoFrameCanvas, VideoObjectDetectorWidget
+from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 from app.workers.watermark_remove import VideoTrackingParams
 from app.utils.image_io import open_video_capture
 
@@ -204,6 +205,7 @@ class WatermarkDetectSettings(QWidget):
     watermarkAIDetectPosBoxes = Signal(list)             # 水印检测范围 boxes -- 正提示框
     watermarkAIDetectNegBoxes = Signal(list)             # 水印检测范围 boxes -- 负提示框
     watermarkAIDetectConfidence = Signal(float)          # 水印置信度
+    enableHighResTitleDetectChanged = Signal(bool)
     videoWatermarkTrackingData = Signal(object)          # 跟踪数据（VideoTrackingParams 实例）
 
 
@@ -417,6 +419,31 @@ class WatermarkDetectSettings(QWidget):
         detection_settings_layout.addWidget(self.confidence_container)
         parameters_layout.addWidget(self.detection_settings_container)
 
+        self.high_res_detect_container = QWidget()
+        high_res_detect_layout = QVBoxLayout(self.high_res_detect_container)
+        high_res_detect_layout.setContentsMargins(0, 0, 0, 0)
+        high_res_detect_layout.setSpacing(6)
+
+        high_res_detect_title = QLabel(self.tr("大图精细模式"))
+        setFont(high_res_detect_title, 13, QFont.DemiBold)
+        high_res_detect_title.setStyleSheet("color: #2c3e50; background: transparent;")
+        high_res_detect_hint = QLabel(self.tr("1.5K 及以上图片将切分子图检测"))
+        setFont(high_res_detect_hint, 10)
+        high_res_detect_hint.setStyleSheet("color: #888888; background: transparent;")
+        high_res_detect_hint.setWordWrap(True)
+
+        self.high_res_detect_switch = ToggleSwitch(parent=self.high_res_detect_container, on_color="#667eea")
+        self.high_res_detect_switch.setActive(False, animated=True)
+        self.high_res_detect_switch.toggled.connect(self._on_high_res_detect_toggled)
+
+        high_res_detect_controls = QHBoxLayout()
+        high_res_detect_controls.setContentsMargins(0, 0, 0, 0)
+        high_res_detect_controls.addWidget(high_res_detect_hint, 1)
+        high_res_detect_controls.addWidget(self.high_res_detect_switch, 0, Qt.AlignmentFlag.AlignRight)
+        high_res_detect_layout.addWidget(high_res_detect_title)
+        high_res_detect_layout.addLayout(high_res_detect_controls)
+        parameters_layout.addWidget(self.high_res_detect_container)
+
         self.video_format_container.setVisible(False)
         self.video_strategy_container.setVisible(False)
         ai_layout.addWidget(self.parameters_card)
@@ -478,6 +505,23 @@ class WatermarkDetectSettings(QWidget):
 
         self._select_detection_mode("semantic_detect", update_height=False)
         self._select_video_detection_strategy("tracking")
+
+    def _on_high_res_detect_toggled(self, checked: bool) -> None:
+        if not checked:
+            self.enableHighResTitleDetectChanged.emit(False)
+            return
+
+        dialog = MessageBox(
+            title=self.tr("大图精细模式提醒"),
+            content=self.tr("针对 1.5K 及以上分辨率图片会切分子图检测以提高检测精度，但处理时间可能增加。是否继续开启？"),
+            parent=self.window(),
+        )
+        dialog.yesButton.setText(self.tr("继续开启"))
+        dialog.cancelButton.setText(self.tr("关闭开关"))
+        if dialog.exec():
+            self.enableHighResTitleDetectChanged.emit(True)
+            return
+        self.high_res_detect_switch.setActive(False)
 
     def _create_area_button(self):
         button = QPushButton(self.tr("🖼 水印区域选择"))
