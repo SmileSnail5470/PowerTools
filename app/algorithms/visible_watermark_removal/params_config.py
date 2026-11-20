@@ -138,6 +138,7 @@ class ImageWatermarkRemoveConfig:
     detection: DetectionConfig = field(default_factory=DetectionConfig)
     mask: MaskConfig = field(default_factory=MaskConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
+    enable_high_res_title: bool = False
 
 
 @dataclass(slots=True)
@@ -167,6 +168,7 @@ class RestorationRemoveConfig:
     restoration: RestorationModelPaths
     params: RestorationConfig = field(default_factory=RestorationConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
+    enable_high_res_title: bool = False
 
 
 def get_ppt_onnx_path(ppt_onnx_basedir: str):

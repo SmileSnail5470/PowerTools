@@ -331,6 +331,8 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
         self.image_params_widget = self._build_mask_dilate_params()
         image_outer_layout.addWidget(self.image_params_widget)
+        self.image_high_res_params_widget = self._build_high_res_quality_params()
+        image_outer_layout.addWidget(self.image_high_res_params_widget)
 
         self.stacked_widget.addWidget(self.image_container)
 
@@ -434,6 +436,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
 
         bind_widget_to_param(self, "model_name", watermark_remove_params, "model.model_name", transform=None)
         self.model_name.connect(self._update_video_params_visibility)
+        self.model_name.connect(self._update_high_res_params_visibility)
         self.select_first_interactive()
         global_event_bus.watermarkRemove_InputFileUpdate.connect(lambda file_path: self.update_default_models(file_path=file_path))
         global_event_bus.License_update.connect(self.select_first_interactive)
@@ -549,6 +552,65 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         slider.valueChanged.emit(2)
         layout.addWidget(slider)
         return container
+
+    def _build_high_res_quality_params(self) -> QWidget:
+        container = QFrame()
+        container.setObjectName("highResQualityParamsCard")
+        container.setStyleSheet("""
+            QFrame#highResQualityParamsCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(6)
+
+        name_label = QLabel(self.tr("高质量修复"))
+        setFont(name_label, 13, QFont.DemiBold)
+        name_label.setStyleSheet("color: #2c3e50; background: transparent;")
+        hint_label = QLabel(self.tr("1.5K 及以上图片将切分子图处理，提升修复质量"))
+        setFont(hint_label, 10)
+        hint_label.setStyleSheet("color: #888888; background: transparent;")
+        hint_label.setWordWrap(True)
+
+        switch = ToggleSwitch(parent=container, on_color="#667eea")
+        switch.setActive(watermark_remove_params.get_param("model.enable_high_res_title"), animated=True)
+        switch.toggled.connect(self._on_high_res_quality_toggled)
+
+        controls_row = QGridLayout()
+        controls_row.setContentsMargins(0, 0, 0, 0)
+        controls_row.setHorizontalSpacing(8)
+        controls_row.setColumnStretch(0, 1)
+        controls_row.addWidget(hint_label, 0, 0)
+        controls_row.addWidget(switch, 0, 1, alignment=Qt.AlignmentFlag.AlignRight)
+        layout.addWidget(name_label)
+        layout.addLayout(controls_row)
+        return container
+
+    def _on_high_res_quality_toggled(self, checked: bool) -> None:
+        if not checked:
+            watermark_remove_params.set_param("model.enable_high_res_title", False)
+            return
+        dialog = MessageBox(
+            title=self.tr("高质量输出提醒"),
+            content=self.tr("针对 1.5K 及以上分辨率图片会切分子图处理以提高修复质量，但处理时间可能增加几倍。是否继续开启？"),
+            parent=self.window(),
+        )
+        dialog.yesButton.setText(self.tr("继续开启"))
+        dialog.cancelButton.setText(self.tr("关闭开关"))
+        if dialog.exec():
+            watermark_remove_params.set_param("model.enable_high_res_title", True)
+            return
+        sender = self.sender()
+        if isinstance(sender, ToggleSwitch):
+            sender.setActive(False)
+
+    def _update_high_res_params_visibility(self, model_name: str) -> None:
+        self.image_high_res_params_widget.setVisible(model_name in ["general_edit", "object_removal"])
+        if self.stacked_widget.currentIndex() == 0:
+            self._animate_to_content_height()
 
     def _build_video_speed_params(self) -> QWidget:
         container = QFrame()

@@ -77,6 +77,7 @@ class _ModelParams:
     restoration_watermark_type: str = "general"
     restoration_prompt: str = ""
     video_watermark_ai_detect_frame_range: list = field(default_factory=lambda: [1, 2**31 - 1])
+    enable_high_res_title: bool = False
 
 
 @dataclass
@@ -195,6 +196,7 @@ class WatermarkRemoveWork(BaseWorker):
                         refine_type=p.model.model_name,
                         dilate_num=int(p.model.mask_dilate),
                     ),
+                    enable_high_res_title=p.model.enable_high_res_title,
                     runtime=runtime_cfg,
                 )
                 self._get_image_instance().run(input_path, output_file, config=image_cfg)

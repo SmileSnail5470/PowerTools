@@ -1,4 +1,6 @@
 import os
+import tempfile
+import tempfile
 import cv2
 import numpy as np
 from app.algorithms.visible_watermark_removal.modules.sr_segment import SLBRSegment
@@ -14,7 +16,7 @@ from app.algorithms.private.object_segmentation.image.inference import ObjectSeg
 from app.algorithms.private.image_edit.general_edit.inference import ImageEditInference
 from app.algorithms.private.image_restoration.inference import ImageRestorationInference
 from app.algorithms.private.object_remove.inference import ObjectRemoveInference
-from app.algorithms.visible_watermark_removal.params_config import ImageWatermarkRemoveConfig, RestorationRemoveConfig, DetectionConfig
+from app.algorithms.visible_watermark_removal.params_config import ImageWatermarkRemoveConfig, RestorationRemoveConfig, DetectionConfig, SegmentModelPaths
 
 
 class WatermarkSegment():
@@ -353,35 +355,102 @@ class ImageWatermarkRemove():
         mask = ((mask > 0) * 255).astype(np.uint8)
         return mask
 
+    @staticmethod
+    def _get_tile_bounds(width: int, height: int, max_side: int = 1536):
+        columns = max(1, (width + max_side - 1) // max_side)
+        rows = max(1, (height + max_side - 1) // max_side)
+        return [
+            (column * width // columns, row * height // rows, (column + 1) * width // columns, (row + 1) * height // rows)
+            for row in range(rows)
+            for column in range(columns)
+        ]
+
+    def _detect_mask(self, image_path, segment_config: SegmentModelPaths, detection: DetectionConfig, kwargs):
+        mask = WatermarkSegment(detection).segment(
+            image_path=image_path,
+            sr_onnx_path=segment_config.sr_segment_onnx_path,
+            pt_onnx_path=segment_config.pt_segment_onnx_path,
+            text_detection_onnx_path=segment_config.text_detection_onnx_path,
+            yolo_detection_onnx_path=segment_config.yolo_detection_onnx_path,
+            segment_onnx_dir=segment_config.segment_onnx_dir,
+            **detection.to_segment_kwargs(),
+            **kwargs,
+        )
+        return mask
+
+    def _detect_full_image_mask(self, image_path, segment_config: SegmentModelPaths, detection: DetectionConfig, kwargs):
+        image = cv2.imread(image_path)
+        if image is None:
+            raise ValueError(f"Cannot read image: {image_path}")
+        height, width = image.shape[:2]
+        tile_bounds = self._get_tile_bounds(width, height)
+        if len(tile_bounds) == 1:
+            mask = self._detect_mask(image_path, segment_config, detection, kwargs)
+        else:
+            mask = np.zeros((height, width), dtype=np.uint8)
+            with tempfile.TemporaryDirectory(prefix="watermark_detect_") as temp_dir:
+                for index, (x1, y1, x2, y2) in enumerate(tile_bounds):
+                    tile_image_path = os.path.join(temp_dir, f"tile_{index}.png")
+                    if not cv2.imwrite(tile_image_path, image[y1:y2, x1:x2]):
+                        raise OSError(f"Cannot write temporary image: {tile_image_path}")
+                    tile_mask = self._detect_mask(tile_image_path, segment_config, detection, kwargs)
+                    expected_shape = (y2 - y1, x2 - x1)
+                    if tile_mask.shape != expected_shape:
+                        raise ValueError(f"Detected mask dimensions {tile_mask.shape[::-1]} do not match tile dimensions {(x2 - x1, y2 - y1)}")
+                    mask[y1:y2, x1:x2] = tile_mask
+        if detection.watermark_ai_detect_pos_boxes:
+            mask_image = np.zeros((height, width), dtype=np.uint8)
+            for xmin, ymin, xmax, ymax in detection.watermark_ai_detect_pos_boxes:
+                mask_image[ymin:ymax, xmin:xmax] = mask[ymin:ymax, xmin:xmax]
+            mask = mask_image
+        return mask
+
+    def _inpaint_tiles(self,
+        output_path: str,
+        image: np.ndarray,
+        tile_bounds: list[tuple[int, int, int, int]],
+        inpaint_kwargs: dict,
+        mask: np.ndarray | None = None,
+    ):
+        height, width = image.shape[:2]
+        if mask is not None and mask.shape != (height, width):
+            raise ValueError(f"Mask dimensions {mask.shape[::-1]} do not match image dimensions {(width, height)}")
+        result = image.copy()
+        with tempfile.TemporaryDirectory(prefix="watermark_inpaint_") as temp_dir:
+            for index, (x1, y1, x2, y2) in enumerate(tile_bounds):
+                tile_mask = mask[y1:y2, x1:x2] if mask is not None else None
+                if tile_mask is not None and not np.any(tile_mask):
+                    continue
+                tile_image_path = os.path.join(temp_dir, f"tile_{index}.png")
+                tile_output_path = os.path.join(temp_dir, f"output_{index}.png")
+                if not cv2.imwrite(tile_image_path, image[y1:y2, x1:x2]):
+                    raise OSError(f"Cannot write temporary image: {tile_image_path}")
+                tile_inpaint_kwargs = dict(inpaint_kwargs)
+                if tile_mask is not None:
+                    tile_inpaint_kwargs["mask"] = tile_mask
+                WatermarkInpaint(**tile_inpaint_kwargs).inpaint(image_path=tile_image_path, output_path=tile_output_path)
+                tile_result = cv2.imread(tile_output_path, cv2.IMREAD_UNCHANGED)
+                expected_shape = (y2 - y1, x2 - x1)
+                if tile_result is None or tile_result.shape[:2] != expected_shape:
+                    raise ValueError(f"Processed tile dimensions do not match expected dimensions {expected_shape}")
+                result[y1:y2, x1:x2] = tile_result[:, :, :3]
+        if not cv2.imwrite(output_path, result):
+            raise OSError(f"Cannot write output image: {output_path}")
+
     def run(self, image_path: str, output_path: str, config: ImageWatermarkRemoveConfig, **kwargs):
         seg = config.segment
         inp = config.inpaint
         det = config.detection
         msk = config.mask
         rt = config.runtime
+        enable_high_res_title = config.enable_high_res_title
 
         progress_cb = rt.progress_cb
         if progress_cb is not None:
             progress_cb("MaskStart", "")
 
         if not msk.mask_path:
-            mask = WatermarkSegment(det).segment(
-                image_path=image_path,
-                sr_onnx_path=seg.sr_segment_onnx_path,
-                pt_onnx_path=seg.pt_segment_onnx_path,
-                text_detection_onnx_path=seg.text_detection_onnx_path,
-                yolo_detection_onnx_path=seg.yolo_detection_onnx_path,
-                segment_onnx_dir=seg.segment_onnx_dir,
-                **det.to_segment_kwargs(),
-                **kwargs,
-            )
-            if det.watermark_ai_detect_pos_boxes:
-                h, w = mask.shape
-                mask_image = np.zeros((h, w), dtype=np.uint8)
-                for bbox in det.watermark_ai_detect_pos_boxes:
-                    xmin, ymin, xmax, ymax = bbox
-                    mask_image[ymin:ymax, xmin:xmax] = mask[ymin:ymax, xmin:xmax]
-                mask = mask_image
+            mask = self._detect_full_image_mask(image_path, seg, det, kwargs)
         else:
             mask = self._read_mask(mask_path=msk.mask_path)
 
@@ -402,8 +471,7 @@ class ImageWatermarkRemove():
             )
             progress_cb("MaskCompleted", mask_tmp_path)
 
-        image_inpainting = WatermarkInpaint(
-            mask=mask,
+        inpaint_kwargs = dict(
             pt_inpaint_onnx_path=inp.pt_inpaint_onnx_path,
             cf_onnx_path=inp.cf_onnx_path,
             lama_onnx_path=inp.lama_onnx_path,
@@ -414,7 +482,15 @@ class ImageWatermarkRemove():
             model_type=msk.refine_type,
             dilate_num=msk.dilate_num,
         )
-        image_inpainting.inpaint(image_path=image_path, output_path=output_path)
+        image = cv2.imread(image_path)
+        if image is None:
+            raise ValueError(f"Cannot read image: {image_path}")
+        height, width = image.shape[:2]
+        tile_bounds = self._get_tile_bounds(width, height)
+        if len(tile_bounds) > 1 and enable_high_res_title:
+            self._inpaint_tiles(output_path, image, tile_bounds, inpaint_kwargs, mask)
+        else:
+            WatermarkInpaint(mask=mask, **inpaint_kwargs).inpaint(image_path=image_path, output_path=output_path)
         if progress_cb is not None:
             progress_cb("WaterRemoved", "")
 
@@ -425,12 +501,20 @@ class ImageWatermarkRemove():
         if progress_cb is not None:
             progress_cb("WaterRemoveStart", "")
 
-        image_inpainting = WatermarkInpaint(
+        inpaint_kwargs = dict(
             image_restoration_onnx_dir=config.restoration.image_restoration_onnx_dir,
             restoration_prompt=params.restoration_prompt,
             restoration_watermark_type=params.restoration_watermark_type,
             model_type=params.refine_type,
         )
-        image_inpainting.inpaint(image_path=image_path, output_path=output_path)
+        image = cv2.imread(image_path)
+        if image is None:
+            raise ValueError(f"Cannot read image: {image_path}")
+        height, width = image.shape[:2]
+        tile_bounds = self._get_tile_bounds(width, height)
+        if len(tile_bounds) > 1 and config.enable_high_res_title:
+            self._inpaint_tiles(output_path, image, tile_bounds, inpaint_kwargs)
+        else:
+            WatermarkInpaint(**inpaint_kwargs).inpaint(image_path=image_path, output_path=output_path)
         if progress_cb is not None:
             progress_cb("WaterRemoved", "")
