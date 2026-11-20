@@ -48,6 +48,13 @@ def _first_supported_media_path(path):
     return next((os.path.join(path, name) for name in os.listdir(path) if get_file_type(os.path.join(path, name))),"")
 
 
+def _add_parameter_section_title(layout: QVBoxLayout, text: str) -> None:
+    title_label = QLabel(text)
+    setFont(title_label, 13, QFont.DemiBold)
+    title_label.setStyleSheet("color: #2c3e50; background: transparent;")
+    layout.addWidget(title_label)
+
+
 class FileSelectorCard(HeaderCardWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -86,17 +93,14 @@ class FileSelectorCard(HeaderCardWidget):
         self.pivot.addItem(routeKey=objectName, text=text)
 
 
-class ProcessRegionCard(HeaderCardWidget):
+class ProcessRegionCard(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setTitle(self.tr("🎯 原图保留区域（可选）"))
-        self.setBorderRadius(8)
 
-        main_layout = QVBoxLayout()
+        main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(8)
-        self.viewLayout.setContentsMargins(10, 10, 10, 10)
-        self.viewLayout.addLayout(main_layout)
+        _add_parameter_section_title(main_layout, self.tr("🎯 原图保留区域（可选）"))
 
         self.select_button = PushButton(text=self.tr("🖼 框选原图保留区域"))
         self.select_button.setEnabled(False)
@@ -171,18 +175,14 @@ class ProcessRegionCard(HeaderCardWidget):
             self.region_info_label.setText(self.tr("未选择区域，将处理整张图片"))
 
 
-class ColorFixCard(HeaderCardWidget):
+class ColorFixCard(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setTitle(self.tr("🎨 颜色修复"))
-        self.setBorderRadius(8)
 
-        main_layout = QVBoxLayout()
+        main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(10)
-
-        self.viewLayout.setContentsMargins(10, 10, 10, 10)
-        self.viewLayout.addLayout(main_layout)
+        main_layout.setSpacing(8)
+        _add_parameter_section_title(main_layout, self.tr("🎨 颜色修复"))
 
         toggle_layout = QHBoxLayout()
         toggle_layout.setContentsMargins(0, 0, 0, 0)
@@ -206,24 +206,20 @@ class ColorFixCard(HeaderCardWidget):
         main_layout.addWidget(hint_label)
 
 
-class HighQualityOutputCard(HeaderCardWidget):
+class HighQualityOutputCard(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setTitle(self.tr("✨ 输出质量"))
-        self.setBorderRadius(8)
 
-        main_layout = QVBoxLayout()
+        main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(10)
-
-        self.viewLayout.setContentsMargins(10, 10, 10, 10)
-        self.viewLayout.addLayout(main_layout)
+        main_layout.setSpacing(8)
+        _add_parameter_section_title(main_layout, self.tr("✨ 图片超分"))
 
         toggle_layout = QHBoxLayout()
         toggle_layout.setContentsMargins(0, 0, 0, 0)
         toggle_layout.setSpacing(10)
 
-        label = QLabel(self.tr("启用高质量输出"))
+        label = QLabel(self.tr("启用超分输出"))
         label.setStyleSheet("color: #666666;")
         toggle_layout.addWidget(label)
         toggle_layout.addStretch()
@@ -246,18 +242,14 @@ class HighQualityOutputCard(HeaderCardWidget):
         main_layout.addWidget(hint_label)
 
 
-class TilingCard(HeaderCardWidget):
+class TilingCard(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setTitle(self.tr("🧩 大图处理"))
-        self.setBorderRadius(8)
 
-        main_layout = QVBoxLayout()
+        main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(10)
-
-        self.viewLayout.setContentsMargins(10, 10, 10, 10)
-        self.viewLayout.addLayout(main_layout)
+        main_layout.setSpacing(8)
+        _add_parameter_section_title(main_layout, self.tr("🧩 高质量输出"))
 
         toggle_layout = QHBoxLayout()
         toggle_layout.setContentsMargins(0, 0, 0, 0)
@@ -284,6 +276,48 @@ class TilingCard(HeaderCardWidget):
         hint_label.setWordWrap(True)
         hint_label.setStyleSheet("color: #999999;")
         main_layout.addWidget(hint_label)
+
+
+class ParameterSettingsCard(QFrame):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("paramsCard")
+        self.setStyleSheet("""
+            QFrame#paramsCard {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+        """)
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(12, 10, 12, 12)
+        main_layout.setSpacing(10)
+
+        header = QWidget(self)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 4, 0, 0)
+        header_layout.setSpacing(8)
+
+        icon_label = QLabel("⚙️")
+        setFont(icon_label, 13)
+        icon_label.setStyleSheet("color: #555555; background: transparent;")
+        title_label = QLabel(self.tr("参数设置"))
+        setFont(title_label, 13, QFont.DemiBold)
+        title_label.setStyleSheet("color: #555555; background: transparent;")
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setStyleSheet("color: #e2e8f0;")
+
+        header_layout.addWidget(icon_label)
+        header_layout.addWidget(title_label)
+        header_layout.addWidget(divider, 1)
+        main_layout.addWidget(header)
+
+        main_layout.addWidget(ProcessRegionCard(self))
+        main_layout.addWidget(ColorFixCard(self))
+        main_layout.addWidget(HighQualityOutputCard(self))
+        main_layout.addWidget(TilingCard(self))
 
 
 class ModelSelectCard(HeaderCardWidget):
@@ -544,11 +578,8 @@ class ControlPanelWidget(ScrollArea):
         main_layout.setAlignment(Qt.AlignTop)
 
         main_layout.addWidget(FileSelectorCard(self))
-        main_layout.addWidget(ProcessRegionCard(self))
-        main_layout.addWidget(ColorFixCard(self))
-        main_layout.addWidget(HighQualityOutputCard(self))
-        main_layout.addWidget(TilingCard(self))
         main_layout.addWidget(ModelSelectCard(self))
+        main_layout.addWidget(ParameterSettingsCard(self))
         main_layout.addWidget(OutputSettingsCard(self))
         main_layout.addStretch(1)
 

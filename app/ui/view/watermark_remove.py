@@ -332,7 +332,7 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         self.image_params_widget = self._build_mask_dilate_params()
         image_outer_layout.addWidget(self.image_params_widget)
         self.image_high_res_params_widget = self._build_high_res_quality_params()
-        image_outer_layout.addWidget(self.image_high_res_params_widget)
+        self.image_params_widget.layout().addWidget(self.image_high_res_params_widget)
 
         self.stacked_widget.addWidget(self.image_container)
 
@@ -554,17 +554,9 @@ class WatermarkRemoveStyleCard(HeaderCardWidget):
         return container
 
     def _build_high_res_quality_params(self) -> QWidget:
-        container = QFrame()
-        container.setObjectName("highResQualityParamsCard")
-        container.setStyleSheet("""
-            QFrame#highResQualityParamsCard {
-                background-color: #f8f9fa;
-                border-radius: 8px;
-                border: 1px solid #e9ecef;
-            }
-        """)
+        container = QWidget()
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
         name_label = QLabel(self.tr("高质量修复"))

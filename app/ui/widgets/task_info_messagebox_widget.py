@@ -83,7 +83,8 @@ class TaskInfoMessageBox(MessageBoxBase):
             "lama":             "自然保守",
             "coordfill":        "快速填充",
             "video_engine":     "关键帧擦除",
-            "ppt":              "时序擦除"
+            "ppt":              "时序擦除",
+            "stable_video_remove": "稳固擦除"
         }
         layout.addWidget(self._section_input(p.io.input_path))
         params = [(self.tr("水印检测方式"), value_map.get(p.detect.watermark_detect_type, p.detect.watermark_detect_type))]
