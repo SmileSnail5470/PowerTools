@@ -127,6 +127,13 @@ class TaskInfoMessageBox(MessageBoxBase):
             params.append((self.tr("水印类型"), p.model.restoration_watermark_type))
             if p.model.restoration_prompt:
                 params.append((self.tr("自定义提示词"), p.model.restoration_prompt))
+        elif p.model.model_name in ["general_edit", "object_removal"]:
+            params.append((self.tr("高质量修复"), str(p.model.enable_high_res_title)))
+            params.append((self.tr("Mask 扩张系数"),   str(p.model.mask_dilate)))
+        elif p.model.model_name in ["stable_video_remove"]:
+            params.append((self.tr("非水印区域保留原画质"), str(p.model.paste_back)))
+            params.append((self.tr("低内存模式"),   str(p.model.low_memory)))
+            params.append((self.tr("水印移除速度"),   "快速" if p.model.infer_step == 2 else "标准" if p.model.infer_step == 4 else "高质量"))
         else:
             params.append((self.tr("Mask 扩张系数"),   str(p.model.mask_dilate)))
 
@@ -205,6 +212,7 @@ class TaskInfoMessageBox(MessageBoxBase):
             (self.tr("去除模型"),     model_map.get(p.model.model_name, p.model.model_name)),
             (self.tr("颜色修复"),     self.tr("开") if p.settings.use_color_fix else self.tr("关")),
             (self.tr("高质量输出"),   self.tr("开") if p.settings.high_quality_output else self.tr("关")),
+            (self.tr("切分子图处理"), self.tr("开") if p.settings.use_tiling else self.tr("关")),
         ]
         if p.settings.reserve_region:
             r = p.settings.reserve_region

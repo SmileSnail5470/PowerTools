@@ -25,6 +25,7 @@ class _BlindRemoveModelParams:
 class _BlindRemoveSettingsParams:
     use_color_fix: bool = True
     high_quality_output: bool = False
+    use_tiling: bool = False
     reserve_region: dict = None
 
 
@@ -67,6 +68,7 @@ class BlindWatermarkRemoveWork(BaseWorker):
         output_path = p.io.output_path
         use_color_fix = p.settings.use_color_fix
         high_quality_output = p.settings.high_quality_output
+        use_tiling = p.settings.use_tiling
         reserve_region = p.settings.reserve_region
 
         if cancel_requested and cancel_requested():
@@ -111,6 +113,7 @@ class BlindWatermarkRemoveWork(BaseWorker):
                     "prompt": "",
                     "edit_prompt": None,
                     "use_color_fix": use_color_fix,
+                    "use_tiling": use_tiling,
                     "high_quality_output": high_quality_output,
                     "reserve_region": reserve_region,
                 },
@@ -123,6 +126,7 @@ class BlindWatermarkRemoveWork(BaseWorker):
                 progress_cb("BlindWatermarkRemoveStart", "")
             inference = self._get_instance(model_dir=model_dir, ocr_model_path=ocr_model_path, use_color_fix=use_color_fix)
             inference.use_color_fix = use_color_fix
+            inference.use_tiling = use_tiling
             inference.infer(
                 input_path=input_path,
                 output_path=output_file,

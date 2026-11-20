@@ -240,7 +240,47 @@ class HighQualityOutputCard(HeaderCardWidget):
         self.toggle.toggled.emit(False)
         main_layout.addLayout(toggle_layout)
 
-        hint_label = CaptionLabel(self.tr("提高输出质量，增加暗印去除概率，但耗时可能翻倍。"))
+        hint_label = CaptionLabel(self.tr("对结果做图片超分处理以提高输出质量，增加暗印去除概率，但耗时可能翻倍。"))
+        hint_label.setWordWrap(True)
+        hint_label.setStyleSheet("color: #999999;")
+        main_layout.addWidget(hint_label)
+
+
+class TilingCard(HeaderCardWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setTitle(self.tr("🧩 大图处理"))
+        self.setBorderRadius(8)
+
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(10)
+
+        self.viewLayout.setContentsMargins(10, 10, 10, 10)
+        self.viewLayout.addLayout(main_layout)
+
+        toggle_layout = QHBoxLayout()
+        toggle_layout.setContentsMargins(0, 0, 0, 0)
+        toggle_layout.setSpacing(10)
+
+        label = QLabel(self.tr("切分子图处理"))
+        label.setStyleSheet("color: #666666;")
+        toggle_layout.addWidget(label)
+        toggle_layout.addStretch()
+        self.toggle = ToggleSwitch(self)
+        toggle_layout.addWidget(self.toggle)
+
+        bind_widget_to_param(
+            self.toggle,
+            "toggled",
+            blind_watermark_remove_params,
+            "settings.use_tiling",
+            transform=None,
+        )
+        self.toggle.toggled.emit(False)
+        main_layout.addLayout(toggle_layout)
+
+        hint_label = CaptionLabel(self.tr("关闭时缩放整图处理；开启后按原分辨率分块处理，大分辨率图片效果更好，但耗时随图片尺寸增加。"))
         hint_label.setWordWrap(True)
         hint_label.setStyleSheet("color: #999999;")
         main_layout.addWidget(hint_label)
@@ -507,6 +547,7 @@ class ControlPanelWidget(ScrollArea):
         main_layout.addWidget(ProcessRegionCard(self))
         main_layout.addWidget(ColorFixCard(self))
         main_layout.addWidget(HighQualityOutputCard(self))
+        main_layout.addWidget(TilingCard(self))
         main_layout.addWidget(ModelSelectCard(self))
         main_layout.addWidget(OutputSettingsCard(self))
         main_layout.addStretch(1)
