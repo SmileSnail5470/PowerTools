@@ -43,7 +43,6 @@ class MaskPreparer:
             sr_onnx_path=segment.sr_segment_onnx_path,
             pt_onnx_path=segment.pt_segment_onnx_path,
             text_detection_onnx_path=segment.text_detection_onnx_path,
-            yolo_detection_onnx_path=segment.yolo_detection_onnx_path,
             segment_onnx_dir=segment.segment_onnx_dir,
             **detection.to_segment_kwargs(),
         )

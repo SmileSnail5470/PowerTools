@@ -81,7 +81,6 @@ class VideoObjectDetectorWorker(BaseWorker):
             sr_segment_onnx_path=os.path.join(onnx_model_dir, "sr_segment.encmodel"),
             pt_segment_onnx_path=os.path.join(onnx_model_dir, "pt_segment.encmodel"),
             text_detection_onnx_path=os.path.join(onnx_model_dir, "pp_ocr_det.encmodel"),
-            yolo_detection_onnx_path=os.path.join(onnx_model_dir, "yolo.encmodel"),
             segment_onnx_dir=segment_model_dir,
         )
         inpaint_paths = InpaintModelPaths(

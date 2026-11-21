@@ -20,7 +20,6 @@ class SegmentModelPaths:
     sr_segment_onnx_path: str
     pt_segment_onnx_path: str
     text_detection_onnx_path: str
-    yolo_detection_onnx_path: str
     segment_onnx_dir: str
 
 
@@ -47,13 +46,13 @@ class DetectionConfig:
         "semantic_detect",
         "space_detect",
         "text_watermark", 
-        "subtitle", 
         "general_watermark"
     ] = "semantic_detect"
     watermark_ai_detect_prompt: str = "watermark"
     watermark_ai_detect_pos_boxes: list = field(default_factory=list)
     watermark_ai_detect_neg_boxes: list = field(default_factory=list)
     watermark_ai_detect_confidence: float = 0.3
+    watermark_ai_text_detection_result_mode: Literal["segment", "detection"] = "segment"
     enable_high_res_title_detect: bool = False
 
     # OCR 检测超参
@@ -64,10 +63,6 @@ class DetectionConfig:
     ocr_unclip_ratio: float = 1.5
     ocr_score_mode: str = "fast"
     ocr_det_box_type: str = "quad"
-
-    # YOLO 检测超参
-    yolo_confidence: float = 0.03
-    yolo_iou_threshold: float = 0.2
 
     def to_segment_kwargs(self) -> dict[str, Any]:
         return {

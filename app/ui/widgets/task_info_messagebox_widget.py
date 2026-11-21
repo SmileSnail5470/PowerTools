@@ -67,7 +67,6 @@ class TaskInfoMessageBox(MessageBoxBase):
             "manual_detect":    "手工标注",
             "semantic_detect":  "语义检测",
             "space_detect":     "框选区域",
-            "subtitle":         "字幕",
             "text_watermark":   "文字水印",
             "general_watermark":"通用检测",
             "static_watermark": "静态水印",
@@ -120,6 +119,9 @@ class TaskInfoMessageBox(MessageBoxBase):
                         params.append((self.tr("负检测框 (保留)"), p.detect.watermark_ai_detect_neg_boxes))
                     if p.detect.watermark_ai_detect_pos_boxes:
                         params.append((self.tr("正检测框 (去除)"), p.detect.watermark_ai_detect_pos_boxes))
+                elif p.detect.watermark_ai_detect_method == "text_watermark":
+                    result_mode = "分割模式" if p.detect.watermark_ai_text_detection_result_mode == "segment" else "检测模式"
+                    params.append((self.tr("检测结果模式"), self.tr(result_mode)))
                 else:
                     if p.detect.watermark_ai_detect_pos_boxes:
                         params.append((self.tr("正检测框 (去除)"), p.detect.watermark_ai_detect_pos_boxes))

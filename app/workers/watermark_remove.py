@@ -63,6 +63,7 @@ class _DetectParams:
     watermark_ai_detect_pos_boxes: list = field(default_factory=list)
     watermark_ai_detect_neg_boxes: list = field(default_factory=list)
     watermark_ai_detect_confidence: float = 0.3
+    watermark_ai_text_detection_result_mode: str = "segment"
     enable_high_res_title_detect: bool = False
     video_watermark_tracking_data: VideoTrackingParams = field(default_factory=VideoTrackingParams)
 
@@ -157,7 +158,6 @@ class WatermarkRemoveWork(BaseWorker):
             sr_segment_onnx_path=os.path.join(onnx_model_dir, "sr_segment.encmodel"),
             pt_segment_onnx_path=os.path.join(onnx_model_dir, "pt_segment.encmodel"),
             text_detection_onnx_path=os.path.join(onnx_model_dir, "pp_ocr_det.encmodel"),
-            yolo_detection_onnx_path=os.path.join(onnx_model_dir, "yolo.encmodel"),
             segment_onnx_dir=segment_model_dir,
         )
         inpaint_paths = InpaintModelPaths(
@@ -177,6 +177,7 @@ class WatermarkRemoveWork(BaseWorker):
             watermark_ai_detect_pos_boxes=detect.watermark_ai_detect_pos_boxes,
             watermark_ai_detect_neg_boxes=detect.watermark_ai_detect_neg_boxes,
             watermark_ai_detect_confidence=detect.watermark_ai_detect_confidence,
+            watermark_ai_text_detection_result_mode=detect.watermark_ai_text_detection_result_mode,
             enable_high_res_title_detect=detect.enable_high_res_title_detect
         )
         runtime_cfg = RuntimeConfig(

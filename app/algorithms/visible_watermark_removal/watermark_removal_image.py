@@ -11,7 +11,6 @@ from app.algorithms.visible_watermark_removal.modules.grig_inpaint import GRIGIn
 from app.algorithms.visible_watermark_removal.modules.emdf_inpaint import EMDFInpaint
 from app.algorithms.visible_watermark_removal.modules.lama_inpaint import LamaInpaint
 from app.algorithms.visible_watermark_removal.modules.text_detection import detect_text_watermarks
-from app.algorithms.visible_watermark_removal.modules.yolo_detecttion import YOLODetection
 from app.algorithms.private.object_segmentation.image.inference import ObjectSegmentationInference
 from app.algorithms.private.image_edit.general_edit.inference import ImageEditInference
 from app.algorithms.private.image_restoration.inference import ImageRestorationInference
@@ -26,45 +25,7 @@ class WatermarkSegment():
         self.watermark_ai_detect_pos_boxes = watermark_detect_params.watermark_ai_detect_pos_boxes
         self.watermark_ai_detect_neg_boxes = watermark_detect_params.watermark_ai_detect_neg_boxes
         self.watermark_ai_detect_confidence = watermark_detect_params.watermark_ai_detect_confidence
-
-    def _split_mask_to_regions(self, mask: np.ndarray):
-        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
-        regions = []
-        for i in range(1, num_labels):
-            region = (labels == i).astype(np.uint8) * 255
-            regions.append(region)
-        return regions
-
-    def _region_is_rotated(self, region_mask, angle_thresh=10):
-        ys, xs = np.where(region_mask > 0)
-        if len(xs) < 20:
-            return False
-        
-        pts = np.column_stack([xs, ys]).astype(np.float32)
-        (cx, cy), (w, h), angle = cv2.minAreaRect(pts)
-        angle = abs(angle) % 360
-        if angle > 180:
-            angle = 360 - angle
-        angle = min(
-            abs(angle - 0),
-            abs(angle - 90),
-            abs(angle - 180),
-        )
-        return angle > angle_thresh
-
-    def _merge_text_yolo_masks(self, text_mask, yolo_mask):
-        final_mask = np.zeros_like(text_mask)
-        regions = self._split_mask_to_regions(text_mask)
-
-        for region in regions:
-            if self._region_is_rotated(region):
-                merged = region
-            else:
-                merged = cv2.bitwise_or(region, yolo_mask)
-
-            final_mask = cv2.bitwise_or(final_mask, merged)
-
-        return final_mask
+        self.watermark_ai_text_detection_result_mode = watermark_detect_params.watermark_ai_text_detection_result_mode
 
     def segment(
             self, 
@@ -72,46 +33,24 @@ class WatermarkSegment():
             sr_onnx_path: str, 
             pt_onnx_path: str, 
             text_detection_onnx_path: str, 
-            yolo_detection_onnx_path: str, 
             segment_onnx_dir: str,
             **kwargs
         ):
         if self.watermark_ai_detect_method == "text_watermark":
-            mask = detect_text_watermarks(
-                input_path=image_path,
-                limit_side_len = kwargs.get("limit_side_len", 960),
-                limit_type = kwargs.get("limit_type", "max"),
-                det_thresh = kwargs.get("det_thresh", 0.3),
-                det_box_thresh = kwargs.get("det_box_thresh", 0.6),
-                unclip_ratio = kwargs.get("unclip_ratio", 1.5),
-                score_mode = kwargs.get("score_mode", "fast"),
-                det_box_type = kwargs.get("det_box_type", "quad"),
-                onnx_path = text_detection_onnx_path
-            )
-            watermark_detector = YOLODetection()
-            watermark_detector.prepare(
-                confidence=kwargs.get("confidence", 0.03), 
-                iou_threshold=kwargs.get("iou_threshold", 0.2), 
-                onnx_path=yolo_detection_onnx_path
-            )
-            _, output_masks, combined_info = watermark_detector.detect_watermarks(image_path=image_path)
-            if combined_info["num_detections"] > 0:
-                yolo_mask = output_masks[0, 0]              # [H, W]
-                yolo_mask = np.clip(yolo_mask, 0.0, 1.0)
-                yolo_mask = (yolo_mask * 255.0).astype(np.uint8)
-                mask = self._merge_text_yolo_masks(mask, yolo_mask)
-        elif self.watermark_ai_detect_method == "subtitle":
-            mask = detect_text_watermarks(
-                input_path=image_path,
-                limit_side_len = kwargs.get("limit_side_len", 960),
-                limit_type = kwargs.get("limit_type", "max"),
-                det_thresh = kwargs.get("det_thresh", 0.3),
-                det_box_thresh = kwargs.get("det_box_thresh", 0.6),
-                unclip_ratio = kwargs.get("unclip_ratio", 1.5),
-                score_mode = kwargs.get("score_mode", "fast"),
-                det_box_type = kwargs.get("det_box_type", "quad"),
-                onnx_path = text_detection_onnx_path
-            )
+            if self.watermark_ai_text_detection_result_mode == "detection":
+                mask = detect_text_watermarks(
+                    input_path=image_path,
+                    limit_side_len = kwargs.get("limit_side_len", 960),
+                    limit_type = kwargs.get("limit_type", "max"),
+                    det_thresh = kwargs.get("det_thresh", 0.3),
+                    det_box_thresh = kwargs.get("det_box_thresh", 0.6),
+                    unclip_ratio = kwargs.get("unclip_ratio", 1.5),
+                    score_mode = kwargs.get("score_mode", "fast"),
+                    det_box_type = kwargs.get("det_box_type", "quad"),
+                    onnx_path = text_detection_onnx_path
+                )
+            else:
+                pass
         elif self.watermark_ai_detect_method == "general_watermark":
             slbr_segment = SLBRSegment()
             slbr_segment.prepare(onnx_path=sr_onnx_path)
@@ -371,7 +310,6 @@ class ImageWatermarkRemove():
             sr_onnx_path=segment_config.sr_segment_onnx_path,
             pt_onnx_path=segment_config.pt_segment_onnx_path,
             text_detection_onnx_path=segment_config.text_detection_onnx_path,
-            yolo_detection_onnx_path=segment_config.yolo_detection_onnx_path,
             segment_onnx_dir=segment_config.segment_onnx_dir,
             **detection.to_segment_kwargs(),
             **kwargs,

@@ -117,6 +117,7 @@ class WatermarkDetectionTypeCard(HeaderCardWidget):
         bind_widget_to_param(watermark_detect_settings, "watermarkAIDetectPosBoxes", watermark_remove_params, "detect.watermark_ai_detect_pos_boxes", transform=None)
         bind_widget_to_param(watermark_detect_settings, "watermarkAIDetectNegBoxes", watermark_remove_params, "detect.watermark_ai_detect_neg_boxes", transform=None)
         bind_widget_to_param(watermark_detect_settings, "watermarkAIDetectConfidence", watermark_remove_params, "detect.watermark_ai_detect_confidence", transform=None)
+        bind_widget_to_param(watermark_detect_settings, "watermarkAITextDetectionResultMode", watermark_remove_params, "detect.watermark_ai_text_detection_result_mode", transform=None)
         bind_widget_to_param(watermark_detect_settings, "enableHighResTitleDetectChanged", watermark_remove_params, "detect.enable_high_res_title_detect", transform=None)
         bind_widget_to_param(watermark_detect_settings, "videoWatermarkTrackingData", watermark_remove_params, "detect.video_watermark_tracking_data", transform=None)
 

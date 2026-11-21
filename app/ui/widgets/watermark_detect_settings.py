@@ -205,6 +205,7 @@ class WatermarkDetectSettings(QWidget):
     watermarkAIDetectPosBoxes = Signal(list)             # 水印检测范围 boxes -- 正提示框
     watermarkAIDetectNegBoxes = Signal(list)             # 水印检测范围 boxes -- 负提示框
     watermarkAIDetectConfidence = Signal(float)          # 水印置信度
+    watermarkAITextDetectionResultMode = Signal(str)     # 文字检测分割模式/检测模式
     enableHighResTitleDetectChanged = Signal(bool)
     videoWatermarkTrackingData = Signal(object)          # 跟踪数据（VideoTrackingParams 实例）
 
@@ -278,8 +279,7 @@ class WatermarkDetectSettings(QWidget):
         detection_modes = (
             ("semantic_detect", self.tr("语义识别"), self.tr("按文本描述识别"), "🧠", "#EDE9FE"),
             ("space_detect", self.tr("框选区域"), self.tr("手动框选水印"), "🎯", "#DBEAFE"),
-            ("subtitle", self.tr("字幕"), self.tr("识别字幕"), "💬", "#FCE7F3"),
-            ("text_watermark", self.tr("文字水印"), self.tr("识别文字水印"), "🔤", "#DCFCE7"),
+            ("text_watermark", self.tr("文字"), self.tr("识别文字"), "🔤", "#DCFCE7"),
             ("general_watermark", self.tr("通用检测"), self.tr("检测 Logo 等内容"), "✨", "#FEF3C7"),
         )
         for mode, title, description, icon, icon_color in detection_modes:
@@ -412,10 +412,44 @@ class WatermarkDetectSettings(QWidget):
             self.mode_parameters_stack.addWidget(page)
             self.mode_parameters[mode] = page
         self.confidence_container = self._create_confidence_widget()
+
+        self.text_detection_result_container = QWidget()
+        text_detection_result_layout = QVBoxLayout(self.text_detection_result_container)
+        text_detection_result_layout.setContentsMargins(0, 0, 0, 0)
+        text_detection_result_layout.setSpacing(6)
+        text_detection_result_title = self.create_label_group(self.tr("检测结果模式"), None)
+        text_detection_result_layout.addWidget(text_detection_result_title)
+        text_detection_result_cards_layout = QHBoxLayout()
+        text_detection_result_cards_layout.setContentsMargins(0, 0, 0, 0)
+        text_detection_result_cards_layout.setSpacing(8)
+        self.segment_result_card = OptionCard(
+            self.tr("分割模式"),
+            self.tr("按文字轮廓生成分割区域"),
+            icon="✂️",
+            icon_color="#DBEAFE",
+        )
+        self.segment_result_card.setFixedSize(150, 64)
+        self.segment_result_card.selected = True
+        self.segment_result_card.update_style()
+        self.segment_result_card.clicked.connect(lambda: self._select_text_detection_result_mode("segment"))
+        self.detection_result_card = OptionCard(
+            self.tr("检测模式"),
+            self.tr("按文字检测框生成区域"),
+            icon="🔍",
+            icon_color="#EDE9FE",
+        )
+        self.detection_result_card.setFixedSize(150, 64)
+        self.detection_result_card.clicked.connect(lambda: self._select_text_detection_result_mode("detection"))
+        text_detection_result_cards_layout.addWidget(self.segment_result_card)
+        text_detection_result_cards_layout.addWidget(self.detection_result_card)
+        text_detection_result_layout.addLayout(text_detection_result_cards_layout)
+        self.text_detection_result_container.setVisible(False)
+
         self.detection_settings_container = QWidget()
         detection_settings_layout = QVBoxLayout(self.detection_settings_container)
         detection_settings_layout.setContentsMargins(0, 0, 0, 0)
         detection_settings_layout.setSpacing(6)
+        detection_settings_layout.addWidget(self.text_detection_result_container)
         detection_settings_layout.addWidget(self.mode_parameters_stack)
         detection_settings_layout.addWidget(self.confidence_container)
         parameters_layout.addWidget(self.detection_settings_container)
@@ -505,6 +539,7 @@ class WatermarkDetectSettings(QWidget):
         self.main_layout.addWidget(self.card)
 
         self._select_detection_mode("semantic_detect", update_height=False)
+        self._select_text_detection_result_mode("segment")
         self._select_video_detection_strategy("tracking")
 
     def _on_high_res_detect_toggled(self, checked: bool) -> None:
@@ -799,6 +834,7 @@ class WatermarkDetectSettings(QWidget):
         self.mode_parameters_stack.setCurrentWidget(self.mode_parameters[mode])
         self.mode_parameters_stack.updateGeometry()
         self.confidence_container.setVisible(mode in ("semantic_detect", "space_detect"))
+        self.text_detection_result_container.setVisible(mode == "text_watermark")
         self.watermarkDetectType.emit("ai_detect")
         self.watermarkAIDetectMethod.emit(mode)
         self.watermarkAIDetectPosBoxes.emit([])
@@ -806,6 +842,13 @@ class WatermarkDetectSettings(QWidget):
         self._update_tracking_visibility(update_height=False)
         if update_height:
             self.update_layout_height()
+
+    def _select_text_detection_result_mode(self, mode):
+        self.segment_result_card.selected = mode == "segment"
+        self.segment_result_card.update_style()
+        self.detection_result_card.selected = mode == "detection"
+        self.detection_result_card.update_style()
+        self.watermarkAITextDetectionResultMode.emit(mode)
 
     def _select_watermark_format(self, watermark_format, is_dynamic):
         self.static_format_card.selected = not is_dynamic
