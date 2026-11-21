@@ -1426,6 +1426,8 @@ class VideoObjectDetectorWidget(QDialog):
         chips_layout.setSpacing(6)
         chips_text = {
             self.tr("水印"): "watermark",
+            self.tr("半透明水印"): "semi-transparent watermark",
+            self.tr("透明水印"): "transparent watermark",
             self.tr("字幕"): "subtitle",
             self.tr("LOGO"): "logo",
         }

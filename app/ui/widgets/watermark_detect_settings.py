@@ -385,8 +385,9 @@ class WatermarkDetectSettings(QWidget):
                 chip_layout.setSpacing(12)
                 text_map = (
                     (self.tr("水印"), "watermark"),
+                    (self.tr("半透明水印"), "semi-transparent watermark"),
+                    (self.tr("透明水印"), "transparent watermark"),
                     (self.tr("字幕"), "subtitle"),
-                    (self.tr("水印和字幕"), "watermark,subtitle"),
                 )
                 for label, prompt in text_map:
                     chip = QPushButton(label)
