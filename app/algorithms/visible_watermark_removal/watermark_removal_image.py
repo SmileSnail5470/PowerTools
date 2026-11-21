@@ -50,7 +50,29 @@ class WatermarkSegment():
                     onnx_path = text_detection_onnx_path
                 )
             else:
-                pass
+                text_mask, text_boxes = detect_text_watermarks(
+                    input_path=image_path,
+                    limit_side_len = kwargs.get("limit_side_len", 960),
+                    limit_type = kwargs.get("limit_type", "max"),
+                    det_thresh = kwargs.get("det_thresh", 0.3),
+                    det_box_thresh = kwargs.get("det_box_thresh", 0.6),
+                    unclip_ratio = kwargs.get("unclip_ratio", 1.5),
+                    score_mode = kwargs.get("score_mode", "fast"),
+                    det_box_type = kwargs.get("det_box_type", "quad"),
+                    onnx_path = text_detection_onnx_path,
+                    return_boxes=True,
+                )
+                if text_boxes:
+                    segment_instance = ObjectSegmentationInference(model_dir=segment_onnx_dir, threshold=0.3)
+                    mask = segment_instance.infer(
+                        input_path=image_path,
+                        text=None,
+                        threshold=0.3,
+                        box=text_boxes,
+                        negative_box=None
+                    )
+                else:
+                    mask = text_mask
         elif self.watermark_ai_detect_method == "general_watermark":
             slbr_segment = SLBRSegment()
             slbr_segment.prepare(onnx_path=sr_onnx_path)

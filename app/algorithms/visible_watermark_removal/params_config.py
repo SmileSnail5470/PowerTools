@@ -73,8 +73,6 @@ class DetectionConfig:
             "unclip_ratio": self.ocr_unclip_ratio,
             "score_mode": self.ocr_score_mode,
             "det_box_type": self.ocr_det_box_type,
-            "confidence": self.yolo_confidence,
-            "iou_threshold": self.yolo_iou_threshold,
         }
 
 @dataclass(slots=True)
