@@ -1313,10 +1313,9 @@ class _RightPanel(QWidget):
         root.addWidget(scroll, 1)
 
         footer = QWidget()
-        footer.setFixedHeight(142)
-        footer.setStyleSheet("background: #FFFFFF; border-top: 1px solid #E2E8F0;")
+        footer.setStyleSheet("background: #FFFFFF;")
         ft_l = QVBoxLayout(footer)
-        ft_l.setContentsMargins(12, 7, 12, 7); ft_l.setSpacing(5)
+        ft_l.setContentsMargins(8, 4, 8, 4)
 
         export_title = QLabel("导出路径")
         export_title.setStyleSheet(
@@ -1331,12 +1330,12 @@ class _RightPanel(QWidget):
         self.export_path_edit = QLineEdit()
         self.export_path_edit.setObjectName("cropExportPath")
         self.export_path_edit.setPlaceholderText("选择裁剪结果保存目录...")
-        self.export_path_edit.setFixedHeight(34)
+        self.export_path_edit.setFixedHeight(28)
         cache_path = cfg.get(cfg.cachePath) or os.path.join(os.path.expanduser("~"), "PowerToolsCache")
         self.export_path_edit.setText(os.path.join(cache_path, "tmpCrop"))
         self.export_path_edit.setStyleSheet(
             "QLineEdit#cropExportPath {"
-            "  min-height: 32px; max-height: 32px; color: #1e293b; background: #f8fafc;"
+            "  min-height: 28px; max-height: 28px; color: #1e293b; background: #f8fafc;"
             "  border: 1px solid #e2e8f0; border-radius: 10px; padding: 0 12px;"
             "  font-size: 11px;"
             "}"
@@ -1349,7 +1348,7 @@ class _RightPanel(QWidget):
         browse_btn.setIconSize(QSize(16, 16))
         browse_btn.setToolTip("浏览裁剪导出目录")
         browse_btn.setCursor(Qt.PointingHandCursor)
-        browse_btn.setFixedSize(34, 34)
+        browse_btn.setFixedSize(28, 28)
         browse_btn.setStyleSheet(
             "QPushButton#cropExportBrowse { color: #475569; background: #f8fafc;"
             "  border: 1px solid #e2e8f0; border-radius: 10px; }"
