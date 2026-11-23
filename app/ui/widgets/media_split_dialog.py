@@ -1470,12 +1470,9 @@ class _RightPanel(QWidget):
         if canvas.custom_mode:
             for index, region in enumerate(canvas.custom_regions):
                 if (0, index) in canvas.selected_cells:
-                    selected_ids.append(f"{index + 1:02d} · {region.width} × {region.height} px")
+                    selected_ids.append(f"{index + 1:02d}")
         else:
-            selected_ids = [
-                f"{row * canvas.cols + col + 1:02d}"
-                for row, col in sorted(canvas.selected_cells)
-            ]
+            selected_ids = [f"{row * canvas.cols + col + 1:02d}" for row, col in sorted(canvas.selected_cells)]
         selected_text = "、".join(selected_ids) if selected_ids else "无"
         self._sel_summary.setText(selected_text)
         self._sel_summary.setToolTip(f"已选编号：{selected_text}")
