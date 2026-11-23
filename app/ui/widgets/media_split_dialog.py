@@ -1488,8 +1488,6 @@ class _RightPanel(QWidget):
 
 
 class MediaSplitDialog(MaskDialogBase):
-    confirmed = Signal(SplitResult)
-
     def __init__(self, file_path: str, parent=None):
         super().__init__(parent=parent)
 
@@ -1865,7 +1863,6 @@ class MediaSplitDialog(MaskDialogBase):
         result.metadata_path = write_split_metadata(output_dir, result)
         self._canvas.release_video()
         self._result = result
-        self.confirmed.emit(self._result)
         completion_box = MessageBox(
             title="裁剪完成",
             content=(f"裁剪结果已保存至：\n{output_dir}\n\n您可以在软件中重新选择裁剪后的文件进行处理。"),

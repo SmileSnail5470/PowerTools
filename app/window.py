@@ -18,6 +18,7 @@ from app.ui.view.image_edit import ImageEdit
 from app.ui.view.image_restoration import ImageRestoration
 from app.ui.view.license_view import LicenseView
 from app.ui.view.tutorial import Tutorial
+from app.ui.view.toolbox import Toolbox
 from app.ui.widgets.resources_monitor_widget import ResourcesMonitorWidget
 
 from app.ui.common.config import cfg
@@ -51,6 +52,7 @@ class MainWindow(FluentWindow):
         self.imageEditInterface = ImageEdit(self)
         self.imageRestorationInterface = ImageRestoration(self)
         self.tutorialInterface = Tutorial(self)
+        self.toolboxInterface = Toolbox(self)
         self.tutorialInterface.settingsRequested.connect(lambda: self.switchTo(self.settingInterface))
 
         # enable acrylic effect
@@ -87,6 +89,8 @@ class MainWindow(FluentWindow):
 
         self.addSubInterface(self.imageRestorationInterface, Icon.LONG_SCREENSHOT, self.tr("图像修复"), pos, parent=None)
 
+        self.addSubInterface(self.toolboxInterface, FIF.TILES, self.tr("常用工具箱"), NavigationItemPosition.BOTTOM)
+
         # add custom widget to bottom
         self.navigationInterface.addItem(
             routeKey='use-powertools',
@@ -98,15 +102,15 @@ class MainWindow(FluentWindow):
             position=NavigationItemPosition.BOTTOM
         )
 
-        self.navigationInterface.addItem(
-            routeKey='feedback',
-            icon=FIF.FEEDBACK,
-            text=self.tr("反馈"),
-            onClick=self.onSupport,
-            selectable=False,
-            tooltip=self.tr("Price"),
-            position=NavigationItemPosition.BOTTOM
-        )
+        # self.navigationInterface.addItem(
+        #     routeKey='feedback',
+        #     icon=FIF.FEEDBACK,
+        #     text=self.tr("反馈"),
+        #     onClick=self.onSupport,
+        #     selectable=False,
+        #     tooltip=self.tr("Price"),
+        #     position=NavigationItemPosition.BOTTOM
+        # )
 
     def initWindow(self):
         self.resize(1440, 900)
