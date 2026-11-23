@@ -87,3 +87,7 @@ def merge_processed_frames(
         overwrite_output=True,
         quiet=False,
     )
+
+
+def safe_rmtree(path: str | Path) -> None:
+    shutil.rmtree(path, ignore_errors=True)

@@ -27,6 +27,7 @@ from app.algorithms.visible_watermark_removal.helpers.video.video_io import (
     extract_video_frames,
     get_video_info,
     merge_processed_frames,
+    safe_rmtree,
 )
 from app.algorithms.visible_watermark_removal.helpers.video.video_masks import MaskPreparer
 from app.algorithms.visible_watermark_removal.helpers.video.video_roi import (
@@ -130,6 +131,7 @@ class VideoWatermarkRemover:
             config.runtime.ffmpeg_path,
         )
         callback("MaskCompleted", str(visualization_video))
+        safe_rmtree(visualization_dir)
 
     def process_video(self, input_video_path: str, output_video_path: str, config: VideoWatermarkRemoveConfig) -> None:
         info = self._get_video_info(config.runtime.ffmpeg_path, input_video_path)
@@ -327,6 +329,7 @@ class VideoWatermarkRemover:
                 )
                 engine_mask_dir = task_dir / "engine_masks"
                 self._stage_engine_masks(frame_files, frame_mask_map, engine_mask_dir)
+                safe_rmtree(task_dir / "frames")
                 engine_process_video(
                     input_video_path,
                     output_video_path,
