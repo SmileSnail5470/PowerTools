@@ -151,17 +151,6 @@ class DirectoryInfoWidget(SimpleCardWidget):
     def __init__(self, parent=None, dir_path: str = ""):
         super().__init__(parent)
         self.setFixedHeight(63)
-        self.setStyleSheet("""
-            FileSelectorWidget {
-                border: 2px solid rgba(0, 0, 0, 0.08);
-                background-color: #f9f9f9;
-                border-radius: 12px;
-            }
-            FileSelectorWidget:hover {
-                background-color: #f5f5f5;
-                border-color: rgba(0, 0, 0, 0.12);
-            }
-        """)
 
         if not dir_path:
             dir_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "images")
@@ -225,6 +214,9 @@ class DirectoryInfoWidget(SimpleCardWidget):
         self.hBoxLayout.addStretch(1)
         self.hBoxLayout.addWidget(self.separator)
         self.hBoxLayout.addWidget(self.removeButton, 0, Qt.AlignVCenter)
+
+    def paintEvent(self, event):
+        pass
     
 
 class DirectorySelectorWidget(QWidget):
