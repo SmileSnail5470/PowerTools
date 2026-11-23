@@ -1,21 +1,23 @@
 import os
 import cv2
+import json
 import math
 import shutil
-import subprocess
 import tempfile
 from typing import Optional
 from dataclasses import dataclass, field
-from PySide6.QtCore import Qt, QRectF, QPointF, Signal, QTimer
+import app.utils.ffmpeg as ffmpeg
+from PySide6.QtCore import Qt, QRectF, QPointF, QSize, Signal, QTimer
 from PySide6.QtGui import QColor, QPainter, QPen, QBrush, QFont, QPixmap, QImage, QPainterPath, QCursor, QFontMetrics
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSpinBox, QFrame, QSizePolicy, QButtonGroup,
     QScrollArea, QGridLayout,
     QGraphicsDropShadowEffect, QSlider, QMessageBox, QProgressDialog,
-    QApplication,
+    QApplication, QFileDialog, QLineEdit,
 )
-from app.ui.library.qfluentwidgets import CardWidget, FlowLayout, MaskDialogBase, PrimaryPushButton, setFont
+from app.ui.library.qfluentwidgets import CardWidget, FlowLayout, MaskDialogBase, PrimaryPushButton, FluentIcon, Theme, MessageBox, setFont
+from app.ui.common.config import cfg
 
 
 C_BG          = QColor("#F4F6F9")
@@ -56,6 +58,8 @@ class SplitResult:
     source_path: Optional[str] = None
     fps: float = 0.0
     total_frames: int = 0
+    export_dir: Optional[str] = None
+    metadata_path: Optional[str] = None
 
 
 class _OpaqueCard(CardWidget):
@@ -87,6 +91,127 @@ def _is_video_path(file_path: str) -> bool:
     return os.path.splitext(file_path)[-1].lower() in {".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv", ".wmv"}
 
 
+def write_split_metadata(output_dir: str, result: "SplitResult") -> str:
+    metadata = {
+        "version": 1,
+        "source_path": result.source_path,
+        "export_dir": output_dir,
+        "is_video": _is_video_path(result.source_path),
+        "rows": result.rows,
+        "cols": result.cols,
+        "media_width": result.media_width,
+        "media_height": result.media_height,
+        "fps": result.fps,
+        "total_frames": result.total_frames,
+        "regions": [
+            {
+                "index": index + 1,
+                "row": region.row,
+                "col": region.col,
+                "x": region.x,
+                "y": region.y,
+                "width": region.width,
+                "height": region.height,
+                "time_start": region.time_start,
+                "time_end": region.time_end,
+                "crop_output_path": region.output_path,
+                "processed_output_path": None,
+            }
+            for index, region in enumerate(result.regions)
+        ],
+    }
+    metadata_path = os.path.join(output_dir, "crop_metadata.json")
+    with open(metadata_path, "w", encoding="utf-8") as metadata_file:
+        json.dump(metadata, metadata_file, ensure_ascii=False, indent=2)
+    return metadata_path
+
+
+def compose_split_outputs(metadata_path: str, processed_paths: Optional[list[str]], output_path: Optional[str] = None) -> str:
+    with open(metadata_path, "r", encoding="utf-8") as metadata_file:
+        metadata = json.load(metadata_file)
+    regions = metadata.get("regions", [])
+    if len(processed_paths) != len(regions):
+        raise ValueError("processed_paths 数量与裁剪区域数量不一致")
+    for region, processed_path in zip(regions, processed_paths):
+        region["processed_output_path"] = processed_path
+    if not all(region.get("processed_output_path") for region in regions):
+        raise ValueError("裁剪文件尚未处理完成")
+    export_dir = metadata.get("export_dir") or os.path.dirname(metadata_path)
+    source_path = metadata.get("source_path")
+    stem = os.path.splitext(os.path.basename(source_path or "composed"))[0]
+    if metadata.get("is_video"):
+        source_ext = os.path.splitext(source_path or "")[-1] or ".mp4"
+        final_path = output_path or os.path.join(export_dir, f"{stem}_composed{source_ext}")
+        stream = _probe_video_stream(source_path)
+        source = ffmpeg.input(source_path)
+        composite = source.video.filter("setpts", "PTS-STARTPTS")
+        for region in regions:
+            processed = ffmpeg.input(region["processed_output_path"])
+            processed_video = processed.video.filter(
+                "scale",
+                int(region["width"]),
+                int(region["height"]),
+                flags="lanczos",
+            ).filter("setpts", "PTS-STARTPTS")
+            composite = ffmpeg.overlay(
+                composite,
+                processed_video,
+                x=int(region["x"]),
+                y=int(region["y"]),
+                shortest=1,
+            )
+
+        def build(audio_args):
+            outputs = ffmpeg.output(
+                composite,
+                source.audio,
+                final_path,
+                **_video_encode_kwargs(stream),
+                acodec=audio_args["acodec"],
+                **({"b:a": audio_args["b:a"]} if "b:a" in audio_args else {}),
+                fps_mode="passthrough",
+                shortest=None,
+                map_metadata="0",
+                map_chapters="0",
+            )
+            return outputs.overwrite_output().global_args("-hide_banner", "-loglevel", "error")
+
+        try:
+            ffmpeg.run(build({"acodec": "copy"}), cmd=_ffmpeg_executable(), capture_stderr=True)
+        except ffmpeg.Error:
+            ffmpeg.run(build({"acodec": "aac", "b:a": "192k"}), cmd=_ffmpeg_executable(), capture_stderr=True)
+    else:
+        final_path = output_path or os.path.join(export_dir, f"{stem}_composed.png")
+        source = cv2.imread(source_path, cv2.IMREAD_UNCHANGED)
+        if source is None:
+            raise RuntimeError(f"无法读取原始图片：{source_path}")
+        for region in regions:
+            processed = cv2.imread(region["processed_output_path"], cv2.IMREAD_UNCHANGED)
+            if processed is None:
+                raise RuntimeError(f"无法读取处理后的裁剪图片：{region['processed_output_path']}")
+            width, height = int(region["width"]), int(region["height"])
+            if processed.shape[:2] != (height, width):
+                processed = cv2.resize(processed, (width, height), interpolation=cv2.INTER_LANCZOS4)
+            if processed.ndim == 2:
+                processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
+            if source.ndim == 2:
+                source = cv2.cvtColor(source, cv2.COLOR_GRAY2BGR)
+            if processed.shape[2] != source.shape[2]:
+                if source.shape[2] == 4:
+                    processed = cv2.cvtColor(processed, cv2.COLOR_BGR2BGRA) if processed.shape[2] == 3 else processed
+                else:
+                    processed = processed[:, :, :3]
+            processed = processed.astype(source.dtype, copy=False)
+            x, y = int(region["x"]), int(region["y"])
+            source[y:y + height, x:x + width] = processed
+        if not cv2.imwrite(final_path, source):
+            raise RuntimeError(f"无法写入合成图片：{final_path}")
+    metadata["final_output_path"] = final_path
+    with open(metadata_path, "w", encoding="utf-8") as metadata_file:
+        json.dump(metadata, metadata_file, ensure_ascii=False, indent=2)
+    return final_path
+
+
 def _ffmpeg_executable() -> str:
     configured = os.getenv("POWERTOOLS_FFMPEG_BIN", "")
     if configured:
@@ -96,6 +221,54 @@ def _ffmpeg_executable() -> str:
         return configured
     else:
         raise Exception("Not found ffmppeg from env 'POWERTOOLS_FFMPEG_BIN'")
+
+
+def _ffprobe_executable() -> str:
+    ffmpeg = _ffmpeg_executable()
+    name = "ffprobe.exe" if os.name == "nt" else "ffprobe"
+    return os.path.join(os.path.dirname(ffmpeg), name)
+
+
+def _probe_video_stream(path: str) -> dict:
+    try:
+        streams = ffmpeg.probe(path, cmd=_ffprobe_executable(),  v="error", select_streams="v:0").get("streams", [])
+        return streams[0] if streams else {}
+    except Exception:
+        return {}
+
+
+def _video_encode_kwargs(stream: dict, fallback_pix_fmt_444: bool = False) -> dict:
+    codec = "libx265" if stream.get("codec_name") == "hevc" else "libx264"
+    kwargs = {
+        "vcodec": codec,
+        "preset": "medium",
+        "crf": "18",
+        "pix_fmt": "yuv444p" if fallback_pix_fmt_444 else (stream.get("pix_fmt") or "yuv420p"),
+    }
+    for key, option in (
+        ("color_space", "colorspace"), 
+        ("color_transfer", "color_trc"), 
+        ("color_primaries", "color_primaries"), 
+        ("color_range", "color_range")
+    ):
+        value = stream.get(key)
+        if value and value != "unknown":
+            kwargs[option] = value
+    if codec == "libx265":
+        kwargs["tag:v"] = "hvc1"
+    return kwargs
+
+
+def _prepare_export_dir(base_dir: str, source_path: str) -> str:
+    stem = os.path.splitext(os.path.basename(source_path))[0]
+    export_dir = os.path.join(base_dir, f"{stem}_crop")
+    if os.path.lexists(export_dir):
+        if os.path.isdir(export_dir) and not os.path.islink(export_dir):
+            shutil.rmtree(export_dir)
+        else:
+            os.remove(export_dir)
+    os.makedirs(export_dir, exist_ok=True)
+    return export_dir
 
 
 class _VideoFrameReader:
@@ -1139,12 +1312,54 @@ class _RightPanel(QWidget):
         scroll.setWidget(self._thumb_w)
         root.addWidget(scroll, 1)
 
-        # Footer
         footer = QWidget()
-        footer.setFixedHeight(92)
+        footer.setFixedHeight(142)
         footer.setStyleSheet("background: #FFFFFF; border-top: 1px solid #E2E8F0;")
         ft_l = QVBoxLayout(footer)
         ft_l.setContentsMargins(12, 7, 12, 7); ft_l.setSpacing(5)
+
+        export_title = QLabel("导出路径")
+        export_title.setStyleSheet(
+            "font-size: 10px; font-weight: 600; color: #64748B; "
+            "letter-spacing: 0.3px; background: transparent;")
+        ft_l.addWidget(export_title)
+
+        export_row = QHBoxLayout()
+        export_row.setContentsMargins(0, 0, 0, 0)
+        export_row.setSpacing(6)
+
+        self.export_path_edit = QLineEdit()
+        self.export_path_edit.setObjectName("cropExportPath")
+        self.export_path_edit.setPlaceholderText("选择裁剪结果保存目录...")
+        self.export_path_edit.setFixedHeight(34)
+        cache_path = cfg.get(cfg.cachePath) or os.path.join(os.path.expanduser("~"), "PowerToolsCache")
+        self.export_path_edit.setText(os.path.join(cache_path, "tmpCrop"))
+        self.export_path_edit.setStyleSheet(
+            "QLineEdit#cropExportPath {"
+            "  min-height: 32px; max-height: 32px; color: #1e293b; background: #f8fafc;"
+            "  border: 1px solid #e2e8f0; border-radius: 10px; padding: 0 12px;"
+            "  font-size: 11px;"
+            "}"
+            "QLineEdit#cropExportPath:hover { background: #ffffff; border-color: #cbd5e1; }"
+            "QLineEdit#cropExportPath:focus { background: #ffffff; border: 1px solid #818cf8; }")
+
+        browse_btn = QPushButton()
+        browse_btn.setObjectName("cropExportBrowse")
+        browse_btn.setIcon(FluentIcon.FOLDER.icon(Theme.LIGHT))
+        browse_btn.setIconSize(QSize(16, 16))
+        browse_btn.setToolTip("浏览裁剪导出目录")
+        browse_btn.setCursor(Qt.PointingHandCursor)
+        browse_btn.setFixedSize(34, 34)
+        browse_btn.setStyleSheet(
+            "QPushButton#cropExportBrowse { color: #475569; background: #f8fafc;"
+            "  border: 1px solid #e2e8f0; border-radius: 10px; }"
+            "QPushButton#cropExportBrowse:hover { background: #f1f5f9; border-color: #cbd5e1; }"
+            "QPushButton#cropExportBrowse:pressed { background: #e2e8f0; }")
+        browse_btn.clicked.connect(self._choose_export_path)
+
+        export_row.addWidget(self.export_path_edit, 1)
+        export_row.addWidget(browse_btn)
+        ft_l.addLayout(export_row)
 
         summary_row = QHBoxLayout()
         sum_lbl = QLabel("已选编号:")
@@ -1171,6 +1386,17 @@ class _RightPanel(QWidget):
 
         self._cards: dict[tuple[int, int], _ThumbCard] = {}
         self._canvas_ref = None
+
+    def export_path(self) -> str:
+        return self.export_path_edit.text().strip()
+
+    def _choose_export_path(self):
+        directory = QFileDialog.getExistingDirectory(
+            self, "选择裁剪导出目录", self.export_path(),
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog,
+        )
+        if directory:
+            self.export_path_edit.setText(directory)
 
     def rebuild(self, canvas: _GridCanvas):
         self._canvas_ref = canvas
@@ -1567,55 +1793,95 @@ class MediaSplitDialog(MaskDialogBase):
     def _on_confirm(self):
         result = self._canvas.get_split_result()
         result.source_path = self._file_path
-        if self._canvas.is_video:
-            output_dir = tempfile.mkdtemp(prefix="powertools_media_split_")
-            progress = QProgressDialog("正在生成裁剪后的视频…", None, 0, len(result.regions), self)
-            progress.setWindowTitle("生成裁剪视频")
+        output_dir = self._right.export_path()
+        output_dir = os.path.abspath(os.path.expanduser(output_dir))
+        if not result.regions:
+            QMessageBox.warning(self, "裁剪失败", "请至少选择一个裁剪区域。")
+            return
+        try:
+            output_dir = _prepare_export_dir(output_dir, self._file_path)
+            stem = os.path.splitext(os.path.basename(self._file_path))[0]
+            progress = QProgressDialog("正在生成裁剪结果…", None, 0, len(result.regions), self)
+            progress.setWindowTitle("生成裁剪结果")
             progress.setWindowModality(Qt.WindowModal)
             progress.setMinimumDuration(0)
             progress.show()
             QApplication.processEvents()
-            try:
-                ffmpeg = _ffmpeg_executable()
+            if self._canvas.is_video:
+                stream = _probe_video_stream(self._file_path)
+                chroma_subsampled = (stream.get("pix_fmt") or "yuv420p").startswith(("yuv420", "yuv422", "nv12", "nv21", "yuvj420", "yuvj422"))
                 for index, region in enumerate(result.regions):
                     progress.setLabelText(f"正在生成第 {index + 1}/{len(result.regions)} 个视频…")
                     progress.setValue(index)
                     QApplication.processEvents()
-                    output_path = os.path.join(output_dir, f"crop_{index + 1:03d}.mp4")
-                    pixel_format = (
-                        "yuv420p"
-                        if all(value % 2 == 0 for value in (
-                            region.x, region.y, region.width, region.height))
-                        else "yuv444p"
+                    output_path = os.path.join(output_dir, f"{stem}_crop_{index + 1:03d}.mp4")
+                    need_444 = chroma_subsampled and not all(value % 2 == 0 for value in (region.x, region.y, region.width, region.height))
+                    video_kwargs = _video_encode_kwargs(stream, fallback_pix_fmt_444=need_444)
+                    source = ffmpeg.input(self._file_path)
+                    cropped = source.video.filter(
+                        "crop",
+                        region.width,
+                        region.height,
+                        region.x,
+                        region.y,
+                        exact=1,
                     )
-                    subprocess.run(
-                        [
-                            ffmpeg, "-y", "-i", self._file_path,
-                            "-map", "0:v:0", "-map", "0:a?",
-                            "-vf",
-                            f"crop={region.width}:{region.height}:"
-                            f"{region.x}:{region.y}:exact=1",
-                            "-c:v", "libx264", "-preset", "medium", "-crf", "18",
-                            "-pix_fmt", pixel_format, "-fps_mode", "passthrough",
-                            "-c:a", "aac", "-b:a", "192k",
-                            "-map_metadata", "0", "-map_chapters", "0",
-                            output_path,
-                        ],
-                        check=True, capture_output=True, text=True,
-                    )
+                    try:
+                        ffmpeg.run(
+                            ffmpeg.output(cropped, source.audio, output_path,
+                                          acodec="copy", fps_mode="passthrough",
+                                          map_metadata="0", map_chapters="0", **video_kwargs)
+                            .overwrite_output().global_args("-hide_banner", "-loglevel", "error"),
+                            cmd=_ffmpeg_executable(), capture_stderr=True,
+                        )
+                    except ffmpeg.Error:
+                        ffmpeg.run(
+                            ffmpeg.output(cropped, source.audio, output_path,
+                                          acodec="aac", **{"b:a": "192k"}, fps_mode="passthrough",
+                                          map_metadata="0", map_chapters="0", **video_kwargs)
+                            .overwrite_output().global_args("-hide_banner", "-loglevel", "error"),
+                            cmd=_ffmpeg_executable(), capture_stderr=True,
+                        )
                     region.output_path = output_path
-                progress.setValue(len(result.regions))
-            except (OSError, subprocess.CalledProcessError) as exc:
-                shutil.rmtree(output_dir, ignore_errors=True)
-                detail = exc.stderr.strip() if isinstance(
-                    exc, subprocess.CalledProcessError) and exc.stderr else str(exc)
-                QMessageBox.critical(self, "裁剪失败", f"生成裁剪视频失败：\n{detail}")
-                return
-            finally:
+            else:
+                source = cv2.imread(self._file_path)
+                if source is None:
+                    raise RuntimeError(f"无法读取原始图片：{self._file_path}")
+                for index, region in enumerate(result.regions):
+                    progress.setLabelText(f"正在生成第 {index + 1}/{len(result.regions)} 张图片…")
+                    progress.setValue(index)
+                    QApplication.processEvents()
+                    crop = source[
+                        region.y:region.y + region.height,
+                        region.x:region.x + region.width,
+                    ]
+                    output_path = os.path.join(output_dir, f"{stem}_crop_{index + 1:03d}.png")
+                    if not cv2.imwrite(output_path, crop):
+                        raise RuntimeError(f"无法写入裁剪图片：{output_path}")
+                    region.output_path = output_path
+            progress.setValue(len(result.regions))
+        except Exception as exc:
+            detail = getattr(exc, "stderr", None)
+            detail = detail.decode("utf-8", "replace") if isinstance(detail, bytes) else (detail or str(exc))
+            QMessageBox.critical(self, "裁剪失败", f"生成裁剪结果失败：\n{detail}")
+            return
+        finally:
+            if 'progress' in locals():
                 progress.close()
+        result.export_dir = output_dir
+        result.metadata_path = write_split_metadata(output_dir, result)
         self._canvas.release_video()
         self._result = result
         self.confirmed.emit(self._result)
+        completion_box = MessageBox(
+            title="裁剪完成",
+            content=(f"裁剪结果已保存至：\n{output_dir}\n\n您可以在软件中重新选择裁剪后的文件进行处理。"),
+            parent=self,
+        )
+        completion_box.cancelButton.hide()
+        completion_box.yesButton.setText("知道了")
+        completion_box.yesButton.setFixedWidth(280)
+        completion_box.exec()
         self.accept()
 
     @property
