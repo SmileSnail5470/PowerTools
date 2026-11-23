@@ -3,7 +3,6 @@ import cv2
 import json
 import math
 import shutil
-import tempfile
 from typing import Optional
 from dataclasses import dataclass, field
 import app.utils.ffmpeg as ffmpeg
@@ -329,8 +328,8 @@ class _GridCanvas(QWidget):
         self._cols        = 1
         self._selected: set[tuple[int, int]] = set()
         self._custom_mode = False
-        self._custom_rect: Optional[QRectF] = None
-        self._custom_selected = False
+        self._custom_rects: list[QRectF] = []
+        self._custom_selected: set[int] = set()
         self._scale       = 1.0
         self._offset      = QPointF(0, 0)
         self._drag_start: Optional[QPointF] = None
@@ -352,8 +351,8 @@ class _GridCanvas(QWidget):
         self._orig_w   = w
         self._orig_h   = h
         self._is_video = is_vid
-        self._custom_rect = None
-        self._custom_selected = False
+        self._custom_rects.clear()
+        self._custom_selected.clear()
         self._fit_to_view()
         rows, cols = _suggest_grid(w, h, is_vid)
         self.set_grid(rows, cols)
@@ -385,7 +384,11 @@ class _GridCanvas(QWidget):
 
     def set_cell_selected(self, row: int, col: int, sel: bool):
         if self._custom_mode:
-            self._custom_selected = sel and self._custom_rect is not None
+            if 0 <= col < len(self._custom_rects):
+                if sel:
+                    self._custom_selected.add(col)
+                else:
+                    self._custom_selected.discard(col)
             self.update()
             self.grid_changed.emit()
             return
@@ -398,7 +401,7 @@ class _GridCanvas(QWidget):
 
     def select_all(self):
         if self._custom_mode:
-            self._custom_selected = self._custom_rect is not None
+            self._custom_selected = set(range(len(self._custom_rects)))
             self.update()
             self.grid_changed.emit()
             return
@@ -408,7 +411,7 @@ class _GridCanvas(QWidget):
 
     def deselect_all(self):
         if self._custom_mode:
-            self._custom_selected = False
+            self._custom_selected.clear()
             self.update()
             self.grid_changed.emit()
             return
@@ -419,16 +422,16 @@ class _GridCanvas(QWidget):
     def get_split_result(self) -> SplitResult:
         if self._custom_mode:
             result = SplitResult(
-                rows=1, 
-                cols=1,
+                rows=1,
+                cols=max(1, len(self._custom_rects)),
                 media_width=self._orig_w, 
                 media_height=self._orig_h,
                 fps=self._video_fps, 
                 total_frames=self._total_frames
             )
-            region = self.custom_region
-            if region is not None and self._custom_selected:
-                result.regions.append(region)
+            for index, region in enumerate(self.custom_regions):
+                if index in self._custom_selected:
+                    result.regions.append(region)
             return result
         result = SplitResult(
             rows=self._rows, 
@@ -464,10 +467,11 @@ class _GridCanvas(QWidget):
         sub = self._pixmap.copy(sx, sy, max(1, sw), max(1, sh))
         return sub.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
-    def get_custom_thumbnail(self, size: int = 74) -> QPixmap:
-        region = self.custom_region
-        if region is None or self._pixmap.isNull():
+    def get_custom_thumbnail(self, index: int, size: int = 74) -> QPixmap:
+        regions = self.custom_regions
+        if not 0 <= index < len(regions) or self._pixmap.isNull():
             return QPixmap()
+        region = regions[index]
         pw, ph = self._pixmap.width(), self._pixmap.height()
         sx = round(region.x * pw / self._orig_w)
         sy = round(region.y * ph / self._orig_h)
@@ -478,14 +482,14 @@ class _GridCanvas(QWidget):
         return cropped.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
     @property
-    def custom_region(self) -> Optional[SplitRegion]:
-        if self._custom_rect is None:
-            return None
-        rect = self._custom_rect
-        return SplitRegion(
-            row=0, col=0,
-            x=int(rect.x()), y=int(rect.y()),
-            width=int(rect.width()), height=int(rect.height()))
+    def custom_regions(self) -> list[SplitRegion]:
+        return [
+            SplitRegion(
+                row=0, col=index,
+                x=int(rect.x()), y=int(rect.y()),
+                width=int(rect.width()), height=int(rect.height()))
+            for index, rect in enumerate(self._custom_rects)
+        ]
 
     @property
     def rows(self): return self._rows
@@ -493,13 +497,13 @@ class _GridCanvas(QWidget):
     def cols(self): return self._cols
     @property
     def selected_count(self):
-        return int(self._custom_selected) if self._custom_mode else len(self._selected)
+        return len(self._custom_selected) if self._custom_mode else len(self._selected)
     @property
     def total_cells(self):
-        return int(self._custom_rect is not None) if self._custom_mode else self._rows * self._cols
+        return len(self._custom_rects) if self._custom_mode else self._rows * self._cols
     @property
     def selected_cells(self):
-        return {(0, 0)} if self._custom_mode and self._custom_selected else set(self._selected)
+        return {(0, index) for index in self._custom_selected} if self._custom_mode else set(self._selected)
     @property
     def custom_mode(self): return self._custom_mode
     @property
@@ -603,28 +607,31 @@ class _GridCanvas(QWidget):
         p.setBrush(Qt.NoBrush)
         p.drawRect(ir.adjusted(-0.5, -0.5, 0.5, 0.5))
         if self._custom_mode:
-            crop_rect = self._custom_rect
+            crop_views = [self._source_rect_to_view(rect) for rect in self._custom_rects]
             if self._is_dragging and self._drag_start and self._drag_end:
-                crop_rect = self._view_rect_to_source(QRectF(self._drag_start, self._drag_end))
-            if crop_rect is not None:
-                crop_view = self._source_rect_to_view(crop_rect)
-                outside = QPainterPath()
-                outside.setFillRule(Qt.OddEvenFill)
-                outside.addRect(ir)
-                outside.addRect(crop_view)
-                p.fillPath(outside, QColor(15, 23, 42, 105))
-                if self._custom_selected or self._is_dragging:
+                preview = self._view_rect_to_source(QRectF(self._drag_start, self._drag_end))
+                if preview is not None:
+                    crop_views.append(self._source_rect_to_view(preview))
+            outside = QPainterPath()
+            outside.addRect(ir)
+            for crop_view in crop_views:
+                crop_path = QPainterPath()
+                crop_path.addRect(crop_view)
+                outside = outside.subtracted(crop_path)
+            p.fillPath(outside, QColor(15, 23, 42, 105))
+            for index, crop_view in enumerate(crop_views):
+                is_selected = index < len(self._custom_rects) and index in self._custom_selected
+                if is_selected:
                     p.fillRect(crop_view, QColor(0, 120, 212, 38))
-                p.setPen(QPen(C_BRAND if self._custom_selected else C_MUTED, 2.0, Qt.SolidLine if self._custom_selected else Qt.DashLine))
+                p.setPen(QPen(C_BRAND if is_selected else C_MUTED, 2.0, Qt.SolidLine if is_selected else Qt.DashLine))
                 p.setBrush(Qt.NoBrush)
                 p.drawRoundedRect(crop_view, 3, 3)
-                if self._custom_selected and not self._is_dragging:
-                    p.setPen(QPen(Qt.white, 1.8, Qt.SolidLine, Qt.RoundCap))
-                    p.setBrush(C_BRAND)
-                    badge = QRectF(crop_view.right() - 23, crop_view.top() + 8, 18, 18)
-                    p.drawEllipse(badge)
-                    p.drawLine(badge.left() + 4, badge.center().y(), badge.left() + 7, badge.center().y() + 3)
-                    p.drawLine(badge.left() + 7, badge.center().y() + 3, badge.left() + 13, badge.center().y() - 4)
+                p.setPen(Qt.white)
+                p.setBrush(C_BRAND if is_selected else C_MUTED)
+                badge = QRectF(crop_view.right() - 23, crop_view.top() + 8, 18, 18)
+                p.drawEllipse(badge)
+                setFont(p, 8)
+                p.drawText(badge, Qt.AlignCenter, str(index + 1))
             return
         if self._rows == 1 and self._cols == 1:
             return
@@ -718,8 +725,8 @@ class _GridCanvas(QWidget):
                 source_rect = self._view_rect_to_source(
                     QRectF(self._drag_start, pos))
                 if source_rect is not None:
-                    self._custom_rect = source_rect
-                    self._custom_selected = True
+                    self._custom_rects.append(source_rect)
+                    self._custom_selected.add(len(self._custom_rects) - 1)
                     self.grid_changed.emit()
             self._drag_start = None
             self._drag_end = None
@@ -1100,7 +1107,7 @@ class _LeftPanel(QWidget):
         self.panel_custom.setStyleSheet("background: transparent;")
         pc_layout = QVBoxLayout(self.panel_custom)
         pc_layout.setContentsMargins(0, 0, 0, 0)
-        hint = QLabel("在预览区拖拽，绘制裁剪框。")
+        hint = QLabel("在预览区重复拖拽，可添加多个裁剪框；点击右侧缩略图可切换是否导出。")
         hint.setWordWrap(True)
         hint.setStyleSheet(
             "font-size: 11px; color: #475569; background: #F8FAFC; "
@@ -1166,12 +1173,9 @@ class _LeftPanel(QWidget):
         self.lbl_info_orig.setText(f"原始尺寸：{orig_w} × {orig_h} px")
         self.lbl_info_sub.setText(f"子块尺寸：{sw} × {sh} px")
 
-    def update_custom_info(self, orig_w: int, orig_h: int, crop_w: Optional[int], crop_h: Optional[int]):
+    def update_custom_info(self, orig_w: int, orig_h: int, region_count: int):
         self.lbl_info_orig.setText(f"原图：{orig_w} × {orig_h} px")
-        if crop_w is None or crop_h is None:
-            self.lbl_info_sub.setText("裁剪框：未绘制")
-        else:
-            self.lbl_info_sub.setText(f"裁剪尺寸：{crop_w} × {crop_h} px")
+        self.lbl_info_sub.setText(f"自定义裁剪区域：{region_count} 个")
 
     def set_grid_values(self, r: int, c: int):
         for s, v in [(self._rows_spin, r), (self._cols_spin, c)]:
@@ -1404,15 +1408,13 @@ class _RightPanel(QWidget):
 
         rows, cols = canvas.rows, canvas.cols
         if canvas.custom_mode:
-            region = canvas.custom_region
-            if region is not None:
-                thumb = canvas.get_custom_thumbnail(size=_ThumbCard._SIZE)
-                card = _ThumbCard(
-                    0, 0, thumb, region.width, region.height, 1, self._thumb_w)
-                card.set_selected((0, 0) in canvas.selected_cells)
+            for index, region in enumerate(canvas.custom_regions):
+                thumb = canvas.get_custom_thumbnail(index, size=_ThumbCard._SIZE)
+                card = _ThumbCard(0, index, thumb, region.width, region.height, index + 1, self._thumb_w)
+                card.set_selected((0, index) in canvas.selected_cells)
                 card.toggled.connect(self._on_card_toggled)
                 self._flow.addWidget(card)
-                self._cards[(0, 0)] = card
+                self._cards[(0, index)] = card
             self._refresh_status(canvas)
             QTimer.singleShot(0, self._reflow_thumbnails)
             return
@@ -1466,10 +1468,9 @@ class _RightPanel(QWidget):
             f"已选: {sel}" if not canvas.custom_mode or total else "已选: 未绘制")
         selected_ids = []
         if canvas.custom_mode:
-            if sel:
-                region = canvas.custom_region
-                selected_ids.append(
-                    f"01 · {region.width} × {region.height} px" if region else "01")
+            for index, region in enumerate(canvas.custom_regions):
+                if (0, index) in canvas.selected_cells:
+                    selected_ids.append(f"{index + 1:02d} · {region.width} × {region.height} px")
         else:
             selected_ids = [
                 f"{row * canvas.cols + col + 1:02d}"
@@ -1770,11 +1771,7 @@ class MediaSplitDialog(MaskDialogBase):
         self._left.set_grid_values(rows, cols)
         if self._canvas.orig_w:
             if self._canvas.custom_mode:
-                region = self._canvas.custom_region
-                self._left.update_custom_info(
-                    self._canvas.orig_w, self._canvas.orig_h,
-                    region.width if region else None,
-                    region.height if region else None)
+                self._left.update_custom_info(self._canvas.orig_w, self._canvas.orig_h, len(self._canvas.custom_regions))
             else:
                 self._left.update_info(self._canvas.orig_w, self._canvas.orig_h,
                                        rows, cols, self._canvas.is_video)
