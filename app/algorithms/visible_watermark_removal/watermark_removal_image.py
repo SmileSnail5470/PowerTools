@@ -11,10 +11,10 @@ from app.algorithms.visible_watermark_removal.modules.grig_inpaint import GRIGIn
 from app.algorithms.visible_watermark_removal.modules.emdf_inpaint import EMDFInpaint
 from app.algorithms.visible_watermark_removal.modules.lama_inpaint import LamaInpaint
 from app.algorithms.visible_watermark_removal.modules.text_detection import detect_text_watermarks
-from app.algorithms.private.object_segmentation.image.inference import ObjectSegmentationInference
-from app.algorithms.private.image_edit.general_edit.inference import ImageEditInference
-from app.algorithms.private.image_restoration.inference import ImageRestorationInference
-from app.algorithms.private.object_remove.inference import ObjectRemoveInference
+from app.algorithms.private.object_segmentation.inference import create_inference as create_segmentation_inference
+from app.algorithms.private.image_edit.inference import create_inference as create_edit_inference
+from app.algorithms.private.image_restoration.inference import create_inference as create_restoration_inference
+from app.algorithms.private.object_remove.inference import create_inference as create_object_remove_inference
 from app.algorithms.visible_watermark_removal.params_config import ImageWatermarkRemoveConfig, RestorationRemoveConfig, DetectionConfig, SegmentModelPaths
 
 
@@ -63,7 +63,7 @@ class WatermarkSegment():
                     return_boxes=True,
                 )
                 if text_boxes:
-                    segment_instance = ObjectSegmentationInference(model_dir=segment_onnx_dir, threshold=0.3)
+                    segment_instance = create_segmentation_inference("image", model_dir=segment_onnx_dir, threshold=0.3)
                     mask = segment_instance.infer(
                         input_path=image_path,
                         text=None,
@@ -86,7 +86,8 @@ class WatermarkSegment():
 
             mask = np.clip((sl_mask + pt_mask), 0, 255).astype(np.uint8)
         elif self.watermark_ai_detect_method == "semantic_detect":
-            segment_instance = ObjectSegmentationInference(
+            segment_instance = create_segmentation_inference(
+                "image",
                 model_dir=segment_onnx_dir,
                 threshold=float(self.watermark_ai_detect_confidence)
             )
@@ -98,7 +99,8 @@ class WatermarkSegment():
                 negative_box=self.watermark_ai_detect_neg_boxes
             )
         elif self.watermark_ai_detect_method == "space_detect":
-            segment_instance = ObjectSegmentationInference(
+            segment_instance = create_segmentation_inference(
+                "image",
                 model_dir=segment_onnx_dir,
                 threshold=float(self.watermark_ai_detect_confidence)
             )
@@ -151,7 +153,8 @@ class WatermarkInpaint():
         cv2.imwrite(output_path, image)
 
     def _process_image_with_general_edit(self, image_path):
-        general_edit_inpaint = ImageEditInference(
+        general_edit_inpaint = create_edit_inference(
+            "general_edit",
             model_dir=self.general_edit_onnx_dir,
             dilate_num=self.dilate_num
         )
@@ -163,7 +166,10 @@ class WatermarkInpaint():
         return result
 
     def _process_image_with_image_restoration(self, image_path):
-        image_restoration_inpaint = ImageRestorationInference(model_dir=self.image_restoration_onnx_dir)
+        image_restoration_inpaint = create_restoration_inference(
+            "image_restoration",
+            model_dir=self.image_restoration_onnx_dir,
+        )
         result = image_restoration_inpaint.infer(
             prompt=self.restoration_prompt,
             input_path=image_path,
@@ -173,7 +179,8 @@ class WatermarkInpaint():
         return result  # [H, W, 3] 0~255 uint8 RGB
 
     def _process_image_with_object_removal(self, image_path):
-        object_remove_inpaint = ObjectRemoveInference(
+        object_remove_inpaint = create_object_remove_inference(
+            "image",
             model_dir=self.object_remove_onnx_dir,
             dilate_num=self.dilate_num,
         )

@@ -7,8 +7,7 @@ from PIL import Image
 from app.ui.common.config import cfg
 from app.workers.work_base import BaseWorker, _resolve_hardware_variant
 from app.utils.logger.decorators import log_exception
-from app.algorithms.private.sr_edit.inference import ImageSRInference
-from app.algorithms.private.image_restoration.inference import ImageRestorationInference
+from app.algorithms.private.image_restoration.inference import create_inference
 
 
 restoration_logger = logging.getLogger('ImageRestoration')
@@ -78,7 +77,10 @@ class ImageRestorationWork(BaseWorker):
             bool(kwargs.get("low_memory", True)),
             kwargs.get("seed", 42),
         )
-        return cls._replace_instance(key, lambda: ImageRestorationInference(model_dir=model_dir, **kwargs))
+        return cls._replace_instance(
+            key,
+            lambda: create_inference("image_restoration", model_dir=model_dir, **kwargs),
+        )
 
     @classmethod
     def _get_sr_instance(cls, model_dir, **kwargs):
@@ -87,7 +89,10 @@ class ImageRestorationWork(BaseWorker):
             os.fspath(model_dir),
             bool(kwargs.get("low_memory", True)),
         )
-        return cls._replace_instance(key, lambda: ImageSRInference(model_dir=model_dir, **kwargs))
+        return cls._replace_instance(
+            key,
+            lambda: create_inference("image_sr", model_dir=model_dir, **kwargs),
+        )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

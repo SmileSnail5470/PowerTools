@@ -1,14 +1,12 @@
 import logging
-import os
 import shutil
-import tempfile
 import numpy as np
 from PIL import Image
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional, Protocol
+from typing import Optional, Protocol
 from app.algorithms.tracker.mask_tracker_edgetam import MaskTrackerEdgeTAM
-from app.algorithms.private.object_segmentation.video.inference import VideoObjectSegmentationInference
+from app.algorithms.private.object_segmentation.inference import create_inference
 from app.algorithms.visible_watermark_removal.params_config import VideoWatermarkRemoveConfig
 from app.algorithms.visible_watermark_removal.watermark_removal_image import WatermarkSegment
 
@@ -182,10 +180,11 @@ class MaskPreparer:
         tracking_detect_direction = tracking_data["tracking_detect_direction"]
         tracking_detect_frame_range = tracking_data["tracking_detect_frame_range"]
         start_frame_idx, end_frame_idx = tracking_detect_frame_range[0], tracking_detect_frame_range[1]
-        tracker = VideoObjectSegmentationInference(
-        model_dir=model_dir, 
-        video_model_dir=model_dir,
-        max_mem_attn_batch=None
+        tracker = create_inference(
+            "video",
+            model_dir=model_dir,
+            video_model_dir=model_dir,
+            max_mem_attn_batch=None,
         )
         if tracking_detect_direction == "forward":
             max_frames = end_frame_idx - tracking_detect_anchor_frame

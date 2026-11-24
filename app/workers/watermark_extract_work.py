@@ -9,8 +9,7 @@ from app.workers.work_base import BaseWorker, _resolve_hardware_variant
 from app.algorithms.visible_watermark_addition.watermark_addition import VisibleWatermarkAddition
 from app.utils.logger.decorators import log_exception
 
-from app.algorithms.private.blind_watermark_addition.blind_watermark_addition_image import ImageBlindWatermarkDetect
-from app.algorithms.private.blind_watermark_addition.blind_watermark_addition_video import VideoBlindWatermarkDetect
+from app.algorithms.private.blind_watermark_addition.inference import create_inference
 
 
 @dataclass
@@ -42,7 +41,7 @@ class WatermarkExtractInternal():
     def __init__(self, file_type="image"):
         self.deps_path = cfg.get(cfg.localAIModelDeps)
         self.file_type = file_type
-        self._image_instance = ImageBlindWatermarkDetect()
+        self._image_instance = create_inference("image_detect")
 
     def has_powertools_blind_watermark(self, input_path):
         os.environ["_feature_name_"] = ""
@@ -99,13 +98,13 @@ class WatermarkExtractWork(BaseWorker):
     @classmethod
     def _get_image_instance(cls):
         if cls._image_instance is None:
-            cls._image_instance = ImageBlindWatermarkDetect()
+            cls._image_instance = create_inference("image_detect")
         return cls._image_instance
 
     @classmethod
     def _get_video_instance(cls):
         if cls._video_instance is None:
-            cls._video_instance = VideoBlindWatermarkDetect()
+            cls._video_instance = create_inference("video_detect")
         return cls._video_instance
 
     def __init__(self, *args, **kwargs):

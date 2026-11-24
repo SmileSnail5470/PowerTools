@@ -6,7 +6,7 @@ from app.workers.work_base import BaseWorker, _resolve_hardware_variant
 from app.utils.logger.decorators import log_exception
 from app.algorithms.private.video_engine.config import EngineConfig
 from app.algorithms.private.video_engine.engine import process_video
-from app.algorithms.private.reverse_edit.inference import ReverseEditInference
+from app.algorithms.private.image_restoration.inference import create_inference
 from app.workers.watermark_extract_work import WatermarkExtractInternal
 
 
@@ -53,7 +53,12 @@ class BlindWatermarkRemoveWork(BaseWorker):
     @classmethod
     def _get_instance(cls, model_dir, ocr_model_path=None, use_color_fix=True):
         if cls._instance is None or cls._instance_model_dir != model_dir:
-            cls._instance = ReverseEditInference(model_dir=model_dir, ocr_model_path=ocr_model_path, use_color_fix=use_color_fix)
+            cls._instance = create_inference(
+                "reverse_edit",
+                model_dir=model_dir,
+                ocr_model_path=ocr_model_path,
+                use_color_fix=use_color_fix,
+            )
             cls._instance_model_dir = model_dir
         return cls._instance
 

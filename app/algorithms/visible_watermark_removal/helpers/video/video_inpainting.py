@@ -11,7 +11,7 @@ from app.algorithms.visible_watermark_removal.params_config import (
     get_ppt_onnx_path,
 )
 from app.algorithms.visible_watermark_removal.video_modules.ppt.inference import PPTInferenceORT
-from app.algorithms.private.video_object_remove.inference import VideoObjectRemoveInference
+from app.algorithms.private.object_remove.inference import create_inference
 from app.algorithms.visible_watermark_removal.helpers.video.video_roi import (
     crop_frames_and_masks,
     get_roi,
@@ -160,7 +160,8 @@ def video_stable_inpainting(
             (width, height),
             os.environ.get("POWERTOOLS_GPU_MEMORY_LIMIT", 16),
         )
-        pipeline = VideoObjectRemoveInference(
+        pipeline = create_inference(
+            "video",
             model_dir=video_object_removal_onnx_basedir,
             low_memory=low_memory,
             paste_back=paste_back,

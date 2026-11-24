@@ -6,7 +6,7 @@ from PIL import Image
 from app.ui.common.config import cfg
 from app.workers.work_base import BaseWorker, _resolve_hardware_variant
 from app.utils.logger.decorators import log_exception
-from app.algorithms.private.image_edit.general_edit.inference import ImageEditInference
+from app.algorithms.private.image_edit.inference import create_inference
 
 
 @dataclass
@@ -50,7 +50,7 @@ class ImageEditWork(BaseWorker):
     @classmethod
     def _get_instance(cls, model_dir):
         if cls._instance is None or cls._instance_model_dir != model_dir:
-            cls._instance = ImageEditInference(model_dir=model_dir)
+            cls._instance = create_inference("general_edit", model_dir=model_dir)
             cls._instance_model_dir = model_dir
         return cls._instance
 

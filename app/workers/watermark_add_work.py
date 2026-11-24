@@ -6,8 +6,7 @@ from app.workers.work_base import BaseWorker, _resolve_hardware_variant
 from app.utils.logger.decorators import log_exception
 
 from app.algorithms.visible_watermark_addition.watermark_addition import VisibleWatermarkAddition
-from app.algorithms.private.blind_watermark_addition.blind_watermark_addition_image import ImageBlindWatermarkEmbed
-from app.algorithms.private.blind_watermark_addition.blind_watermark_addition_video import VideoBlindWatermarkEmbed
+from app.algorithms.private.blind_watermark_addition.inference import create_inference
 
 
 @dataclass
@@ -91,13 +90,13 @@ class WatermarkAddWork(BaseWorker):
     @classmethod
     def _get_blind_image_instance(cls):
         if cls._blind_image_instance is None:
-            cls._blind_image_instance = ImageBlindWatermarkEmbed()
+            cls._blind_image_instance = create_inference("image_embed")
         return cls._blind_image_instance
 
     @classmethod
     def _get_blind_video_instance(cls):
         if cls._blind_video_instance is None:
-            cls._blind_video_instance = VideoBlindWatermarkEmbed()
+            cls._blind_video_instance = create_inference("video_embed")
         return cls._blind_video_instance
 
     def __init__(self, *args, **kwargs):

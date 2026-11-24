@@ -18,7 +18,7 @@ from app.algorithms.visible_watermark_removal.params_config import (
     VideoMaskConfig,
     VideoWatermarkRemoveConfig,
 )
-from app.algorithms.private.object_segmentation.image.inference import ObjectSegmentationInference
+from app.algorithms.private.object_segmentation.inference import create_inference
 
 logger = logging.getLogger("VideoObjectDetectorWorker")
 
@@ -42,7 +42,8 @@ def segment_video_frame(
     hw = _resolve_hardware_variant()
     model_dir = os.path.join(deps_path, hw, "object_segmentation")
 
-    inference = ObjectSegmentationInference(
+    inference = create_inference(
+        "image",
         model_dir=model_dir,
         low_memory=True,
         threshold=threshold,
