@@ -24,6 +24,11 @@ class _ImageEditModelParams:
 class _ImageEditTaskParams:
     prompt: str = ""
     mask_boxes: list = field(default_factory=list)
+    reference_paths: list = field(default_factory=list)
+    resolution_tier: str = "1K"
+    aspect_ratio: str = "1:1"
+    custom_width: int = 1024
+    custom_height: int = 1024
 
 
 @dataclass

@@ -3,9 +3,9 @@ import sys
 from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
 from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QLabel, QHBoxLayout, QStackedWidget, QStackedLayout,
-    QLineEdit, QFileDialog, QButtonGroup, QPushButton, QTextEdit, QFrame
+    QLineEdit, QFileDialog, QButtonGroup, QPushButton, QFrame
 )
-from PySide6.QtGui import QFont, QColor, QAction, QPixmap
+from PySide6.QtGui import QFont, QColor, QAction
 
 from app.ui.library.qfluentwidgets import (
     setFont, HeaderCardWidget, ScrollArea, PushButton, CaptionLabel, FlowLayout,
@@ -14,12 +14,11 @@ from app.ui.library.qfluentwidgets import (
 )
 
 from app.ui.widgets.gradient_header_widget import GradientHeader
-from app.ui.widgets.file_selector_widget import FileSelectorWidget
 from app.ui.widgets.custom_card_group_widget import StyleCard
-from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget, ScrollBar
+from app.ui.widgets.image_preview_widget import SyncImageViewer, ImageNavigationWidget
 from app.ui.widgets.status_bar_widget import StatusInfoWidget
 from app.ui.widgets.task_info_messagebox_widget import TaskInfoMessageBox
-from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
+from app.ui.widgets.image_edit_settings import ParameterSettingsCard
 
 from app.ui.common.event_bus import global_event_bus
 from app.controllers.task_manager import global_task_manager
@@ -35,180 +34,6 @@ image_edit_params = LayeredTaskParams(params=ImageEditUIParams())
 image_edit_task_status_model = TaskStatusModel()
 # 当前批次已提交的任务 future，用于支持一次性取消
 image_edit_active_futures = []
-
-
-class PromptInputCard(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(8)
-
-        title_label = QLabel(self.tr("✍️ 提示词"), self)
-        setFont(title_label, 13, QFont.DemiBold)
-        title_label.setStyleSheet("color: #555555; background: transparent;")
-        main_layout.addWidget(title_label)
-
-        self.prompt_edit = QTextEdit(self)
-        self.prompt_edit.setMaximumHeight(100)
-        self.prompt_edit.setStyleSheet("""
-            QTextEdit {
-                border: 1px solid #e0e0e0;
-                border-radius: 8px;
-                padding: 8px;
-                background-color: #fafafa;
-                color: #1a1a1a;
-            }
-            QTextEdit:focus {
-                border: 1px solid #667eea;
-                background-color: #ffffff;
-                color: #000000;
-            }
-        """)
-        self._v_scroll = ScrollBar(Qt.Vertical, self)
-        self.prompt_edit.setVerticalScrollBar(self._v_scroll)
-        setFont(self.prompt_edit, fontSize=13)
-        self.prompt_edit.textChanged.connect(self._on_text_changed)
-        main_layout.addWidget(self.prompt_edit)
-
-        hint_label = CaptionLabel(self.tr("描述对图片的编辑操作"))
-        hint_label.setWordWrap(True)
-        hint_label.setStyleSheet("color: #999999;")
-        main_layout.addWidget(hint_label)
-
-    def _on_text_changed(self):
-        image_edit_params.set_param("task.prompt", self.prompt_edit.toPlainText())
-
-
-class ReferenceImageCard(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(8)
-
-        title_label = QLabel(self.tr("🖼️ 参考图（可选）"), self)
-        setFont(title_label, 13, QFont.DemiBold)
-        title_label.setStyleSheet("color: #555555; background: transparent;")
-        main_layout.addWidget(title_label)
-
-        self.file_selector = FileSelectorWidget(self, format_text_value=self.tr("支持 JPG, PNG 格式"))
-        self.file_selector.item_selected.connect(self._on_file_selected)
-        bind_widget_to_param(self.file_selector, "item_selected", image_edit_params, "io.input_path", transform=None)
-        main_layout.addWidget(self.file_selector)
-
-        preview_layout = QHBoxLayout()
-        preview_layout.setContentsMargins(0, 10, 0, 0)
-        preview_layout.setSpacing(8)
-
-        btn_layout = QVBoxLayout()
-        btn_layout.setSpacing(6)
-
-        self.area_select_btn = PushButton(text=self.tr("🖼 区域选择"))
-        self.area_select_btn.setEnabled(False)
-        self.area_select_btn.setStyleSheet("""
-            PushButton { padding: 6px 12px; border-radius: 6px; font-size: 12px; }
-            PushButton { 
-                background: #F1F5F9; 
-                border: 1px solid #E2E8F0; 
-                border-radius: 6px; 
-                padding: 6px; 
-                color: #0F172A;
-            }
-            PushButton:hover { 
-                background: #E2E8F0; 
-                border-color: #CBD5E1;
-            }
-            PushButton:pressed { 
-                background: #CBD5E1; 
-                padding-top: 7px;
-                padding-bottom: 5px;
-            }
-        """)
-        setFont(self.area_select_btn, fontSize=12)
-        self.area_select_btn.clicked.connect(self._on_area_select)
-        btn_layout.addWidget(self.area_select_btn)
-
-        self.area_info_label = CaptionLabel(self.tr("未选择区域"))
-        self.area_info_label.setAlignment(Qt.AlignCenter)
-        self.area_info_label.setStyleSheet("color: #999999;")
-        btn_layout.addWidget(self.area_info_label)
-        preview_layout.addLayout(btn_layout)
-        main_layout.addLayout(preview_layout)
-
-        self._file_path = ""
-
-    def _on_file_selected(self, file_path):
-        self._file_path = file_path
-        image_edit_params.set_param("task.mask_boxes", [])
-        self.area_info_label.setText(self.tr("未选择区域"))
-        if file_path and os.path.isfile(file_path):
-            pixmap = QPixmap(file_path)
-            if not pixmap.isNull():
-                self.area_select_btn.setEnabled(True)
-            else:
-                self.area_select_btn.setEnabled(False)
-        else:
-            self.area_select_btn.setEnabled(False)
-        global_event_bus.imageEdit_InputFileUpdate.emit(file_path)
-
-    def _on_area_select(self):
-        if not self._file_path:
-            return
-        dialog = AreaSelectorDialog(file_path=self._file_path, single_area_only=False, parent=self.window())
-        dialog.exec()
-        boxes = dialog.get_results()
-        image_edit_params.set_param("task.mask_boxes", boxes)
-        if boxes:
-            self.area_info_label.setText(self.tr("已选择 {0} 个区域").format(len(boxes)))
-        else:
-            self.area_info_label.setText(self.tr("未选择区域"))
-
-
-class ParameterSettingsCard(QFrame):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("paramsCard")
-        self.setStyleSheet("""
-            QFrame#paramsCard {
-                background-color: #f8f9fa;
-                border-radius: 8px;
-                border: 1px solid #e9ecef;
-            }
-        """)
-
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(12, 10, 12, 12)
-        main_layout.setSpacing(10)
-
-        header = QWidget(self)
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(0, 4, 0, 0)
-        header_layout.setSpacing(8)
-
-        icon_label = QLabel("⚙️")
-        setFont(icon_label, 13)
-        icon_label.setStyleSheet("color: #555555; background: transparent;")
-        title_label = QLabel(self.tr("参数设置"))
-        setFont(title_label, 13, QFont.DemiBold)
-        title_label.setStyleSheet("color: #555555; background: transparent;")
-        divider = QFrame()
-        divider.setFrameShape(QFrame.HLine)
-        divider.setStyleSheet("color: #e2e8f0;")
-
-        header_layout.addWidget(icon_label)
-        header_layout.addWidget(title_label)
-        header_layout.addWidget(divider, 1)
-        main_layout.addWidget(header)
-        main_layout.addWidget(PromptInputCard(self))
-
-        section_divider = QFrame(self)
-        section_divider.setFrameShape(QFrame.HLine)
-        section_divider.setStyleSheet("color: #e2e8f0;")
-        main_layout.addWidget(section_divider)
-        main_layout.addWidget(ReferenceImageCard(self))
 
 
 class ModelSelectCard(HeaderCardWidget):
@@ -284,7 +109,11 @@ class ModelSelectCard(HeaderCardWidget):
         image_layout.setHorizontalSpacing(8)
         image_layout.setVerticalSpacing(8)
 
-        general_edit_card = StyleCard("#667eea", self.tr("智能重绘"), self.tr("复杂场景，效果好"), vertical_layout=True)
+        precision_edit_card = StyleCard("#f093fb", self.tr("精细编辑"), self.tr("精准修改，细节出色"), vertical_layout=True)
+        precision_edit_card.set_name("precision_edit")
+        image_layout.addWidget(precision_edit_card)
+
+        general_edit_card = StyleCard("#667eea", self.tr("通用编辑"), self.tr("智能理解，一般创作"), vertical_layout=True)
         general_edit_card.set_name("general_edit")
         image_layout.addWidget(general_edit_card)
 
@@ -304,7 +133,7 @@ class ModelSelectCard(HeaderCardWidget):
         image_outer_layout.addWidget(image_model_card)
         self.stacked_widget.addWidget(image_container)
 
-        self.image_cards = [general_edit_card]
+        self.image_cards = [precision_edit_card, general_edit_card]
         self.all_cards.extend(self.image_cards)
 
         # 视频模型（占位）
@@ -438,8 +267,12 @@ class ControlPanelWidget(ScrollArea):
         main_layout.setSpacing(10)
         main_layout.setAlignment(Qt.AlignTop)
 
-        main_layout.addWidget(ModelSelectCard(self))
-        main_layout.addWidget(ParameterSettingsCard(self))
+        model_select_card = ModelSelectCard(self)
+        parameter_settings_card = ParameterSettingsCard(image_edit_params, self)
+        model_select_card.model_name.connect(parameter_settings_card.set_model)
+        parameter_settings_card.set_model(image_edit_params.get_param("model.model_name"))
+        main_layout.addWidget(model_select_card)
+        main_layout.addWidget(parameter_settings_card)
         main_layout.addWidget(OutputSettingsCard(self))
         main_layout.addStretch(1)
 
