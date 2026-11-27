@@ -3,13 +3,13 @@ import sys
 from PySide6.QtCore import QRegularExpression, Qt, Signal, QTimer
 from PySide6.QtGui import QFont, QPixmap, QRegularExpressionValidator
 from PySide6.QtWidgets import (
-    QFileDialog, QButtonGroup, QFrame, QGridLayout, QHBoxLayout, QLabel,
-    QLineEdit, QMessageBox, QPushButton, QStackedWidget, QTextEdit, QVBoxLayout, QWidget
+    QFileDialog, QButtonGroup, QDialog, QFrame, QGridLayout, QHBoxLayout,
+    QLabel, QLineEdit, QMessageBox, QPushButton, QStackedWidget, QTextEdit, QVBoxLayout, QWidget
 )
 from app.ui.common.event_bus import global_event_bus
 from app.ui.common.task_params import LayeredTaskParams
 from app.ui.library.qfluentwidgets import setFont
-from app.ui.widgets.watermark_interactive_widget import AreaSelectorDialog
+from app.ui.widgets.reference_image_editor import ReferenceImageEditorDialog
 
 
 def _card_colors():
@@ -398,14 +398,18 @@ class ReferenceImageCard(SettingsSection):
     def _select_area(self):
         if not self._file_paths:
             return
-        dialog = AreaSelectorDialog(file_path=self._file_paths[0], single_area_only=False, parent=self.window())
-        dialog.exec()
-        boxes = dialog.get_results()
-        self.params.set_param(self.mask_path, boxes)
-        if boxes:
-            self.area_info.setText(self.tr("{0} 个区域已选择").format(len(boxes)))
-        else:
-            self.area_info.setText(self.tr("尚未选择重绘区域"))
+        try:
+            dialog = ReferenceImageEditorDialog(self._file_paths, parent=self.window())
+        except ValueError as exc:
+            QMessageBox.warning(self, self.tr("无法编辑参考图"), str(exc))
+            return
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        updated_paths = dialog.updated_paths
+        edited_count = sum(old_path != new_path for old_path, new_path in zip(self._file_paths, updated_paths))
+        if edited_count:
+            self._set_files(updated_paths)
+            self.area_info.setText(self.tr("{0} 张参考图已保存至缓存").format(edited_count))
 
 
 class ResolutionSettingsCard(SettingsSection):
