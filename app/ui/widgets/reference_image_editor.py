@@ -17,6 +17,7 @@ class ReferenceImageCanvas(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumSize(360, 360)
+        self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self.setMouseTracking(True)
         self.image = QImage()
         self.strokes = []
@@ -95,6 +96,7 @@ class ReferenceImageCanvas(QWidget):
     def mousePressEvent(self, event):
         if event.button() != Qt.MouseButton.LeftButton:
             return
+        self.setFocus(Qt.FocusReason.MouseFocusReason)
         point = self._to_image_point(event.position())
         if point is None:
             return
@@ -102,7 +104,7 @@ class ReferenceImageCanvas(QWidget):
         self._active_stroke = {
             "mode": self.mode,
             "color": color.name(),
-            "width": 3 if self.mode == "lasso" else self.brush_size,
+            "width": self.brush_size,
             "points": [point],
         }
         self._active_cursor = point
@@ -181,8 +183,8 @@ class ReferenceImageEditorDialog(QDialog):
         scroll.setMinimumHeight(285)
         _v_scroll = ScrollBar(Qt.Vertical, self)
         _h_scroll = ScrollBar(Qt.Horizontal, self)
-        self.setVerticalScrollBar(_v_scroll)
-        self.setHorizontalScrollBar(_h_scroll)
+        scroll.setVerticalScrollBar(_v_scroll)
+        scroll.setHorizontalScrollBar(_h_scroll)
         scroll.setStyleSheet("""QScrollArea { background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 7px; }""")
         items = QWidget(scroll)
         items.setObjectName("referenceThumbnailList")
@@ -287,8 +289,9 @@ class ReferenceImageEditorDialog(QDialog):
         self._color_grid = color_grid
 
         brush_row = QHBoxLayout()
-        brush_label = QLabel(self.tr("画刷大小"))
+        brush_label = QLabel(self.tr("画笔大小"))
         brush_label.setStyleSheet("QLabel { color: #334155; background: transparent; border: none; }")
+        self.brush_size_label = brush_label
         brush_row.addWidget(brush_label)
         self.brush_size = QSpinBox()
         self.brush_size.setRange(2, 200)
@@ -381,6 +384,7 @@ class ReferenceImageEditorDialog(QDialog):
         footer.addStretch(1)
         cancel_button = QPushButton(self.tr("取消"))
         cancel_button.setStyleSheet(self._tool_button_style())
+        cancel_button.setAutoDefault(False)
         cancel_button.clicked.connect(self.reject)
         save_button = QPushButton(self.tr("保存编辑"))
         save_button.setStyleSheet("""
@@ -395,7 +399,7 @@ class ReferenceImageEditorDialog(QDialog):
             QPushButton:hover { background-color: #1d4ed8; }
             QPushButton:pressed { background-color: #1e40af; }
         """)
-        save_button.setDefault(True)
+        save_button.setAutoDefault(False)
         save_button.clicked.connect(self._save)
         footer.addWidget(cancel_button)
         footer.addWidget(save_button)
@@ -435,19 +439,25 @@ class ReferenceImageEditorDialog(QDialog):
 
     def _set_lasso_mode(self):
         self.canvas.mode = "lasso"
+        self.brush_size_label.setText(self.tr("画笔大小"))
         self.brush_button.setChecked(False)
         self.lasso_button.setChecked(True)
         self._color_label.setEnabled(True)
+        self._color_label.show()
         for _, button in self._color_buttons:
             button.setEnabled(True)
+            button.show()
 
     def _set_brush_mode(self):
         self.canvas.mode = "brush"
+        self.brush_size_label.setText(self.tr("画刷大小"))
         self.lasso_button.setChecked(False)
         self.brush_button.setChecked(True)
         self._color_label.setEnabled(False)
+        self._color_label.hide()
         for _, button in self._color_buttons:
             button.setEnabled(False)
+            button.hide()
 
     def _select_color(self, color_value: str):
         self.canvas.stroke_color = QColor(color_value)

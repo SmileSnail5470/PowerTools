@@ -1,14 +1,14 @@
 import os
 import sys
-from PySide6.QtCore import QRegularExpression, Qt, Signal, QTimer
-from PySide6.QtGui import QFont, QPixmap, QRegularExpressionValidator
+from PySide6.QtCore import QRegularExpression, QSize, Qt, Signal, QTimer
+from PySide6.QtGui import QColor, QFont, QPixmap, QRegularExpressionValidator
 from PySide6.QtWidgets import (
-    QFileDialog, QButtonGroup, QDialog, QFrame, QGridLayout, QHBoxLayout,
+    QAbstractScrollArea, QFileDialog, QButtonGroup, QDialog, QFrame, QGridLayout, QHBoxLayout,
     QLabel, QLineEdit, QMessageBox, QPushButton, QStackedWidget, QTextEdit, QVBoxLayout, QWidget
 )
 from app.ui.common.event_bus import global_event_bus
 from app.ui.common.task_params import LayeredTaskParams
-from app.ui.library.qfluentwidgets import setFont
+from app.ui.library.qfluentwidgets import FluentIcon, setFont
 from app.ui.widgets.reference_image_editor import ReferenceImageEditorDialog
 
 
@@ -412,42 +412,127 @@ class ReferenceImageCard(SettingsSection):
             self.area_info.setText(self.tr("{0} 张参考图已保存至缓存").format(edited_count))
 
 
-class ResolutionSettingsCard(SettingsSection):
-    RESOLUTIONS = {
-        "1K": {
-            "1:1": (1024, 1024),
-            "4:3": (1152, 864),
-            "3:4": (864, 1152),
-            "3:2": (1200, 800),
-            "2:3": (800, 1200),
-            "16:9": (1280, 720),
-            "9:16": (720, 1280),
-        },
-        "1.5K": {
-            "1:1": (1536, 1536),
-            "4:3": (1728, 1296),
-            "3:4": (1296, 1728),
-            "3:2": (1800, 1200),
-            "2:3": (1200, 1800),
-            "16:9": (1920, 1080),
-            "9:16": (1080, 1920),
-        },
-        "2K": {
-            "1:1": (2048, 2048),
-            "4:3": (2304, 1728),
-            "3:4": (1728, 2304),
-            "3:2": (2400, 1600),
-            "2:3": (1600, 2400),
-            "16:9": (2560, 1440),
-            "9:16": (1440, 2560),
-        },
-    }
-    SIZE_TIERS = (
-        ("1K", "标准高清"),
-        ("1.5K", "细腻增强"),
-        ("2K", "超清原画"),
-        ("自定义", "输入分辨率"),
+def _create_edit_mode_selector(parent, reference_card):
+    colors = _card_colors()
+    selector = QWidget(parent)
+    layout = QVBoxLayout(selector)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(8)
+    layout.addWidget(SectionHeading("◇", "任务类型", parent=selector))
+
+    cards_container = QFrame(selector)
+    cards_container.setObjectName("taskTypeCardsContainer")
+    cards_container.setStyleSheet("""
+        QFrame#taskTypeCardsContainer {
+            background: #f1f3f5;
+            border: none;
+            border-radius: 12px;
+        }
+    """)
+    cards_layout = QHBoxLayout(cards_container)
+    cards_layout.setContentsMargins(14, 10, 14, 10)
+    cards_layout.setSpacing(8)
+    group = QButtonGroup(selector)
+    group.setExclusive(True)
+    mode_buttons = {}
+    modes = (
+        ("image_edit", "图像编辑", "基于参考图编辑", FluentIcon.EDIT, "#2563eb", "#eff6ff", "#dbeafe"),
+        ("text_to_image", "文生图", "根据文字生成图像", FluentIcon.PHOTO, "#7c3aed", "#f5f3ff", "#ede9fe"),
     )
+    for mode, title, description, icon, icon_color, tint_color, checked_border_color in modes:
+        button = QPushButton(selector)
+        button.setCheckable(True)
+        button.setMinimumHeight(60)
+        button.setCursor(Qt.PointingHandCursor)
+        button.setProperty("tintColor", tint_color)
+        button.setProperty("iconColor", icon_color)
+        button.setProperty("checkedBorderColor", checked_border_color)
+        button.setStyleSheet("""
+            QPushButton {
+                background: %(card)s;
+                border: 1.5px solid %(border)s;
+                border-radius: 12px;
+                text-align: left;
+            }
+            QPushButton:hover {
+                background: %(tint_color)s;
+                border-color: %(icon_color)s;
+            }
+            QPushButton:checked {
+                background: %(tint_color)s;
+                border: 2px solid %(icon_color)s;
+            }
+        """ % {**colors, "tint_color": tint_color, "icon_color": icon_color})
+
+        card_layout = QHBoxLayout(button)
+        card_layout.setContentsMargins(10, 8, 10, 8)
+        card_layout.setSpacing(9)
+
+        icon_container = QLabel(button)
+        icon_container.setFixedSize(34, 34)
+        icon_container.setAlignment(Qt.AlignCenter)
+        icon_container.setStyleSheet(
+            "background: %s; border-radius: 10px; border: none;" % tint_color
+        )
+        icon_container.setPixmap(icon.icon(color=QColor(icon_color)).pixmap(QSize(18, 18)))
+        icon_container.setAttribute(Qt.WA_TransparentForMouseEvents)
+        card_layout.addWidget(icon_container, 0, Qt.AlignVCenter)
+
+        text_layout = QVBoxLayout()
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(2)
+        text_layout.setAlignment(Qt.AlignVCenter)
+        title_label = QLabel(title, button)
+        setFont(title_label, 12, QFont.DemiBold)
+        title_label.setStyleSheet("color: %s; background: transparent;" % colors["primary"])
+        title_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        description_label = QLabel(description, button)
+        description_label.setWordWrap(False)
+        setFont(description_label, 10)
+        description_label.setStyleSheet("color: %s; background: transparent;" % colors["secondary"])
+        description_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        text_layout.addWidget(title_label)
+        text_layout.addWidget(description_label)
+        card_layout.addLayout(text_layout, 1)
+
+        group.addButton(button)
+        mode_buttons[mode] = button
+        cards_layout.addWidget(button, 1)
+
+    layout.addWidget(cards_container)
+    mode_buttons["image_edit"].setChecked(True)
+
+    def _propagate_geometry_update():
+        widget = parent
+        for _ in range(12):
+            if widget is None:
+                break
+            lyt = widget.layout()
+            if lyt is not None:
+                lyt.invalidate()
+                lyt.activate()
+            widget.updateGeometry()
+            widget.adjustSize()
+            parent_widget = widget.parentWidget()
+            if parent_widget is None:
+                break
+            if isinstance(parent_widget, QAbstractScrollArea):
+                parent_widget.updateGeometry()
+                break
+            widget = parent_widget
+
+    def set_mode(mode: str):
+        reference_card.setVisible(mode == "image_edit")
+        _propagate_geometry_update()
+        QTimer.singleShot(0, _propagate_geometry_update)
+
+    mode_buttons["image_edit"].clicked.connect(lambda: set_mode("image_edit"))
+    mode_buttons["text_to_image"].clicked.connect(lambda: set_mode("text_to_image"))
+    return selector
+
+
+class ResolutionSettingsCard(SettingsSection):
+    CUSTOM_RATIO = "自定义"
     ASPECT_RATIOS = (
         ("1:1", 16, 16),
         ("4:3", 18, 14),
@@ -461,102 +546,37 @@ class ResolutionSettingsCard(SettingsSection):
     def __init__(self, params: LayeredTaskParams, parent=None):
         super().__init__(parent)
         self.params = params
-        self._selected_tier = params.get_param("task.resolution_tier")
         supported_ratios = {ratio for ratio, _, _ in self.ASPECT_RATIOS}
-        self._selected_ratio = params.get_param("task.aspect_ratio")
-        if self._selected_ratio not in supported_ratios:
-            self._selected_ratio = "1:1"
-            self.params.set_param("task.aspect_ratio", self._selected_ratio)
+        selected_ratio = params.get_param("task.aspect_ratio")
+        if selected_ratio in supported_ratios:
+            self._selected_ratio = selected_ratio
+            self._custom_ratio_width = 1
+            self._custom_ratio_height = 1
+        else:
+            try:
+                custom_width, custom_height = map(int, selected_ratio.split(":"))
+            except (AttributeError, TypeError, ValueError):
+                custom_width, custom_height = 0, 0
+            if custom_width > 0 and custom_height > 0:
+                self._selected_ratio = self.CUSTOM_RATIO
+                self._custom_ratio_width = custom_width
+                self._custom_ratio_height = custom_height
+            else:
+                self._selected_ratio = "1:1"
+                self._custom_ratio_width = 1
+                self._custom_ratio_height = 1
+                self.params.set_param("task.aspect_ratio", self._selected_ratio)
         colors = _card_colors()
         self.content_layout.setSpacing(12)
 
-        header = QHBoxLayout()
-        header.setContentsMargins(0, 0, 0, 0)
-        header.setSpacing(8)
-        header.addWidget(SectionHeading("⛶", "分辨率设置", parent=self), 1)
-        self.exact_resolution = QLabel(self)
-        setFont(self.exact_resolution, 10, QFont.DemiBold)
-        exact_font = self.exact_resolution.font()
-        exact_font.setStyleHint(QFont.Monospace)
-        self.exact_resolution.setFont(exact_font)
-        self.exact_resolution.setStyleSheet("""
-            QLabel {
-                color: %(accent)s;
-                background: %(tint)s;
-                border: 1px solid rgba(59, 130, 246, 0.15);
-                border-radius: 10px;
-                padding: 3px 8px;
-            }
-        """ % colors)
-        header.addWidget(self.exact_resolution, 0, Qt.AlignVCenter)
-        self.content_layout.addLayout(header)
-
-        size_section = QVBoxLayout()
-        size_section.setContentsMargins(0, 0, 0, 0)
-        size_section.setSpacing(6)
-        size_label = QLabel("图像大小", self)
-        setFont(size_label, 10)
-        size_label.setStyleSheet("color: %s;" % colors["secondary"])
-        size_section.addWidget(size_label)
-
-        self._tier_buttons = {}
-        self._tier_group = QButtonGroup(self)
-        self._tier_group.setExclusive(True)
-        tier_grid = QGridLayout()
-        tier_grid.setContentsMargins(0, 0, 0, 0)
-        tier_grid.setHorizontalSpacing(6)
-        tier_grid.setVerticalSpacing(6)
-        for index, (tier, description) in enumerate(self.SIZE_TIERS):
-            button = QPushButton(self)
-            button.setCheckable(True)
-            button.setMinimumHeight(52)
-            button.setStyleSheet(self._option_button_style())
-            button_layout = QVBoxLayout(button)
-            button_layout.setContentsMargins(4, 5, 4, 5)
-            button_layout.setSpacing(2)
-            tier_label = QLabel(tier, button)
-            setFont(tier_label, 11, QFont.Bold)
-            tier_font = tier_label.font()
-            tier_font.setStyleHint(QFont.Monospace)
-            tier_label.setFont(tier_font)
-            tier_label.setStyleSheet("background: transparent;")
-            description_label = QLabel(description, button)
-            setFont(description_label, 8)
-            description_label.setStyleSheet("background: transparent;")
-            button_layout.addWidget(tier_label, 0, Qt.AlignHCenter)
-            button_layout.addWidget(description_label, 0, Qt.AlignHCenter)
-            button_layout.setAlignment(Qt.AlignCenter)
-            self._tier_group.addButton(button)
-            self._tier_buttons[tier] = button
-            tier_grid.addWidget(button, 0, index)
-            button.clicked.connect(lambda checked=False, selected=tier: self._set_tier(selected))
-        size_section.addLayout(tier_grid)
-
-        self.custom_dimensions = QWidget(self)
-        dimensions_layout = QHBoxLayout(self.custom_dimensions)
-        dimensions_layout.setContentsMargins(0, 0, 0, 0)
-        dimensions_layout.setSpacing(7)
-        self.width_input = self._dimension_input("宽")
-        self.height_input = self._dimension_input("高")
-        dimensions_layout.addWidget(self.width_input, 1)
-        separator = QLabel("×", self.custom_dimensions)
-        separator.setAlignment(Qt.AlignCenter)
-        separator.setStyleSheet("color: %s;" % colors["muted"])
-        dimensions_layout.addWidget(separator)
-        dimensions_layout.addWidget(self.height_input, 1)
-        size_section.addWidget(self.custom_dimensions)
-        self.custom_hint = QLabel("自定义尺寸不随画面比例调整", self)
-        setFont(self.custom_hint, 9)
-        self.custom_hint.setStyleSheet("color: %s;" % colors["muted"])
-        size_section.addWidget(self.custom_hint)
-        self.content_layout.addLayout(size_section)
+        self.content_layout.addWidget(SectionHeading("⛶", "图像设置", parent=self))
 
         self.ratio_section = QWidget(self)
         ratio_section = QVBoxLayout(self.ratio_section)
         ratio_section.setContentsMargins(0, 0, 0, 0)
         ratio_section.setSpacing(6)
         ratio_label = QLabel("画面比例", self)
-        setFont(ratio_label, 10)
+        setFont(ratio_label, 11)
         ratio_label.setStyleSheet("color: %s;" % colors["secondary"])
         ratio_section.addWidget(ratio_label)
 
@@ -567,7 +587,8 @@ class ResolutionSettingsCard(SettingsSection):
         ratio_grid.setContentsMargins(0, 0, 0, 0)
         ratio_grid.setHorizontalSpacing(5)
         ratio_grid.setVerticalSpacing(5)
-        for index, (ratio, width, height) in enumerate(self.ASPECT_RATIOS):
+        ratio_options = (*self.ASPECT_RATIOS, (self.CUSTOM_RATIO, 16, 16))
+        for index, (ratio, width, height) in enumerate(ratio_options):
             button = QPushButton(self)
             button.setCheckable(True)
             button.setMinimumHeight(54)
@@ -596,18 +617,38 @@ class ResolutionSettingsCard(SettingsSection):
             ratio_grid.addWidget(button, index // 4, index % 4)
             button.clicked.connect(lambda checked=False, selected=ratio: self._set_ratio(selected))
         ratio_section.addLayout(ratio_grid)
+
+        self.custom_ratio_inputs = QWidget(self.ratio_section)
+        custom_ratio_layout = QHBoxLayout(self.custom_ratio_inputs)
+        custom_ratio_layout.setContentsMargins(0, 0, 0, 0)
+        custom_ratio_layout.setSpacing(7)
+        ratio_input_label = QLabel("宽高比", self.custom_ratio_inputs)
+        setFont(ratio_input_label, 11)
+        ratio_input_label.setStyleSheet("color: %s;" % colors["secondary"])
+        custom_ratio_layout.addWidget(ratio_input_label)
+        custom_ratio_layout.addStretch(1)
+        self.ratio_width_input = self._ratio_input("宽")
+        self.ratio_height_input = self._ratio_input("高")
+        self.ratio_width_input.setText(str(self._custom_ratio_width))
+        self.ratio_height_input.setText(str(self._custom_ratio_height))
+        custom_ratio_layout.addWidget(self.ratio_width_input, 1)
+        separator = QLabel(":", self.custom_ratio_inputs)
+        separator.setAlignment(Qt.AlignCenter)
+        separator.setStyleSheet("color: %s;" % colors["muted"])
+        custom_ratio_layout.addWidget(separator)
+        custom_ratio_layout.addWidget(self.ratio_height_input, 1)
+        ratio_section.addWidget(self.custom_ratio_inputs)
+        self.custom_ratio_hint = QLabel("例如 16:9", self.ratio_section)
+        setFont(self.custom_ratio_hint, 9)
+        self.custom_ratio_hint.setStyleSheet("color: %s;" % colors["muted"])
+        ratio_section.addWidget(self.custom_ratio_hint)
+        self.ratio_width_input.textChanged.connect(self._update_custom_ratio)
+        self.ratio_height_input.textChanged.connect(self._update_custom_ratio)
         self.content_layout.addWidget(self.ratio_section)
 
-        self._tier_buttons.get(self._selected_tier, self._tier_buttons["1K"]).setChecked(True)
-        self._ratio_buttons.get(self._selected_ratio, self._ratio_buttons["1:1"]).setChecked(True)
-        self.width_input.setText(str(params.get_param("task.custom_width")))
-        self.height_input.setText(str(params.get_param("task.custom_height")))
-        self.custom_dimensions.setVisible(self._selected_tier == "自定义")
-        self.custom_hint.setVisible(self._selected_tier == "自定义")
-        self.ratio_section.setVisible(self._selected_tier != "自定义")
-        self.width_input.textChanged.connect(self._update_custom_resolution)
-        self.height_input.textChanged.connect(self._update_custom_resolution)
-        self._update_exact_resolution()
+        self._ratio_buttons[self._selected_ratio].setChecked(True)
+        is_custom_ratio = self._selected_ratio == self.CUSTOM_RATIO
+        self.custom_ratio_inputs.setVisible(is_custom_ratio)
 
     @staticmethod
     def _option_button_style():
@@ -634,95 +675,64 @@ class ResolutionSettingsCard(SettingsSection):
             }
         """
 
-    def _dimension_input(self, placeholder: str) -> QLineEdit:
-        colors = _card_colors()
+    def _ratio_input(self, placeholder: str) -> QLineEdit:
         input_field = QLineEdit(self)
+        input_field.setObjectName("ratioInput")
         input_field.setPlaceholderText(placeholder)
         input_field.setAlignment(Qt.AlignCenter)
         input_field.setValidator(QRegularExpressionValidator(QRegularExpression(r"\d*"), input_field))
-        setFont(input_field, 10)
+        input_field.setFixedHeight(30)
+        setFont(input_field, 12)
         input_field.setStyleSheet("""
-            QLineEdit {
-                color: %(primary)s;
-                background: %(sub)s;
-                border: 1px solid %(border)s;
-                border-radius: 8px;
-                padding: 6px 8px;
+            QLineEdit#ratioInput {
+                color: #1e293b;
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+                padding: 0 10px;
+                font-size: 12px;
+                selection-background-color: #6366f1;
             }
-            QLineEdit:focus {
-                border: 1px solid %(accent)s;
+            QLineEdit#ratioInput:hover {
+                background: #fff;
+                border-color: #cbd5e1;
             }
-        """ % colors)
+            QLineEdit#ratioInput:focus {
+                background: #fff;
+                border: 1px solid #818cf8;
+            }
+        """)
         return input_field
-
-    def _set_tier(self, tier: str):
-        self._selected_tier = tier
-        self.params.set_param("task.resolution_tier", tier)
-        self.custom_dimensions.setVisible(tier == "自定义")
-        self.custom_hint.setVisible(tier == "自定义")
-        self.ratio_section.setVisible(tier != "自定义")
-        self._update_exact_resolution()
 
     def _set_ratio(self, ratio: str):
         self._selected_ratio = ratio
-        self.params.set_param("task.aspect_ratio", ratio)
-        self._update_exact_resolution()
+        is_custom = ratio == self.CUSTOM_RATIO
+        self.custom_ratio_inputs.setVisible(is_custom)
+        self.custom_ratio_hint.setVisible(is_custom)
+        if not is_custom:
+            self.params.set_param("task.aspect_ratio", ratio)
+            return
+        self._update_custom_ratio()
 
-    def _update_custom_resolution(self):
+    def _update_custom_ratio(self):
         try:
-            width = int(self.width_input.text())
-            height = int(self.height_input.text())
+            width = int(self.ratio_width_input.text())
+            height = int(self.ratio_height_input.text())
         except ValueError:
-            self._show_invalid_resolution()
+            self.custom_ratio_hint.setText("请输入大于 0 的整数宽高比")
+            self.custom_ratio_hint.setStyleSheet("color: #e11d48;")
             return
         if width <= 0 or height <= 0:
-            self._show_invalid_resolution()
+            self.custom_ratio_hint.setText("请输入大于 0 的整数宽高比")
+            self.custom_ratio_hint.setStyleSheet("color: #e11d48;")
             return
-        self.params.set_param("task.custom_width", width)
-        self.params.set_param("task.custom_height", height)
-        self._update_exact_resolution(width, height)
-
-    def _show_invalid_resolution(self):
-        self.exact_resolution.setText("请输入有效分辨率")
-        self.exact_resolution.setStyleSheet("""
-            QLabel {
-                color: #e11d48;
-                background: #fff1f2;
-                border: 1px solid rgba(225, 29, 72, 0.2);
-                border-radius: 10px;
-                padding: 3px 8px;
-            }
-        """)
-
-    def _update_exact_resolution(self, custom_width=None, custom_height=None):
-        if self._selected_tier == "自定义":
-            if custom_width is None or custom_height is None:
-                try:
-                    custom_width = int(self.width_input.text())
-                    custom_height = int(self.height_input.text())
-                except ValueError:
-                    self._show_invalid_resolution()
-                    return
-            if custom_width <= 0 or custom_height <= 0:
-                self._show_invalid_resolution()
-                return
-            width, height = custom_width, custom_height
-            exact_resolution_info = f"自定义 → {width} × {height} px"
-        else:
-            width, height = self.RESOLUTIONS[self._selected_tier][self._selected_ratio]
-            exact_resolution_info = f"{self._selected_tier} · {self._selected_ratio} → {width} × {height} px"
-
+        self._custom_ratio_width = width
+        self._custom_ratio_height = height
+        if self._selected_ratio == self.CUSTOM_RATIO:
+            self.params.set_param("task.aspect_ratio", f"{width}:{height}")
         colors = _card_colors()
-        self.exact_resolution.setText(exact_resolution_info)
-        self.exact_resolution.setStyleSheet("""
-            QLabel {
-                color: %(accent)s;
-                background: %(tint)s;
-                border: 1px solid rgba(59, 130, 246, 0.15);
-                border-radius: 10px;
-                padding: 3px 8px;
-            }
-        """ % colors)
+        self.custom_ratio_hint.setText("例如 16:9")
+        self.custom_ratio_hint.setStyleSheet("color: %s;" % colors["muted"])
 
 
 class GeneralEditSettingsPanel(QWidget):
@@ -731,8 +741,11 @@ class GeneralEditSettingsPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(14)
+        self.reference_image_card = ReferenceImageCard(params, self)
+        self.mode_selector = _create_edit_mode_selector(self, self.reference_image_card)
+        layout.addWidget(self.mode_selector)
         layout.addWidget(PromptEditorCard(params, self))
-        layout.addWidget(ReferenceImageCard(params, self))
+        layout.addWidget(self.reference_image_card)
         layout.addWidget(ResolutionSettingsCard(params, self))
 
 
@@ -742,9 +755,28 @@ class PrecisionEditSettingsPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(14)
+        self.reference_image_card = ReferenceImageCard(params, self)
+        self.mode_selector = _create_edit_mode_selector(self, self.reference_image_card)
+        layout.addWidget(self.mode_selector)
         layout.addWidget(PromptEditorCard(params, self))
-        layout.addWidget(ReferenceImageCard(params, self))
+        layout.addWidget(self.reference_image_card)
         layout.addWidget(ResolutionSettingsCard(params, self))
+
+
+class _CurrentPageStackedWidget(QStackedWidget):
+    def sizeHint(self) -> QSize:
+        size_hint = super().sizeHint()
+        current_widget = self.currentWidget()
+        if current_widget is not None:
+            size_hint.setHeight(current_widget.sizeHint().height())
+        return size_hint
+
+    def minimumSizeHint(self) -> QSize:
+        size_hint = super().minimumSizeHint()
+        current_widget = self.currentWidget()
+        if current_widget is not None:
+            size_hint.setHeight(current_widget.minimumSizeHint().height())
+        return size_hint
 
 
 MODEL_SETTINGS_PANELS = {
@@ -789,7 +821,7 @@ class ParameterSettingsCard(QFrame):
         header_layout.addWidget(divider, 1)
         layout.addWidget(header)
 
-        self.stack = QStackedWidget(self)
+        self.stack = _CurrentPageStackedWidget(self)
         self.stack.setStyleSheet("QStackedWidget { background: transparent; border: none; }")
         layout.addWidget(self.stack)
 
@@ -801,6 +833,20 @@ class ParameterSettingsCard(QFrame):
         self._placeholder = QLabel(self.tr("该模型暂无参数设置"), self)
         self._placeholder.setAlignment(Qt.AlignCenter)
         self.stack.addWidget(self._placeholder)
+
+    def sizeHint(self) -> QSize:
+        layout = self.layout()
+        if layout is None:
+            return super().sizeHint()
+        frame_size = self.frameWidth() * 2
+        return layout.sizeHint() + QSize(frame_size, frame_size)
+
+    def minimumSizeHint(self) -> QSize:
+        layout = self.layout()
+        if layout is None:
+            return super().minimumSizeHint()
+        frame_size = self.frameWidth() * 2
+        return layout.minimumSize() + QSize(frame_size, frame_size)
 
     def set_model(self, model_name: str):
         panel = self._panels.get(model_name, self._placeholder)
