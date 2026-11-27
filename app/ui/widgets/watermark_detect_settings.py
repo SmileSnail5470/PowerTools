@@ -826,10 +826,15 @@ class WatermarkDetectSettings(QWidget):
         self.update_layout_height()
 
     def _select_detection_mode(self, mode, update_height=True):
+        mode_changed = getattr(self, "current_detection_mode", None) != mode
         self.current_detection_mode = mode
         for key, card in self.detection_mode_cards.items():
             card.selected = key == mode
             card.update_style()
+
+        self.high_res_detect_container.setVisible(mode != "space_detect")
+        if mode_changed:
+            self.high_res_detect_switch.setActive(False)
 
         self.mode_parameters_stack.setCurrentWidget(self.mode_parameters[mode])
         self.mode_parameters_stack.updateGeometry()
