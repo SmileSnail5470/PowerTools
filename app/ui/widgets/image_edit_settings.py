@@ -3,8 +3,8 @@ import sys
 from PySide6.QtCore import QRegularExpression, Qt, Signal, QTimer
 from PySide6.QtGui import QFont, QPixmap, QRegularExpressionValidator
 from PySide6.QtWidgets import (
-    QFileDialog, QButtonGroup, QFrame, QGridLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QStackedWidget, QTextEdit, QVBoxLayout, QWidget
+    QFileDialog, QButtonGroup, QFrame, QGridLayout, QHBoxLayout, QLabel,
+    QLineEdit, QMessageBox, QPushButton, QStackedWidget, QTextEdit, QVBoxLayout, QWidget
 )
 from app.ui.common.event_bus import global_event_bus
 from app.ui.common.task_params import LayeredTaskParams
@@ -234,6 +234,7 @@ class ReferenceDropZone(QFrame):
 
 class ReferenceImageCard(SettingsSection):
     IMAGE_FILTER = "图片文件 (*.png *.jpg *.jpeg *.bmp *.webp *.tiff)"
+    MAX_REFERENCE_IMAGES = 10
 
     def __init__(
         self,
@@ -321,12 +322,22 @@ class ReferenceImageCard(SettingsSection):
                 invalid_paths.append(path)
             elif path not in self._file_paths and path not in valid_paths:
                 valid_paths.append(path)
-        if valid_paths:
-            self._set_files([*self._file_paths, *valid_paths])
+
+        available_slots = max(0, self.MAX_REFERENCE_IMAGES - len(self._file_paths))
+        accepted_paths = valid_paths[:available_slots]
+        exceeded_count = len(valid_paths) - len(accepted_paths)
+        if accepted_paths:
+            self._set_files([*self._file_paths, *accepted_paths])
         if invalid_paths:
             self.drop_zone.set_status(self.tr("有 {0} 个文件无法读取，已忽略").format(len(invalid_paths)), is_error=True,)
         else:
             self.drop_zone.set_status(self.tr("支持多选或拖拽多张参考图片"))
+        if exceeded_count:
+            QMessageBox.warning(
+                self,
+                self.tr("参考图数量已达上限"),
+                self.tr("最多只能添加 {0} 张参考图，超出的图片已忽略。").format(self.MAX_REFERENCE_IMAGES),
+            )
 
     def _set_files(self, file_paths: list[str], emit_event=True):
         self._file_paths = list(file_paths)
@@ -347,6 +358,7 @@ class ReferenceImageCard(SettingsSection):
             if widget is not None:
                 widget.deleteLater()
 
+        self.file_grid_host.setVisible(bool(self._file_paths))
         colors = _card_colors()
         for index, path in enumerate(self._file_paths):
             tile = QFrame(self.file_grid_host)
@@ -362,23 +374,16 @@ class ReferenceImageCard(SettingsSection):
             tile_layout = QVBoxLayout(tile)
             tile_layout.setContentsMargins(6, 6, 6, 6)
             tile_layout.setSpacing(4)
-            if index == 0:
-                badge = QLabel("主图", tile)
-                badge.setAlignment(Qt.AlignCenter)
-                badge.setStyleSheet("color: %s; background: %s; border-radius: 5px; padding: 2px;" % (colors["accent"], colors["tint"]))
-                tile_layout.addWidget(badge)
+            badge = QLabel(self.tr("参考图 {0}").format(index + 1), tile)
+            badge.setAlignment(Qt.AlignLeft)
+            badge.setStyleSheet("color: %s; background: %s; border-radius: 5px; padding: 2px;" % (colors["accent"], colors["tint"]))
+            tile_layout.addWidget(badge)
             thumbnail = QLabel(tile)
             thumbnail.setFixedSize(72, 60)
-            thumbnail.setAlignment(Qt.AlignCenter)
+            thumbnail.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             thumbnail.setPixmap(QPixmap(path).scaled(72, 60, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            tile_layout.addWidget(thumbnail, 0, Qt.AlignHCenter)
-            filename = QLabel(os.path.basename(path), tile)
-            filename.setFixedWidth(84)
-            filename.setAlignment(Qt.AlignCenter)
-            filename.setToolTip(path)
-            filename.setStyleSheet("color: %s;" % colors["primary"])
-            setFont(filename, 8)
-            tile_layout.addWidget(filename)
+            thumbnail.setToolTip(os.path.basename(path))
+            tile_layout.addWidget(thumbnail, 0, Qt.AlignLeft)
             remove_button = QPushButton("移除", tile)
             remove_button.setCursor(Qt.PointingHandCursor)
             remove_button.setStyleSheet(PromptEditorCard._text_button_style())
