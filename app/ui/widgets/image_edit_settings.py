@@ -10,6 +10,7 @@ from app.ui.common.event_bus import global_event_bus
 from app.ui.common.task_params import LayeredTaskParams
 from app.ui.library.qfluentwidgets import FluentIcon, setFont
 from app.ui.widgets.reference_image_editor import ReferenceImageEditorDialog
+from app.ui.widgets.image_preview_widget import ScrollBar
 
 
 def _card_colors():
@@ -91,6 +92,10 @@ class PromptEditorCard(SettingsSection):
         self.prompt_edit.setPlainText(params.get_param(prompt_path))
         self.prompt_edit.setMinimumHeight(98)
         self.prompt_edit.setMaximumHeight(132)
+        _v_scroll = ScrollBar(Qt.Vertical, self)
+        _h_scroll = ScrollBar(Qt.Horizontal, self)
+        self.prompt_edit.setVerticalScrollBar(_v_scroll)
+        self.prompt_edit.setHorizontalScrollBar(_h_scroll)
         setFont(self.prompt_edit, 12)
         self.prompt_edit.setStyleSheet("""
             QTextEdit {
@@ -375,15 +380,15 @@ class ReferenceImageCard(SettingsSection):
             tile_layout.setContentsMargins(6, 6, 6, 6)
             tile_layout.setSpacing(4)
             badge = QLabel(self.tr("参考图 {0}").format(index + 1), tile)
-            badge.setAlignment(Qt.AlignLeft)
+            badge.setAlignment(Qt.AlignHCenter)
             badge.setStyleSheet("color: %s; background: %s; border-radius: 5px; padding: 2px;" % (colors["accent"], colors["tint"]))
             tile_layout.addWidget(badge)
             thumbnail = QLabel(tile)
             thumbnail.setFixedSize(72, 60)
-            thumbnail.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            thumbnail.setPixmap(QPixmap(path).scaled(72, 60, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            thumbnail.setAlignment(Qt.AlignCenter)
+            thumbnail.setPixmap(QPixmap(path).scaled(thumbnail.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation))
             thumbnail.setToolTip(os.path.basename(path))
-            tile_layout.addWidget(thumbnail, 0, Qt.AlignLeft)
+            tile_layout.addWidget(thumbnail, 0, Qt.AlignHCenter)
             remove_button = QPushButton("移除", tile)
             remove_button.setCursor(Qt.PointingHandCursor)
             remove_button.setStyleSheet(PromptEditorCard._text_button_style())
