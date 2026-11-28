@@ -233,8 +233,6 @@ class TaskInfoMessageBox(MessageBoxBase):
             (self.tr("编辑模型"),  model_map.get(p.model.model_name, p.model.model_name)),
             (self.tr("提示词"),    p.task.prompt),
         ]
-        if p.task.mask_boxes:
-            params.append((self.tr("编辑区域"), self.tr("{0} 个区域").format(len(p.task.mask_boxes))))
         layout.addWidget(self._section_params(self.tr("⚙️ 图像编辑参数"), params))
         layout.addWidget(self._section_output(p.io.output_path))
 
