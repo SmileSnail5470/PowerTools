@@ -227,8 +227,8 @@ class TaskInfoMessageBox(MessageBoxBase):
     def _build_image_edit(self, layout: QVBoxLayout):
         p: ImageEditUIParams = self._p
         model_map = {"general_edit": "智能重绘"}
-        if p.io.input_path:
-            layout.addWidget(self._section_input(p.io.input_path))
+        for reference_path in p.task.reference_paths:
+            layout.addWidget(self._section_input(reference_path))
         params = [
             (self.tr("编辑模型"),  model_map.get(p.model.model_name, p.model.model_name)),
             (self.tr("提示词"),    p.task.prompt),
@@ -285,7 +285,7 @@ class TaskInfoMessageBox(MessageBoxBase):
     def _section_params(self, title: str, params: list[tuple[str, str]]) -> QFrame:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet("""QScrollArea { background-color: #f5f5f5; border: none; border-radius: 12px; }""")
 
         sec = self._make_section(title)

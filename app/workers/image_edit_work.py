@@ -11,7 +11,6 @@ from app.algorithms.private.image_edit.inference import create_inference
 
 @dataclass
 class _ImageEditIOParams:
-    input_path: str = ""
     output_path: str = ""
 
 
@@ -25,10 +24,7 @@ class _ImageEditTaskParams:
     prompt: str = ""
     mask_boxes: list = field(default_factory=list)
     reference_paths: list = field(default_factory=list)
-    resolution_tier: str = "1K"
     aspect_ratio: str = "1:1"
-    custom_width: int = 1024
-    custom_height: int = 1024
 
 
 @dataclass
@@ -66,7 +62,7 @@ class ImageEditWork(BaseWorker):
     @log_exception(logger=logging.getLogger('ImageEdit'), reraise=True, log_args=True, log_result=True)
     def run_algorithm(self, progress_cb, cancel_requested, *args, **kwargs):
         p: ImageEditUIParams = args[0].params
-        input_path = p.io.input_path or None
+        reference_paths = p.task.reference_paths or None
         output_path = p.io.output_path
         prompt = p.task.prompt
         mask_boxes = p.task.mask_boxes
@@ -84,7 +80,7 @@ class ImageEditWork(BaseWorker):
         os.makedirs(output_dir, exist_ok=True)
         mask = None
         if mask_boxes:
-            image = Image.open(input_path).convert("RGB")
+            image = Image.open(reference_paths[0]).convert("RGB")
             img_width, img_height = image.size
             mask_np = np.zeros((img_height, img_width), dtype=np.uint8)
             for box in mask_boxes:
@@ -94,8 +90,13 @@ class ImageEditWork(BaseWorker):
                 h = int(box.get('h', 0))
                 mask_np[y:y+h, x:x+w] = 255
             mask = mask_np
-        result_np = inference.infer(prompt=prompt, input_path=input_path, mask=mask)
-        result_img = Image.fromarray(result_np.astype(np.uint8))
+        result = inference.infer(
+            prompt=prompt,
+            reference_paths=reference_paths,
+            aspect_ratio=p.task.aspect_ratio,
+            mask=mask,
+        )
+        result_img = result if isinstance(result, Image.Image) else Image.fromarray(result.astype(np.uint8))
         result_img.save(output_path)
         if progress_cb:
             progress_cb("EditDone", "")

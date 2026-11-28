@@ -458,14 +458,15 @@ class HeaderWidget(QWidget):
         image_edit_params.params._feature_name_ = feature_gate.get_feature_name(model_name)
 
         output_dir = image_edit_params.get_param("io.output_path")
-        input_path = image_edit_params.get_param("io.input_path") or os.path.join(output_dir, "image.png")
+        reference_paths = image_edit_params.get_param("task.reference_paths")
+        input_path = reference_paths[0] if reference_paths else os.path.join(output_dir, "image.png")
         basename = os.path.basename(input_path).rsplit(".", 1)
         output_file = os.path.join(
             output_dir,
             "{0}_edited.{1}".format(basename[0], basename[1] if len(basename) > 1 else "png")
         )
         image_edit_params.set_param("io.output_path", output_file)
-        if not os.path.exists(input_path):
+        if not reference_paths:
             global_event_bus.imageEdit_PreviewMode.emit("single")
             input_path = output_file
 

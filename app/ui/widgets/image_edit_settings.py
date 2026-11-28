@@ -11,6 +11,7 @@ from app.ui.common.task_params import LayeredTaskParams
 from app.ui.library.qfluentwidgets import FluentIcon, setFont
 from app.ui.widgets.reference_image_editor import ReferenceImageEditorDialog
 from app.ui.widgets.image_preview_widget import ScrollBar
+from app.ui.widgets.toggle_switch_widget import ToggleSwitch
 
 
 def _card_colors():
@@ -245,20 +246,16 @@ class ReferenceImageCard(SettingsSection):
         self,
         params: LayeredTaskParams,
         parent=None,
-        input_path: str = "io.input_path",
         mask_path: str = "task.mask_boxes",
         reference_paths: str = "task.reference_paths",
         action_label: str = "圈选或涂抹重绘区域",
     ):
         super().__init__(parent)
         self.params = params
-        self.input_path = input_path
         self.mask_path = mask_path
         self.reference_paths = reference_paths
         self.action_label = action_label
         self._file_paths = list(params.get_param(reference_paths) or [])
-        if not self._file_paths and params.get_param(input_path):
-            self._file_paths = [params.get_param(input_path)]
 
         self.content_layout.addWidget(SectionHeading("▧", "参考图", parent=self))
 
@@ -348,7 +345,6 @@ class ReferenceImageCard(SettingsSection):
         self._file_paths = list(file_paths)
         primary_path = self._file_paths[0] if self._file_paths else ""
         self.params.set_param(self.reference_paths, self._file_paths)
-        self.params.set_param(self.input_path, primary_path)
         self.params.set_param(self.mask_path, [])
         self.area_info.setText(self.tr("尚未选择重绘区域"))
         self.area_select_button.setEnabled(bool(primary_path))
@@ -417,7 +413,7 @@ class ReferenceImageCard(SettingsSection):
             self.area_info.setText(self.tr("{0} 张参考图已保存至缓存").format(edited_count))
 
 
-def _create_edit_mode_selector(parent, reference_card):
+def _create_edit_mode_selector(parent, reference_card, resolution_settings_card):
     colors = _card_colors()
     selector = QWidget(parent)
     layout = QVBoxLayout(selector)
@@ -527,7 +523,9 @@ def _create_edit_mode_selector(parent, reference_card):
             widget = parent_widget
 
     def set_mode(mode: str):
-        reference_card.setVisible(mode == "image_edit")
+        is_image_edit = mode == "image_edit"
+        reference_card.setVisible(is_image_edit)
+        resolution_settings_card.set_image_edit_mode(is_image_edit)
         _propagate_geometry_update()
         QTimer.singleShot(0, _propagate_geometry_update)
 
@@ -553,6 +551,7 @@ class ResolutionSettingsCard(SettingsSection):
         self.params = params
         supported_ratios = {ratio for ratio, _, _ in self.ASPECT_RATIOS}
         selected_ratio = params.get_param("task.aspect_ratio")
+        self._is_image_edit_mode = True
         if selected_ratio in supported_ratios:
             self._selected_ratio = selected_ratio
             self._custom_ratio_width = 1
@@ -580,7 +579,7 @@ class ResolutionSettingsCard(SettingsSection):
         ratio_section = QVBoxLayout(self.ratio_section)
         ratio_section.setContentsMargins(0, 0, 0, 0)
         ratio_section.setSpacing(6)
-        ratio_label = QLabel("画面比例", self)
+        ratio_label = QLabel("画面比例", self.ratio_section)
         setFont(ratio_label, 11)
         ratio_label.setStyleSheet("color: %s;" % colors["secondary"])
         ratio_section.addWidget(ratio_label)
@@ -642,6 +641,15 @@ class ResolutionSettingsCard(SettingsSection):
         separator.setStyleSheet("color: %s;" % colors["muted"])
         custom_ratio_layout.addWidget(separator)
         custom_ratio_layout.addWidget(self.ratio_height_input, 1)
+        self.keep_reference_resolution_label = QLabel("保持【参考图1】分辨率", self.custom_ratio_inputs)
+        setFont(self.keep_reference_resolution_label, 10)
+        self.keep_reference_resolution_label.setStyleSheet("color: %s;" % colors["secondary"])
+        custom_ratio_layout.addWidget(self.keep_reference_resolution_label)
+        self.keep_reference_resolution_switch = ToggleSwitch(parent=self.custom_ratio_inputs, on_color="#0067c0")
+        self.keep_reference_resolution_switch.setEnabled(bool(params.get_param("task.reference_paths")))
+        custom_ratio_layout.addWidget(self.keep_reference_resolution_switch)
+        self.keep_reference_resolution_label.setVisible(False)
+        self.keep_reference_resolution_switch.setVisible(False)
         ratio_section.addWidget(self.custom_ratio_inputs)
         self.custom_ratio_hint = QLabel("例如 16:9", self.ratio_section)
         setFont(self.custom_ratio_hint, 9)
@@ -649,11 +657,15 @@ class ResolutionSettingsCard(SettingsSection):
         ratio_section.addWidget(self.custom_ratio_hint)
         self.ratio_width_input.textChanged.connect(self._update_custom_ratio)
         self.ratio_height_input.textChanged.connect(self._update_custom_ratio)
+        self.keep_reference_resolution_switch.toggled.connect(self._on_keep_reference_resolution_toggled)
+        self.params.param_changed.connect(self._on_task_param_changed)
         self.content_layout.addWidget(self.ratio_section)
 
         self._ratio_buttons[self._selected_ratio].setChecked(True)
         is_custom_ratio = self._selected_ratio == self.CUSTOM_RATIO
         self.custom_ratio_inputs.setVisible(is_custom_ratio)
+        self._update_custom_ratio_controls()
+        self._sync_aspect_ratio_param()
 
     @staticmethod
     def _option_button_style():
@@ -714,10 +726,56 @@ class ResolutionSettingsCard(SettingsSection):
         is_custom = ratio == self.CUSTOM_RATIO
         self.custom_ratio_inputs.setVisible(is_custom)
         self.custom_ratio_hint.setVisible(is_custom)
+        if not is_custom and self.keep_reference_resolution_switch.isActive():
+            self.keep_reference_resolution_switch.setActive(False, animated=False)
+        self._update_custom_ratio_controls()
         if not is_custom:
-            self.params.set_param("task.aspect_ratio", ratio)
+            self._sync_aspect_ratio_param()
             return
         self._update_custom_ratio()
+
+    def _current_aspect_ratio(self) -> str:
+        if self._selected_ratio == self.CUSTOM_RATIO:
+            return f"{self._custom_ratio_width}:{self._custom_ratio_height}"
+        return self._selected_ratio
+
+    def _sync_aspect_ratio_param(self, keep_reference_resolution: bool | None = None):
+        if keep_reference_resolution is None:
+            keep_reference_resolution = self.keep_reference_resolution_switch.isActive()
+        if (
+            self._is_image_edit_mode
+            and self._selected_ratio == self.CUSTOM_RATIO
+            and keep_reference_resolution
+            and self.params.get_param("task.reference_paths")
+        ):
+            aspect_ratio = ""
+        else:
+            aspect_ratio = self._current_aspect_ratio()
+        self.params.set_param("task.aspect_ratio", aspect_ratio)
+
+    def _on_keep_reference_resolution_toggled(self, checked: bool):
+        self._update_custom_ratio_controls()
+        self._sync_aspect_ratio_param(checked)
+
+    def _update_custom_ratio_controls(self):
+        is_custom = self._selected_ratio == self.CUSTOM_RATIO
+        show_toggle = is_custom and self._is_image_edit_mode
+        self.keep_reference_resolution_label.setVisible(show_toggle)
+        self.keep_reference_resolution_switch.setVisible(show_toggle)
+        inputs_enabled = not (show_toggle and self.keep_reference_resolution_switch.isActive())
+        self.ratio_width_input.setEnabled(inputs_enabled)
+        self.ratio_height_input.setEnabled(inputs_enabled)
+
+    def _on_task_param_changed(self, path: str, value):
+        if path != "task.reference_paths":
+            return
+        self.keep_reference_resolution_switch.setEnabled(bool(value))
+        self._sync_aspect_ratio_param()
+
+    def set_image_edit_mode(self, is_image_edit: bool):
+        self._is_image_edit_mode = is_image_edit
+        self._update_custom_ratio_controls()
+        self._sync_aspect_ratio_param()
 
     def _update_custom_ratio(self):
         try:
@@ -734,7 +792,7 @@ class ResolutionSettingsCard(SettingsSection):
         self._custom_ratio_width = width
         self._custom_ratio_height = height
         if self._selected_ratio == self.CUSTOM_RATIO:
-            self.params.set_param("task.aspect_ratio", f"{width}:{height}")
+            self._sync_aspect_ratio_param()
         colors = _card_colors()
         self.custom_ratio_hint.setText("例如 16:9")
         self.custom_ratio_hint.setStyleSheet("color: %s;" % colors["muted"])
@@ -747,11 +805,12 @@ class GeneralEditSettingsPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(14)
         self.reference_image_card = ReferenceImageCard(params, self)
-        self.mode_selector = _create_edit_mode_selector(self, self.reference_image_card)
+        self.resolution_settings_card = ResolutionSettingsCard(params, self)
+        self.mode_selector = _create_edit_mode_selector(self, self.reference_image_card, self.resolution_settings_card)
         layout.addWidget(self.mode_selector)
         layout.addWidget(PromptEditorCard(params, self))
         layout.addWidget(self.reference_image_card)
-        layout.addWidget(ResolutionSettingsCard(params, self))
+        layout.addWidget(self.resolution_settings_card)
 
 
 class PrecisionEditSettingsPanel(QWidget):
@@ -761,11 +820,12 @@ class PrecisionEditSettingsPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(14)
         self.reference_image_card = ReferenceImageCard(params, self)
-        self.mode_selector = _create_edit_mode_selector(self, self.reference_image_card)
+        self.resolution_settings_card = ResolutionSettingsCard(params, self)
+        self.mode_selector = _create_edit_mode_selector(self, self.reference_image_card, self.resolution_settings_card)
         layout.addWidget(self.mode_selector)
         layout.addWidget(PromptEditorCard(params, self))
         layout.addWidget(self.reference_image_card)
-        layout.addWidget(ResolutionSettingsCard(params, self))
+        layout.addWidget(self.resolution_settings_card)
 
 
 class _CurrentPageStackedWidget(QStackedWidget):
