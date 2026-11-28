@@ -22,7 +22,6 @@ class _ImageEditModelParams:
 @dataclass
 class _ImageEditTaskParams:
     prompt: str = ""
-    mask_boxes: list = field(default_factory=list)
     reference_paths: list = field(default_factory=list)
     aspect_ratio: str = "1:1"
 
@@ -49,9 +48,9 @@ class ImageEditWork(BaseWorker):
     _instance_model_dir = None
 
     @classmethod
-    def _get_instance(cls, model_dir):
+    def _get_instance(cls, model_dir, model_name):
         if cls._instance is None or cls._instance_model_dir != model_dir:
-            cls._instance = create_inference("general_edit", model_dir=model_dir)
+            cls._instance = create_inference(model_name, model_dir=model_dir)
             cls._instance_model_dir = model_dir
         return cls._instance
 
@@ -65,36 +64,23 @@ class ImageEditWork(BaseWorker):
         reference_paths = p.task.reference_paths or None
         output_path = p.io.output_path
         prompt = p.task.prompt
-        mask_boxes = p.task.mask_boxes
+        model_name = p.model.model_name
 
         if cancel_requested and cancel_requested():
             raise InterruptedError("Task was cancelled before start")
 
-        model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", "general_edit")
+        model_dir = os.path.join(self.deps_path, _resolve_hardware_variant(), "image_edit", model_name)
         if p._feature_name_ is not None:
             os.environ["_feature_name_"] = p._feature_name_
         if progress_cb:
             progress_cb("EditStart", "")
-        inference = self._get_instance(model_dir)
+        inference = self._get_instance(model_dir, model_name)
         output_dir = os.path.dirname(output_path)
         os.makedirs(output_dir, exist_ok=True)
-        mask = None
-        if mask_boxes:
-            image = Image.open(reference_paths[0]).convert("RGB")
-            img_width, img_height = image.size
-            mask_np = np.zeros((img_height, img_width), dtype=np.uint8)
-            for box in mask_boxes:
-                x = int(box.get('x', 0))
-                y = int(box.get('y', 0))
-                w = int(box.get('w', 0))
-                h = int(box.get('h', 0))
-                mask_np[y:y+h, x:x+w] = 255
-            mask = mask_np
         result = inference.infer(
             prompt=prompt,
             reference_paths=reference_paths,
             aspect_ratio=p.task.aspect_ratio,
-            mask=mask,
         )
         result_img = result if isinstance(result, Image.Image) else Image.fromarray(result.astype(np.uint8))
         result_img.save(output_path)

@@ -246,13 +246,11 @@ class ReferenceImageCard(SettingsSection):
         self,
         params: LayeredTaskParams,
         parent=None,
-        mask_path: str = "task.mask_boxes",
         reference_paths: str = "task.reference_paths",
         action_label: str = "圈选或涂抹重绘区域",
     ):
         super().__init__(parent)
         self.params = params
-        self.mask_path = mask_path
         self.reference_paths = reference_paths
         self.action_label = action_label
         self._file_paths = list(params.get_param(reference_paths) or [])
@@ -345,7 +343,6 @@ class ReferenceImageCard(SettingsSection):
         self._file_paths = list(file_paths)
         primary_path = self._file_paths[0] if self._file_paths else ""
         self.params.set_param(self.reference_paths, self._file_paths)
-        self.params.set_param(self.mask_path, [])
         self.area_info.setText(self.tr("尚未选择重绘区域"))
         self.area_select_button.setEnabled(bool(primary_path))
         self._render_files()
@@ -598,7 +595,7 @@ class ResolutionSettingsCard(SettingsSection):
             button.setMinimumHeight(54)
             button.setStyleSheet(self._option_button_style())
             button_layout = QVBoxLayout(button)
-            button_layout.setContentsMargins(3, 5, 3, 5)
+            button_layout.setContentsMargins(3, 10, 3, 5)
             button_layout.setSpacing(4)
             ratio_icon = QWidget(button)
             ratio_icon.setObjectName("ratioIcon")
@@ -654,6 +651,7 @@ class ResolutionSettingsCard(SettingsSection):
         self.custom_ratio_hint = QLabel("例如 16:9", self.ratio_section)
         setFont(self.custom_ratio_hint, 9)
         self.custom_ratio_hint.setStyleSheet("color: %s;" % colors["muted"])
+        self.custom_ratio_hint.setVisible(False)
         ratio_section.addWidget(self.custom_ratio_hint)
         self.ratio_width_input.textChanged.connect(self._update_custom_ratio)
         self.ratio_height_input.textChanged.connect(self._update_custom_ratio)
